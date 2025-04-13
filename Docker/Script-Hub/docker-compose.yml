@@ -1,0 +1,12 @@
+services:
+  app:
+    image: xream/script-hub:latest
+    restart: always
+    environment:
+      - PORT=9100
+      - BASE_URL=http://xxxx.com
+      - BETA_PORT=9101
+      - BETA_BASE_URL=http://beta.xxxx.com
+    ports:
+      - "127.0.0.1:9100:9100"  # 主机上的 9100 端口映射到容器的 PORT
+      - "127.0.0.1:9101:9101"  # 主机上的 9101 端口映射到容器的 BETA_PORT
