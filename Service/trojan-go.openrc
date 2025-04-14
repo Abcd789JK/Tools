@@ -1,0 +1,21 @@
+#!/sbin/openrc-run
+
+# openrc service-script for trojan-go
+#
+# place in /etc/init.d/
+# start on boot: "rc-update add trojan-go"
+
+supervisor=supervise-daemon
+name="trojan-go"
+description="trojan-go Proxy"
+
+command="/root/trojan/trojan-go"
+command_args="-config /root/trojan/config.json"
+pidfile="/run/trojan-go.pid"
+
+command_background=true
+
+depend() {
+    need net
+    after net
+}
