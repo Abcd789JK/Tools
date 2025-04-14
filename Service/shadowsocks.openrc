@@ -10,7 +10,7 @@ name="shadowsocks"
 description="shadowsocks Proxy"
 
 command="/root/shadowsocks/shadowsocks"
-command_args="-config /root/shadowsocks/config.json"
+command_args="--config /root/shadowsocks/config.json"
 pidfile="/run/shadowsocks.pid"
 
 command_background=true
