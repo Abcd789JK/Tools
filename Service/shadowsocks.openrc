@@ -1,14 +1,20 @@
 #!/sbin/openrc-run
 
-name="shadowsocks"
-description="Shadowsocks server"
+# openrc service-script for Shadowsocks
+#
+# place in /etc/init.d/
+# start on boot: "rc-update add Shadowsocks"
+supervisor=supervise-daemon
+name="Shadowsocks"
+description="Shadowsocks Proxy"
 
-command="/root/shadowsocks/shadowsocks"
-command_args="-c /root/shadowsocks/config.json"
-pidfile="/run/shadowsocks.pid"
+command="/root/Shadowsocks/Shadowsocks"
+command_args="-config /root/Shadowsocks/config.json"
+pidfile="/run/Shadowsocks.pid"
+
 command_background=true
 
 depend() {
     need net
-    after firewall
+    after net
 }
