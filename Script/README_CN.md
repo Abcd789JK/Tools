@@ -88,10 +88,7 @@ sed -e 's|^metalink=|#metalink=|g' \
 ## Alpine 系统清华源
 
 ```bash
-cat << EOF > /etc/apk/repositories
-https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.21/main
-https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.21/community
-EOF
+sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories
 ```
 
 ## Arch 系统清华源(二选一)

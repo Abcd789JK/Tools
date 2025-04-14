@@ -1,14 +1,17 @@
 [Unit]
-Description=Shadowsocks Server
-After=network.target
+Description= Shadowsocks Rust Service
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
 
 [Service]
-ExecStart=/root/shadowsocks/shadowsocks -c /root/shadowsocks/config.json
-Restart=on-failure
-PIDFile=/run/shadowsocks.pid
+LimitNOFILE=32767 
+Type=simple
 User=root
-Group=root
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Restart=on-failure
+RestartSec=5s
+DynamicUser=true
+ExecStartPre=/bin/sh -c 'ulimit -n 51200'
+ExecStart=/root/shadowsocks/shadowsocks -c /root/shadowsocks/config.json
 
 [Install]
 WantedBy=multi-user.target

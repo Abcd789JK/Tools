@@ -4,6 +4,7 @@
 #
 # place in /etc/init.d/
 # start on boot: "rc-update add mihomo"
+
 supervisor=supervise-daemon
 name="mihomo"
 description="Mihomo Kernel by MetaCubeX"

@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-14 14:11:08
+#!date = 2025-04-14 15:03:05
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -231,9 +231,8 @@ enable_systfo() {
         if [ -f /proc/sys/net/ipv4/tcp_fastopen ]; then
             echo 3 > /proc/sys/net/ipv4/tcp_fastopen
         fi
-
         # 定义 sysctl 配置文件路径
-        SYSCTL_CONF="/etc/sysctl.d/99-systfo.conf"
+        SYSCTL_CONF="/etc/sysctl.d/99-systfo.conf"       
         # 如果配置文件不存在，则写入网络优化参数
         if [ ! -f "$SYSCTL_CONF" ]; then
             cat <<EOF > "$SYSCTL_CONF"
@@ -262,8 +261,10 @@ EOF
             # 应用配置
             sysctl --system >/dev/null 2>&1
         fi
+        # 输出成功消息
         echo -e "${green}TCP Fast Open 已启用并应用网络优化参数${reset}"
     else
+        # 输出内核版本过低的错误消息
         echo -e "${red}系统内核版本过低，无法支持 TCP Fast Open！${reset}"
     fi
 }
