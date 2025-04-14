@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-14 16:04:22
+#!date = 2025-04-14 16:12:52
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -682,14 +682,13 @@ config_shadowsocks() {
 #############################
 get_shadowsocks() {
     local config_file="/root/shadowsocks/config.json"
-    # 提取端口、加密方式和密码
     server_port=$(jq -r '.server_port' "$config_file")
     method=$(jq -r '.method' "$config_file")
     password=$(jq -r '.password' "$config_file")
-    # 输出
-    echo "🔑 端口：$server_port"
-    echo "🔐 加密方式：$method"
-    echo "🔑 密码：$password"
+    echo -e "${green}端口: ${reset}$server_port"
+    echo -e "${green}密码: ${reset}$password"
+    echo -e "${green}加密方式: ${reset}$method"
+    start_menu
 }
 
 #############################
@@ -703,8 +702,9 @@ menu() {
     echo "================================="
     echo -e "${green} 0${reset}. 更新脚本"
     echo -e "${green}10${reset}. 退出脚本"
-    echo -e "${green}20${reset}. 更换配置"
-    echo -e "${green}30${reset}. 查看日志"
+    echo -e "${green}20${reset}. 查看日志"
+    echo -e "${green}30${reset}. 更换配置"
+    echo -e "${green}40${reset}. 查看配置"
     echo "---------------------------------"
     echo -e "${green} 1${reset}. 安装 shadowsocks"
     echo -e "${green} 2${reset}. 更新 shadowsocks"
@@ -728,9 +728,9 @@ menu() {
         5) stop_shadowsocks ;;
         6) restart_shadowsocks ;;
         7) enable_shadowsocks ;;
-        8) disable_shadowsocks ;;
-        20) config_shadowsocks ;;
-        30) logs_shadowsocks ;;
+        8) disable_shadowsocks ;
+        20) logs_shadowsocks ;;
+        30) config_shadowsocks ;;
         40) get_shadowsocks ;;
         10) exit 0 ;;
         0) update_shell ;;
