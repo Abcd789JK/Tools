@@ -4,6 +4,7 @@
 #
 # place in /etc/init.d/
 # start on boot: "rc-update add v2ray"
+
 supervisor=supervise-daemon
 name="v2ray"
 description="V2Ray Proxy"

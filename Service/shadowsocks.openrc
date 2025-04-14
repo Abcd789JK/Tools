@@ -4,6 +4,7 @@
 #
 # place in /etc/init.d/
 # start on boot: "rc-update add shadowsocks"
+
 supervisor=supervise-daemon
 name="shadowsocks"
 description="shadowsocks Proxy"
