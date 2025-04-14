@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-14 16:12:52
+#!date = 2025-04-14 16:16:08
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -728,7 +728,7 @@ menu() {
         5) stop_shadowsocks ;;
         6) restart_shadowsocks ;;
         7) enable_shadowsocks ;;
-        8) disable_shadowsocks ;
+        8) disable_shadowsocks ;;
         20) logs_shadowsocks ;;
         30) config_shadowsocks ;;
         40) get_shadowsocks ;;
