@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-14 15:03:05
+#!date = 2025-04-14 21:05:06
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -277,16 +277,12 @@ config_shadowsocks() {
         exit 1
     }
     echo -e "${green}开始配置 Shadowsocks ${reset}"
-    
     # 提示是否快速生成配置文件
     read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
     quick_confirm=${quick_confirm:-y}
-    
     if [[ "$quick_confirm" == [Yy] ]]; then
-        # 自动随机生成端口
+        # 自动生成：端口，选择加密方式、密码模式
         PORT=$(shuf -i 10000-65000 -n 1)
-        
-        # 选择加密方式
         echo -e "请选择加密方式："
         echo -e "${green}1${reset}、aes-128-gcm"
         echo -e "${green}2${reset}、aes-256-gcm"
@@ -305,23 +301,9 @@ config_shadowsocks() {
             6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
             *) METHOD="aes-128-gcm" ;;
         esac
-
-        # 选择认证方式：自定义密码或自动生成 UUID
-        echo -e "请选择认证模式："
-        echo -e "${green}1${reset}、自定义密码"
-        echo -e "${green}2${reset}、自动生成 UUID 当作密码"
-        read -rp "输入数字选择认证模式 (1-2 默认[1]): " auth_choice
-        auth_choice=${auth_choice:-1}
-        if [[ "$auth_choice" == "1" ]]; then
-            read -rp "请输入 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
-            if [[ -z "$PASSWORD" ]]; then
-                PASSWORD=$(cat /proc/sys/kernel/random/uuid)
-            fi
-        else
-            PASSWORD=$(cat /proc/sys/kernel/random/uuid)
-        fi
+        PASSWORD=$(cat /proc/sys/kernel/random/uuid)
     else
-        # 手动模式：用户输入端口、加密方式以及认证信息
+        # 手动输入：端口，选择加密方式、密码模式
         read -p "请输入监听端口 (留空以随机生成端口): " PORT
         if [[ -z "$PORT" ]]; then
             PORT=$(shuf -i 10000-65000 -n 1)
@@ -329,7 +311,6 @@ config_shadowsocks() {
             echo -e "${red}端口号必须在10000到65000之间。${reset}"
             exit 1
         fi
-        
         echo -e "请选择加密方式："
         echo -e "${green}1${reset}、aes-128-gcm"
         echo -e "${green}2${reset}、aes-256-gcm"
@@ -348,27 +329,15 @@ config_shadowsocks() {
             6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
             *) METHOD="aes-128-gcm" ;;
         esac
-        
-        echo -e "请选择认证模式："
-        echo -e "${green}1${reset}、自定义密码"
-        echo -e "${green}2${reset}、自动生成 UUID 当作密码"
-        read -rp "输入数字选择认证模式 (1-2 默认[2]): " auth_choice
-        auth_choice=${auth_choice:-1}
-        if [[ "$auth_choice" == "2" ]]; then
-            read -rp "请输入 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
-            if [[ -z "$PASSWORD" ]]; then
-                PASSWORD=$(cat /proc/sys/kernel/random/uuid)
-            fi
-        else
+        read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
+        if [[ -z "$PASSWORD" ]]; then
             PASSWORD=$(cat /proc/sys/kernel/random/uuid)
         fi
     fi
-
     echo -e "${green}生成的配置参数如下：${reset}"
     echo -e "  - 端口: ${green}$PORT${reset}"
     echo -e "  - 加密方式: ${green}$METHOD${reset}"
     echo -e "  - 密码: ${green}$PASSWORD${reset}"
-
     echo -e "${green}读取配置文件模板${reset}"
     config=$(cat "$config_file")
     echo -e "${green}修改配置文件${reset}"
@@ -377,16 +346,13 @@ config_shadowsocks() {
         .password = $password |
         .method = $method
     ')
-    
     echo -e "${green}写入配置文件${reset}"
     echo "$config" > "$config_file"
-    
     echo -e "${green}验证修改后的配置文件格式${reset}"
     if ! jq . "$config_file" >/dev/null 2>&1; then
         echo -e "${red}修改后的配置文件格式无效，请检查文件${reset}"
         exit 1
     fi
-    
     service_restart
     echo -e "${green}Shadowsocks 配置已完成并保存到 ${config_file} 文件${reset}"
     echo -e "${green}Shadowsocks 配置完成，正在启动中${reset}"
