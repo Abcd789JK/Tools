@@ -1,16 +1,16 @@
 #!/sbin/openrc-run
 
-# openrc service-script for Shadowsocks
+# openrc service-script for shadowsocks
 #
 # place in /etc/init.d/
-# start on boot: "rc-update add Shadowsocks"
+# start on boot: "rc-update add shadowsocks"
 supervisor=supervise-daemon
-name="Shadowsocks"
-description="Shadowsocks Proxy"
+name="shadowsocks"
+description="shadowsocks Proxy"
 
-command="/root/Shadowsocks/Shadowsocks"
-command_args="-config /root/Shadowsocks/config.json"
-pidfile="/run/Shadowsocks.pid"
+command="/root/shadowsocks/shadowsocks"
+command_args="-config /root/shadowsocks/config.json"
+pidfile="/run/shadowsocks.pid"
 
 command_background=true
 
