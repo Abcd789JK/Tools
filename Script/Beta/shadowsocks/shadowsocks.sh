@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-14 14:11:08
+#!date = 2025-04-14 16:04:22
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -678,6 +678,21 @@ config_shadowsocks() {
 }
 
 #############################
+#       获取配置函数       #
+#############################
+get_shadowsocks() {
+    local config_file="/root/shadowsocks/config.json"
+    # 提取端口、加密方式和密码
+    server_port=$(jq -r '.server_port' "$config_file")
+    method=$(jq -r '.method' "$config_file")
+    password=$(jq -r '.password' "$config_file")
+    # 输出
+    echo "🔑 端口：$server_port"
+    echo "🔐 加密方式：$method"
+    echo "🔑 密码：$password"
+}
+
+#############################
 #           主菜单         #
 #############################
 menu() {
@@ -716,6 +731,7 @@ menu() {
         8) disable_shadowsocks ;;
         20) config_shadowsocks ;;
         30) logs_shadowsocks ;;
+        40) get_shadowsocks ;;
         10) exit 0 ;;
         0) update_shell ;;
         *) echo -e "${red}无效选项，请重新选择${reset}" 
