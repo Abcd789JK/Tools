@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-11 20:01:09
+#!date = 2025-04-14 14:11:08
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -160,6 +160,7 @@ download_shadowsocks() {
     download_version
     local version_file="/root/shadowsocks/version.txt"
     local filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-gnu.tar.xz"
+    [ "$distro" = "alpine" ] && filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-musl.tar.xz"
     local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/v${version}/${filename}"
     wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}shadowsocks 下载失败，请检查网络后重试${reset}"
@@ -261,9 +262,9 @@ EOF
             # 应用配置
             sysctl --system >/dev/null 2>&1
         fi
-        echo -e "${Green_font_prefix}TCP Fast Open 已启用并应用网络优化参数${Font_color_suffix}"
+        echo -e "${green}TCP Fast Open 已启用并应用网络优化参数${reset}"
     else
-        echo -e "${Red_font_prefix}系统内核版本过低，无法支持 TCP Fast Open！${Font_color_suffix}"
+        echo -e "${red}系统内核版本过低，无法支持 TCP Fast Open！${reset}"
     fi
 }
 
