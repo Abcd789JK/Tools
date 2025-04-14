@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本
 #!desc = 安装 & 配置
-#!date = 2025-04-14 14:11:08
+#!date = 2025-04-14 14:15:17
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -262,9 +262,9 @@ EOF
             # 应用配置
             sysctl --system >/dev/null 2>&1
         fi
-        echo -e "${Green_font_prefix}TCP Fast Open 已启用并应用网络优化参数${Font_color_suffix}"
+        echo -e "${green}TCP Fast Open 已启用并应用网络优化参数${reset}"
     else
-        echo -e "${Red_font_prefix}系统内核版本过低，无法支持 TCP Fast Open！${Font_color_suffix}"
+        echo -e "${red}系统内核版本过低，无法支持 TCP Fast Open！${reset}"
     fi
 }
 
