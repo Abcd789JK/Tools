@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-15 13:32:58
+#!date = 2025-04-15 13:34:54
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -229,18 +229,13 @@ enable_systfo() {
     if [ "$kernel_major" -ge 3 ]; then
         if [ -f /proc/sys/net/ipv4/tcp_fastopen ]; then
             if echo 3 > /proc/sys/net/ipv4/tcp_fastopen; then
-            else
-                echo -e "${red}错误：无法设置 TCP Fast Open${reset}" >&2
             fi
-        else
-            echo -e ""
         fi
         if [ -d /etc/sysctl.d ]; then
             sysctl_conf="/etc/sysctl.d/99-systfo.conf"
         else
             sysctl_conf="/etc/sysctl.conf"
         fi
-
         if [ ! -f "$sysctl_conf" ]; then
             cat <<'EOF' > "$sysctl_conf"
 fs.file-max = 51200
@@ -267,19 +262,11 @@ net.ipv4.tcp_congestion_control = bbr
 EOF
             if [ "$distro" = "alpine" ]; then
                 if sysctl -p "$sysctl_conf" >/dev/null 2>&1; then
-                    echo -e ""
-                else
-                    echo -e "${red}错误：网络优化参数应用失败${reset}" >&2
                 fi
             else
                 if sysctl --system >/dev/null 2>&1; then
-                    echo -e ""
-                else
-                    echo -e "${red}错误：网络优化参数应用失败${reset}" >&2
                 fi
             fi
-        else
-            echo -e ""
         fi
     else
         echo -e "${red}系统内核版本过低，无法支持 TCP Fast Open！${reset}"
