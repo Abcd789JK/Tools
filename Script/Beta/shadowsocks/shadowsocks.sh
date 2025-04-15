@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-15 13:31:51
+#!date = 2025-04-15 13:32:58
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -22,7 +22,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 sh_ver="0.0.04"
 use_cdn=false
-distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
+distro="unknown"  # 系统类型
 arch=""           # 转换后的系统架构
 arch_raw=""       # 原始系统架构信息
 

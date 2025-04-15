@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-15 13:31:51
+#!date = 2025-04-15 13:32:58
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -22,7 +22,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 sh_ver="1.0.0"
 use_cdn=false
-distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
+distro="unknown"  # 系统类型
 arch=""           # 系统架构
 arch_raw=""       # 原始架构信息
 
