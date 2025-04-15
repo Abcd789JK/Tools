@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-15 08:16:47
+#!date = 2025-04-15 08:36:45
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.02"
+sh_ver="0.0.03"
 use_cdn=false
 distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
 arch=""           # 转换后的系统架构
@@ -695,10 +695,9 @@ config_shadowsocks() {
         exit 1
     fi
     echo -e "${green}更新后的配置${reset}"
-    echo -e "  - 端口: ${green}${port}${reset}"
-    echo -e "  - 密码: ${green}${password}${reset}"
-    echo -e "  - 加密方式: ${green}${method}${reset}"
-
+    echo -e "端口: ${green}${port}${reset}"
+    echo -e "密码: ${green}${password}${reset}"
+    echo -e "加密方式: ${green}${method}${reset}"
     echo -e "${green}正在修改配置${reset}"
     echo "$config" > "$config_file"
     if ! jq . "$config_file" >/dev/null 2>&1; then
@@ -714,12 +713,12 @@ config_shadowsocks() {
 #############################
 get_shadowsocks() {
     local config_file="/root/shadowsocks/config.json"
-    server_port=$(jq -r '.server_port' "$config_file")
+    port=$(jq -r '.server_port' "$config_file")
     method=$(jq -r '.method' "$config_file")
     password=$(jq -r '.password' "$config_file")
-    echo -e "${green}端口: ${reset}$server_port"
-    echo -e "${green}密码: ${reset}$password"
-    echo -e "${green}加密方式: ${reset}$method"
+    echo -e "端口: ${green}${port}${reset}"
+    echo -e "密码: ${green}${password}${reset}"
+    echo -e "加密方式: ${green}${method}${reset}"
     start_menu
 }
 

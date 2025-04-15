@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-15 08:16:47
+#!date = 2025-04-15 08:36:45
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -222,19 +222,18 @@ download_shell() {
 }
 
 #############################
-#       配置文件生成函数     #
+#       TCP 函数     #
 #############################
 enable_systfo() {
     kernel_major=$(uname -r | cut -d. -f1)
     if [ "$kernel_major" -ge 3 ]; then
         if [ -f /proc/sys/net/ipv4/tcp_fastopen ]; then
             if echo 3 > /proc/sys/net/ipv4/tcp_fastopen; then
-                echo -e "${green}成功启用 TCP Fast Open${reset}"
             else
                 echo -e "${red}错误：无法设置 TCP Fast Open${reset}" >&2
             fi
         else
-            echo -e "${red}文件 /proc/sys/net/ipv4/tcp_fastopen 不存在，跳过设置${reset}"
+            echo -e ""
         fi
         if [ -d /etc/sysctl.d ]; then
             sysctl_conf="/etc/sysctl.d/99-systfo.conf"
@@ -268,25 +267,28 @@ net.ipv4.tcp_congestion_control = bbr
 EOF
             if [ "$distro" = "alpine" ]; then
                 if sysctl -p "$sysctl_conf" >/dev/null 2>&1; then
-                    echo -e "${green}网络优化参数已成功应用${reset}"
+                    echo -e ""
                 else
                     echo -e "${red}错误：网络优化参数应用失败${reset}" >&2
                 fi
             else
                 if sysctl --system >/dev/null 2>&1; then
-                    echo -e "${green}网络优化参数已成功应用${reset}"
+                    echo -e ""
                 else
                     echo -e "${red}错误：网络优化参数应用失败${reset}" >&2
                 fi
             fi
         else
-            echo -e "${green}配置文件 ${sysctl_conf} 已存在，跳过写入${reset}"
+            echo -e ""
         fi
     else
         echo -e "${red}系统内核版本过低，无法支持 TCP Fast Open！${reset}"
     fi
 }
 
+#############################
+#       配置文件生成函数     #
+#############################
 config_shadowsocks() {
     local config_file="/root/shadowsocks/config.json"
     local config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/shadowsocks.json"
@@ -298,8 +300,8 @@ config_shadowsocks() {
     read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
     quick_confirm=${quick_confirm:-y}
     if [[ "$quick_confirm" == [Yy] ]]; then
-        PORT=$(shuf -i 10000-65000 -n 1)
-        PASSWORD=$(cat /proc/sys/kernel/random/uuid)
+        port=$(shuf -i 10000-65000 -n 1)
+        password=$(cat /proc/sys/kernel/random/uuid)
         echo -e "请选择加密方式："
         echo -e "${green}1${reset}、aes-128-gcm"
         echo -e "${green}2${reset}、aes-256-gcm"
@@ -310,25 +312,25 @@ config_shadowsocks() {
         read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
         method_choice=${method_choice:-1}
         case $method_choice in
-            1) METHOD="aes-128-gcm" ;;
-            2) METHOD="aes-256-gcm" ;;
-            3) METHOD="chacha20-ietf-poly1305" ;;
-            4) METHOD="2022-blake3-aes-128-gcm" ;;
-            5) METHOD="2022-blake3-aes-256-gcm" ;;
-            6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
-            *) METHOD="aes-128-gcm" ;;
+            1) method="aes-128-gcm" ;;
+            2) method="aes-256-gcm" ;;
+            3) method="chacha20-ietf-poly1305" ;;
+            4) method="2022-blake3-aes-128-gcm" ;;
+            5) method="2022-blake3-aes-256-gcm" ;;
+            6) method="2022-blake3-chacha20-ietf-poly1305" ;;         
+            *) method="aes-128-gcm" ;;
         esac
     else
-        read -p "请输入监听端口 (留空以随机生成端口): " PORT
-        if [[ -z "$PORT" ]]; then
-            PORT=$(shuf -i 10000-65000 -n 1)
-        elif [[ "$PORT" -lt 10000 || "$PORT" -gt 65000 ]]; then
+        read -p "请输入监听端口 (留空以随机生成端口): " port
+        if [[ -z "$port" ]]; then
+            port=$(shuf -i 10000-65000 -n 1)
+        elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
             echo -e "${red}端口号必须在10000到65000之间。${reset}"
             exit 1
         fi
-        read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
-        if [[ -z "$PASSWORD" ]]; then
-            PASSWORD=$(cat /proc/sys/kernel/random/uuid)
+        read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
+        if [[ -z "$password" ]]; then
+            password=$(cat /proc/sys/kernel/random/uuid)
         fi
         echo -e "请选择加密方式："
         echo -e "${green}1${reset}、aes-128-gcm"
@@ -340,21 +342,21 @@ config_shadowsocks() {
         read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
         method_choice=${method_choice:-1}
         case $method_choice in
-            1) METHOD="aes-128-gcm" ;;
-            2) METHOD="aes-256-gcm" ;;
-            3) METHOD="chacha20-ietf-poly1305" ;;
-            4) METHOD="2022-blake3-aes-128-gcm" ;;
-            5) METHOD="2022-blake3-aes-256-gcm" ;;
-            6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
-            *) METHOD="aes-128-gcm" ;;
+            1) method="aes-128-gcm" ;;
+            2) method="aes-256-gcm" ;;
+            3) method="chacha20-ietf-poly1305" ;;
+            4) method="2022-blake3-aes-128-gcm" ;;
+            5) method="2022-blake3-aes-256-gcm" ;;
+            6) method="2022-blake3-chacha20-ietf-poly1305" ;;         
+            *) method="aes-128-gcm" ;;
         esac
     fi
     echo -e "${green}生成的配置${reset}"
-    echo -e "  - 端口: ${green}$PORT${reset}"
-    echo -e "  - 密码: ${green}$PASSWORD${reset}"
-    echo -e "  - 加密方式: ${green}$METHOD${reset}"
+    echo -e "端口: ${green}${port}${reset}"
+    echo -e "密码: ${green}${password}${reset}"
+    echo -e "加密方式: ${green}${method}${reset}"
     config=$(cat "$config_file")
-    config=$(echo "$config" | jq --arg port "$PORT" --arg password "$PASSWORD" --arg method "$METHOD" '
+    config=$(echo "$config" | jq --arg port "$port" --arg password "$password" --arg method "$method" '
         .server_port = ($port | tonumber) |
         .password = $password |
         .method = $method
