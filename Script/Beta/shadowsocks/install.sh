@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-15 09:44:21
+#!date = 2025-04-15 11:34:37
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -297,9 +297,9 @@ config_shadowsocks() {
         exit 1
     }
     echo -e "${green}开始配置 Shadowsocks ${reset}"
-    read -rp "是否快速生成配置文件？(y/n 默认[y]): " confirm
-    confirm=${confirm:-y}
-    if [[ "$confirm" == [Yy] ]]; then
+    read -rp "是否快速生成配置文件？(y/n 默认[y]): " mode
+    mode=${mode:-y}
+    if [[ "$mode" == [Yy] ]]; then
         echo -e "请选择加密方式"
         echo -e "${green}1${reset}. aes-128-gcm"
         echo -e "${green}2${reset}. aes-256-gcm"

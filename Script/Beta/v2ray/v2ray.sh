@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-15 09:44:21
+#!date = 2025-04-15 11:34:37
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -555,11 +555,22 @@ config_v2ray() {
         echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
         exit 1
     fi
-    echo -e "请选择配置修改模式："
-    echo -e "${green}1${reset}、生成完整配置（同时修改端口、加密方式和密码）"
-    echo -e "${green}2${reset}、单独修改某一项"
-    read -rp "输入数字选择模式 (1-2 默认[1]): " confirm
-    confirm=${confirm:-1}
+    select_protocol() {
+        echo -e "请选择加密协议："
+        echo -e "${green}1${reset}. vmess+tcp"
+        echo -e "${green}2${reset}. vmess+ws"
+        echo -e "${green}3${reset}. vmess+tcp+tls"
+        echo -e "${green}4${reset}. vmess+ws+tls"
+        read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
+        confirm=${confirm:-1}
+        case $confirm in
+            1) method="vmess+tcp" ;;
+            2) method="vmess+ws" ;;
+            3) method="vmess+tcp+tls" ;;
+            4) method="vmess+ws+tls" ;;
+            *) method="vmess+tcp" ;;
+        esac
+    }
     get_random_port() {
         echo $(shuf -i 10000-65000 -n 1)
     }
@@ -569,44 +580,23 @@ config_v2ray() {
     get_random_ws_path() {
         head /dev/urandom | tr -dc A-Za-z0-9 | head -c ${1:-10}
     }
-    if [[ "$confirm" == "1" ]]; then
-        read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
-        quick_confirm=${quick_confirm:-y}
-        if [[ "$quick_confirm" =~ ^[Yy]$ ]]; then
-            echo -e "请选择加密协议："
-            echo -e "${green}1${reset}. vmess+tcp"
-            echo -e "${green}2${reset}. vmess+ws"
-            echo -e "${green}3${reset}. vmess+tcp+tls"
-            echo -e "${green}4${reset}. vmess+ws+tls"
-            read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
-            confirm=${confirm:-1}
-            case $confirm in
-                1) method="vmess+tcp" ;;
-                2) method="vmess+ws" ;;
-                3) method="vmess+tcp+tls" ;;
-                4) method="vmess+ws+tls" ;;
-                *) method="vmess+tcp" ;;
-            esac
+    echo -e "请选择配置修改模式："
+    echo -e "${green}1${reset}、生成完整配置（同时修改端口、加密方式和密码）"
+    echo -e "${green}2${reset}、单独修改某一项"
+    read -rp "输入数字选择模式 (1-2 默认[1]): " moua
+    moua=${moua:-1}
+    if [[ "$moua" == "1" ]]; then
+        read -rp "是否快速生成配置文件？(y/n 默认[y]): " mode
+        mode=${mode:-y}
+        if [[ "$mode" =~ ^[Yy]$ ]]; then
+            select_protocol
             port=$(get_random_port)
             uuid=$(get_random_uuid)
             if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
                 ws_path="/$(get_random_ws_path 12)"
             fi
         else
-            echo -e "请选择加密协议："
-            echo -e "${green}1${reset}. vmess+tcp"
-            echo -e "${green}2${reset}. vmess+ws"
-            echo -e "${green}3${reset}. vmess+tcp+tls"
-            echo -e "${green}4${reset}. vmess+ws+tls"
-            read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
-            confirm=${confirm:-1}
-            case $confirm in
-                1) method="vmess+tcp" ;;
-                2) method="vmess+ws" ;;
-                3) method="vmess+tcp+tls" ;;
-                4) method="vmess+ws+tls" ;;
-                *) method="vmess+tcp" ;;
-            esac
+            select_protocol
             read -p "请输入监听端口 (留空以随机生成端口): " port
             if [[ -z "$port" ]]; then
                 port=$(get_random_port)
@@ -636,7 +626,8 @@ config_v2ray() {
                     .inbounds[0].settings.clients[0].id = $uuid |
                     .inbounds[0].streamSettings.network = "tcp" |
                     del(.inbounds[0].streamSettings.wsSettings) |
-                    del(.inbounds[0].streamSettings.tlsSettings)
+                    del(.inbounds[0].streamSettings.tlsSettings) |
+                    del(.inbounds[0].streamSettings.security)
                 ')
                 ;;
             2)
@@ -647,7 +638,8 @@ config_v2ray() {
                     .inbounds[0].streamSettings.network = "ws" |
                     .inbounds[0].streamSettings.wsSettings.path = $ws_path |
                     del(.inbounds[0].streamSettings.tlsSettings) |
-                    del(.inbounds[0].streamSettings.wsSettings.headers)
+                    del(.inbounds[0].streamSettings.wsSettings.headers) |
+                    del(.inbounds[0].streamSettings.security)
                 ')
                 ;;
             3)
@@ -691,7 +683,7 @@ config_v2ray() {
                 start_menu
                 ;;
         esac
-    elif [[ "$confirm" == "2" ]]; then
+    elif [[ "$moua" == "2" ]]; then
         current_config=$(cat "$config_file")
         current_port=$(echo "$current_config" | jq -r '.inbounds[0].port')
         current_uuid=$(echo "$current_config" | jq -r '.inbounds[0].settings.clients[0].id')
@@ -700,16 +692,25 @@ config_v2ray() {
         if [ "$current_network" == "ws" ]; then
             current_ws_path=$(echo "$current_config" | jq -r '.inbounds[0].streamSettings.wsSettings.path')
         fi
-        [ -n "$current_ws_path" ]
+        current_security=$(echo "$current_config" | jq -r '.inbounds[0].streamSettings.security // empty')
+        if [ "$current_network" == "ws" ] && [ "$current_security" == "tls" ]; then
+            method="vmess+ws+tls"
+        elif [ "$current_network" == "ws" ]; then
+            method="vmess+ws"
+        elif [ "$current_security" == "tls" ]; then
+            method="vmess+tcp+tls"
+        else
+            method="vmess+tcp"
+        fi
         echo -e "请选择要修改的项："
         echo -e "${green}1${reset}、端口"
-        echo -e "${green}2${reset}、UUID（密码）"
-        echo -e "${green}3${reset}、协议设置"
-        echo -e "${green}4${reset}、WebSocket 路径"
-        read -rp "输入数字选择 (1-4 默认[1]): " item_choice
-        item_choice=${item_choice:-1}
-        new_config="$current_config"
-        case $item_choice in
+        echo -e "${green}2${reset}、UUID"
+        if [ -n "$current_ws_path" ]; then
+            echo -e "${green}3${reset}、路径"
+        fi
+        read -rp "输入数字选择 (默认[1]): " moub
+        moub=${moub:-1}
+        case $moub in
             1)
                 read -p "请输入新的端口 (留空以随机生成): " port
                 if [[ -z "$port" ]]; then
@@ -718,67 +719,27 @@ config_v2ray() {
                     echo -e "${red}端口号必须在10000到65000之间。${reset}"
                     exit 1
                 fi
-                new_config=$(echo "$new_config" | jq --arg port "$port" '.inbounds[0].port = ($port | tonumber)')
+                new_config=$(echo "$current_config" | jq --arg port "$port" '.inbounds[0].port = ($port | tonumber)')
+                uuid="$current_uuid"
                 ;;
             2)
                 read -p "请输入新的 UUID (留空以生成新的): " uuid
                 if [[ -z "$uuid" ]]; then
                     uuid=$(get_random_uuid)
                 fi
-                new_config=$(echo "$new_config" | jq --arg uuid "$uuid" '.inbounds[0].settings.clients[0].id = $uuid')
+                new_config=$(echo "$current_config" | jq --arg uuid "$uuid" '.inbounds[0].settings.clients[0].id = $uuid')
+                port="$current_port"
                 ;;
             3)
-                echo -e "请选择新的协议设置："
-                echo -e "${green}1${reset}. vmess+tcp"
-                echo -e "${green}2${reset}. vmess+ws"
-                echo -e "${green}3${reset}. vmess+tcp+tls"
-                echo -e "${green}4${reset}. vmess+ws+tls"
-                read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
-                confirm=${confirm:-1}
-                case $confirm in
-                    1)
-                        new_config=$(echo "$new_config" | jq '(.inbounds[0].streamSettings.network) = "tcp" | del(.inbounds[0].streamSettings.wsSettings) | del(.inbounds[0].streamSettings.tlsSettings)')
-                        ;;
-                    2)
-                        read -p "请输入新的 WebSocket 路径 (留空以随机生成): " ws_path
-                        if [[ -z "$ws_path" ]]; then
-                            ws_path="/$(get_random_ws_path 10)"
-                        else
-                            ws_path="/${ws_path}"
-                        fi
-                        new_config=$(echo "$new_config" | jq --arg ws_path "$ws_path" '(.inbounds[0].streamSettings.network) = "ws" | .inbounds[0].streamSettings.wsSettings.path = $ws_path | del(.inbounds[0].streamSettings.tlsSettings) | del(.inbounds[0].streamSettings.wsSettings.headers)')
-                        ;;
-                    3)
-                        new_config=$(echo "$new_config" | jq '(.inbounds[0].streamSettings.network) = "tcp" | .inbounds[0].streamSettings.security = "tls" | .inbounds[0].streamSettings.tlsSettings = { "certificates": [ { "certificateFile": "/root/ssl/server.crt", "keyFile": "/root/ssl/server.key" } ] }')
-                        ;;
-                    4)
-                        read -p "请输入新的 WebSocket 路径 (留空以随机生成): " ws_path
-                        if [[ -z "$ws_path" ]]; then
-                            ws_path="/$(get_random_ws_path 10)"
-                        else
-                            ws_path="/${ws_path}"
-                        fi
-                        new_config=$(echo "$new_config" | jq --arg ws_path "$ws_path" '(.inbounds[0].streamSettings.network) = "ws" | .inbounds[0].streamSettings.wsSettings.path = $ws_path | .inbounds[0].streamSettings.security = "tls" | .inbounds[0].streamSettings.tlsSettings = { "certificates": [ { "certificateFile": "/root/ssl/server.crt", "keyFile": "/root/ssl/server.key" } ] } | del(.inbounds[0].streamSettings.wsSettings.headers)')
-                        ;;
-                    *)
-                        echo -e "${red}无效选项${reset}"
-                        exit 1
-                        ;;
-                esac
-                ;;
-            4)
-                current_network=$(echo "$new_config" | jq -r '.inbounds[0].streamSettings.network')
-                if [[ "$current_network" != "ws" ]]; then
-                    echo -e "${red}当前配置未启用 WebSocket 协议，无法修改 WebSocket 路径。${reset}"
-                    exit 1
-                fi
                 read -p "请输入新的 WebSocket 路径 (留空以随机生成): " ws_path
                 if [[ -z "$ws_path" ]]; then
                     ws_path="/$(get_random_ws_path 10)"
                 else
                     ws_path="/${ws_path}"
                 fi
-                new_config=$(echo "$new_config" | jq --arg ws_path "$ws_path" '.inbounds[0].streamSettings.wsSettings.path = $ws_path')
+                new_config=$(echo "$current_config" | jq --arg ws_path "$ws_path" '.inbounds[0].streamSettings.wsSettings.path = $ws_path')
+                port="$current_port"
+                uuid="$current_uuid"
                 ;;
             *)
                 echo -e "${red}无效选项${reset}"
@@ -790,12 +751,13 @@ config_v2ray() {
         echo -e "${red}无效的修改模式${reset}"
         exit 1
     fi
+    config="$new_config"
     echo -e "${green}更新后的配置:${reset}"
-    echo -e "端口: ${green}$(echo "$config" | jq -r '.inbounds[0].port')${reset}"
-    echo -e "UUID: ${green}$(echo "$config" | jq -r '.inbounds[0].settings.clients[0].id')${reset}"
-    echo -e "网络类型: ${green}$(echo "$config" | jq -r '.inbounds[0].streamSettings.network')${reset}"
-    if [ "$(echo "$config" | jq -r '.inbounds[0].streamSettings.network')" == "ws" ]; then
-        echo -e "WebSocket路径: ${green}$(echo "$config" | jq -r '.inbounds[0].streamSettings.wsSettings.path')${reset}"
+    echo -e "端口: ${green}${port}${reset}"
+    echo -e "密码: ${green}${uuid}${reset}"
+    echo -e "类型: ${green}${method}${reset}"
+    if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
+        echo -e "路径: ${green}${ws_path}${reset}"
     fi
     echo -e "${green}正在更新配置文件${reset}"
     echo "$config" > "$config_file"

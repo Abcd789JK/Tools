@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-15 09:44:21
+#!date = 2025-04-15 11:34:37
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -224,9 +224,9 @@ config_v2ray() {
         exit 1
     }
     echo -e "${green}开始配置 v2ray ${reset}"
-    read -rp "是否快速生成配置文件？(y/n 默认[y]): " confirm
-    confirm=${confirm:-y}
-    if [[ "$confirm" == [Yy] ]]; then
+    read -rp "是否快速生成配置文件？(y/n 默认[y]): " mode
+    mode=${mode:-y}
+    if [[ "$mode" == [Yy] ]]; then
         echo -e "请选择加密协议"
         echo -e "${green}1${reset}. vmess+tcp"
         echo -e "${green}2${reset}. vmess+ws"
@@ -243,7 +243,7 @@ config_v2ray() {
         esac
         port=$(shuf -i 10000-65000 -n 1)
         uuid=$(cat /proc/sys/kernel/random/uuid)
-        if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
+        if [[ "$moed" == "2" || "$moed" == "4" ]]; then
             ws_path=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
         fi
     else
@@ -277,14 +277,14 @@ config_v2ray() {
             if [[ -z "$ws_path" ]]; then
                 ws_path=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)
             else
-                ws_path="${ws_path#/}"
+                ws_path="${ws_path}"
             fi
         fi
     fi
     echo -e "${green}生成的配置${reset}"
     echo -e "端口: ${green}${port}${reset}"
     echo -e "密码: ${green}${uuid}${reset}"
-    echo -e "协议: ${green}${method}${reset}"
+    echo -e "类型: ${green}${method}${reset}"
     if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
         echo -e "路径: ${green}/${ws_path}${reset}"
     fi
