@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-11 20:37:32
+#!date = 2025-04-15 09:44:21
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -227,78 +227,71 @@ config_v2ray() {
     read -rp "是否快速生成配置文件？(y/n 默认[y]): " confirm
     confirm=${confirm:-y}
     if [[ "$confirm" == [Yy] ]]; then
-        echo -e "请选择协议："
-        echo -e "${green}1${reset}、vmess+tcp"
-        echo -e "${green}2${reset}、vmess+ws"
-        echo -e "${green}3${reset}、vmess+tcp+tls"
-        echo -e "${green}4${reset}、vmess+ws+tls"
+        echo -e "请选择加密协议"
+        echo -e "${green}1${reset}. vmess+tcp"
+        echo -e "${green}2${reset}. vmess+ws"
+        echo -e "${green}3${reset}. vmess+tcp+tls"
+        echo -e "${green}4${reset}. vmess+ws+tls"
         read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
         confirm=${confirm:-1}
-        PORT=$(shuf -i 10000-65000 -n 1)
-        UUID=$(cat /proc/sys/kernel/random/uuid)
-        if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            WS_PATH=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
-        fi
-        echo -e "配置文件已生成："
         case $confirm in
-            1) echo -e "  - 协议: ${green}vmess+tcp${reset}" ;;
-            2) echo -e "  - 协议: ${green}vmess+ws${reset}" ;;
-            3) echo -e "  - 协议: ${green}vmess+tcp+tls${reset}" ;;
-            4) echo -e "  - 协议: ${green}vmess+ws+tls${reset}" ;;
-            *) echo -e "${red}无效选项${reset}" && exit 1 ;;
+            1) method="vmess+tcp" ;;
+            2) method="vmess+ws" ;;
+            3) method="vmess+tcp+tls" ;;
+            4) method="vmess+ws+tls" ;;    
+            *) method="vmess+tcp" ;;
         esac
-        echo -e "  - 端口: ${green}$PORT${reset}"
-        echo -e "  - UUID: ${green}$UUID${reset}"
+        port=$(shuf -i 10000-65000 -n 1)
+        uuid=$(cat /proc/sys/kernel/random/uuid)
         if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            echo -e "  - WS路径: ${green}/$WS_PATH${reset}"
+            ws_path=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
         fi
     else
-        echo -e "请选择协议："
-        echo -e "${green}1${reset}、vmess+tcp"
-        echo -e "${green}2${reset}、vmess+ws"
-        echo -e "${green}3${reset}、vmess+tcp+tls"
-        echo -e "${green}4${reset}、vmess+ws+tls"
+        echo -e "请选择加密协议"
+        echo -e "${green}1${reset}. vmess+tcp"
+        echo -e "${green}2${reset}. vmess+ws"
+        echo -e "${green}3${reset}. vmess+tcp+tls"
+        echo -e "${green}4${reset}. vmess+ws+tls"
         read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
         confirm=${confirm:-1}
-        read -p "请输入监听端口 (留空以随机生成端口): " PORT
-        if [[ -z "$PORT" ]]; then
-            PORT=$(shuf -i 10000-65000 -n 1)
-        elif [[ "$PORT" -lt 10000 || "$PORT" -gt 65000 ]]; then
+        case $confirm in
+            1) method="vmess+tcp" ;;
+            2) method="vmess+ws" ;;
+            3) method="vmess+tcp+tls" ;;
+            4) method="vmess+ws+tls" ;;    
+            *) method="vmess+tcp" ;;
+        esac
+        read -p "请输入监听端口 (留空以随机生成端口): " port
+        if [[ -z "$port" ]]; then
+            port=$(shuf -i 10000-65000 -n 1)
+        elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
             echo -e "${red}端口号必须在10000到65000之间。${reset}"
             exit 1
         fi
-        read -p "请输入 v2ray UUID (留空以生成随机UUID): " UUID
-        if [[ -z "$UUID" ]]; then
-            UUID=$(cat /proc/sys/kernel/random/uuid)
+        read -p "请输入 v2ray 的 uuid (留空以生成随机 uuid): " uuid
+        if [[ -z "$uuid" ]]; then
+            uuid=$(cat /proc/sys/kernel/random/uuid)
         fi
         if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            read -p "请输入 WebSocket 路径 (留空以生成随机路径): " WS_PATH
-            if [[ -z "$WS_PATH" ]]; then
-                WS_PATH=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)
+            read -p "请输入 WebSocket 路径 (留空以生成随机路径): " ws_path
+            if [[ -z "$ws_path" ]]; then
+                ws_path=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)
             else
-                WS_PATH="${WS_PATH#/}"
+                ws_path="${ws_path#/}"
             fi
         fi
-        echo -e "配置文件已生成："
-        case $confirm in
-            1) echo -e "  - 协议: ${green}vmess+tcp${reset}" ;;
-            2) echo -e "  - 协议: ${green}vmess+ws${reset}" ;;
-            3) echo -e "  - 协议: ${green}vmess+tcp+tls${reset}" ;;
-            4) echo -e "  - 协议: ${green}vmess+ws+tls${reset}" ;;
-            *) echo -e "${red}无效选项${reset}" && exit 1 ;;
-        esac
-        echo -e "  - 端口: ${green}$PORT${reset}"
-        echo -e "  - UUID: ${green}$UUID${reset}"
-        if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            echo -e "  - WS路径: ${green}/$WS_PATH${reset}"
-        fi
     fi
-    echo -e "${green}读取配置文件${reset}"
+    echo -e "${green}生成的配置${reset}"
+    echo -e "端口: ${green}${port}${reset}"
+    echo -e "密码: ${green}${uuid}${reset}"
+    echo -e "协议: ${green}${method}${reset}"
+    if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
+        echo -e "路径: ${green}/${ws_path}${reset}"
+    fi
     config=$(cat "$config_file")
-    echo -e "${green}修改配置文件${reset}"
     case $confirm in
         1)  # vmess + tcp
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" '
+            config=$(echo "$config" | jq --arg port "$port" --arg uuid "$uuid" '
                 .inbounds[0].port = ($port | tonumber) |
                 .inbounds[0].settings.clients[0].id = $uuid |
                 .inbounds[0].streamSettings.network = "tcp" |
@@ -307,7 +300,7 @@ config_v2ray() {
             ')
             ;;
         2)  # vmess + ws
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" --arg ws_path "/$WS_PATH" '
+            config=$(echo "$config" | jq --arg port "$port" --arg uuid "$uuid" --arg ws_path "/$ws_path" '
                 .inbounds[0].port = ($port | tonumber) |
                 .inbounds[0].settings.clients[0].id = $uuid |
                 .inbounds[0].streamSettings.network = "ws" |
@@ -317,7 +310,7 @@ config_v2ray() {
             ')
             ;;
         3)  # vmess + tcp + tls
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" '
+            config=$(echo "$config" | jq --arg port "$port" --arg uuid "$uuid" '
                 .inbounds[0].port = ($port | tonumber) |
                 .inbounds[0].settings.clients[0].id = $uuid |
                 .inbounds[0].streamSettings.network = "tcp" |
@@ -333,7 +326,7 @@ config_v2ray() {
             ')
             ;;
         4)  # vmess + ws + tls
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" --arg ws_path "/$WS_PATH" '
+            config=$(echo "$config" | jq --arg port "$port" --arg uuid "$uuid" --arg ws_path "/$ws_path" '
                 .inbounds[0].port = ($port | tonumber) |
                 .inbounds[0].settings.clients[0].id = $uuid |
                 .inbounds[0].streamSettings.network = "ws" |
@@ -355,11 +348,8 @@ config_v2ray() {
             exit 1
             ;;
     esac
-    echo -e "${green}写入配置文件${reset}"
     echo "$config" > "$config_file"
-    echo -e "${green}验证修改后的配置文件格式${reset}"
     if ! jq . "$config_file" >/dev/null 2>&1; then
-        echo -e "${red}修改后的配置文件格式无效，请检查文件${reset}"
         exit 1
     fi
     service_restart

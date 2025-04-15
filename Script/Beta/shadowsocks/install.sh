@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-15 08:36:45
+#!date = 2025-04-15 09:44:21
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -297,21 +297,19 @@ config_shadowsocks() {
         exit 1
     }
     echo -e "${green}开始配置 Shadowsocks ${reset}"
-    read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
-    quick_confirm=${quick_confirm:-y}
-    if [[ "$quick_confirm" == [Yy] ]]; then
-        port=$(shuf -i 10000-65000 -n 1)
-        password=$(cat /proc/sys/kernel/random/uuid)
-        echo -e "请选择加密方式："
-        echo -e "${green}1${reset}、aes-128-gcm"
-        echo -e "${green}2${reset}、aes-256-gcm"
-        echo -e "${green}3${reset}、chacha20-ietf-poly1305"
-        echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
-        echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
-        echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
-        read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
-        method_choice=${method_choice:-1}
-        case $method_choice in
+    read -rp "是否快速生成配置文件？(y/n 默认[y]): " confirm
+    confirm=${confirm:-y}
+    if [[ "$confirm" == [Yy] ]]; then
+        echo -e "请选择加密方式"
+        echo -e "${green}1${reset}. aes-128-gcm"
+        echo -e "${green}2${reset}. aes-256-gcm"
+        echo -e "${green}3${reset}. chacha20-ietf-poly1305"
+        echo -e "${green}4${reset}. 2022-blake3-aes-128-gcm"
+        echo -e "${green}5${reset}. 2022-blake3-aes-256-gcm"
+        echo -e "${green}6${reset}. 2022-blake3-chacha20-ietf-poly1305"
+        read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+        confirm=${confirm:-1}
+        case $confirm in
             1) method="aes-128-gcm" ;;
             2) method="aes-256-gcm" ;;
             3) method="chacha20-ietf-poly1305" ;;
@@ -320,7 +318,27 @@ config_shadowsocks() {
             6) method="2022-blake3-chacha20-ietf-poly1305" ;;         
             *) method="aes-128-gcm" ;;
         esac
+        port=$(shuf -i 10000-65000 -n 1)
+        password=$(cat /proc/sys/kernel/random/uuid)
     else
+        echo -e "请选择加密方式"
+        echo -e "${green}1${reset}. aes-128-gcm"
+        echo -e "${green}2${reset}. aes-256-gcm"
+        echo -e "${green}3${reset}. chacha20-ietf-poly1305"
+        echo -e "${green}4${reset}. 2022-blake3-aes-128-gcm"
+        echo -e "${green}5${reset}. 2022-blake3-aes-256-gcm"
+        echo -e "${green}6${reset}. 2022-blake3-chacha20-ietf-poly1305"
+        read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+        confirm=${confirm:-1}
+        case $confirm in
+            1) method="aes-128-gcm" ;;
+            2) method="aes-256-gcm" ;;
+            3) method="chacha20-ietf-poly1305" ;;
+            4) method="2022-blake3-aes-128-gcm" ;;
+            5) method="2022-blake3-aes-256-gcm" ;;
+            6) method="2022-blake3-chacha20-ietf-poly1305" ;;         
+            *) method="aes-128-gcm" ;;
+        esac
         read -p "请输入监听端口 (留空以随机生成端口): " port
         if [[ -z "$port" ]]; then
             port=$(shuf -i 10000-65000 -n 1)
@@ -328,28 +346,10 @@ config_shadowsocks() {
             echo -e "${red}端口号必须在10000到65000之间。${reset}"
             exit 1
         fi
-        read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
+        read -p "请输入 Shadowsocks 的密码 (留空则自动生成 UUID): " password
         if [[ -z "$password" ]]; then
             password=$(cat /proc/sys/kernel/random/uuid)
         fi
-        echo -e "请选择加密方式："
-        echo -e "${green}1${reset}、aes-128-gcm"
-        echo -e "${green}2${reset}、aes-256-gcm"
-        echo -e "${green}3${reset}、chacha20-ietf-poly1305"
-        echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
-        echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
-        echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
-        read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
-        method_choice=${method_choice:-1}
-        case $method_choice in
-            1) method="aes-128-gcm" ;;
-            2) method="aes-256-gcm" ;;
-            3) method="chacha20-ietf-poly1305" ;;
-            4) method="2022-blake3-aes-128-gcm" ;;
-            5) method="2022-blake3-aes-256-gcm" ;;
-            6) method="2022-blake3-chacha20-ietf-poly1305" ;;         
-            *) method="aes-128-gcm" ;;
-        esac
     fi
     echo -e "${green}生成的配置${reset}"
     echo -e "端口: ${green}${port}${reset}"

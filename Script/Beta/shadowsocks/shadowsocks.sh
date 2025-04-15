@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-15 08:37:23
+#!date = 2025-04-15 09:44:21
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -556,6 +556,7 @@ update_shell() {
 #       配置管理函数       #
 #############################
 config_shadowsocks() {
+    check_installation || { start_menu; return; }
     local config_file="/root/shadowsocks/config.json"
     echo -e "${green}开始修改 Shadowsocks 配置${reset}"
     if [ ! -f "$config_file" ]; then
@@ -565,14 +566,12 @@ config_shadowsocks() {
     echo -e "请选择配置修改模式："
     echo -e "${green}1${reset}、生成完整配置（同时修改端口、加密方式和密码）"
     echo -e "${green}2${reset}、单独修改某一项"
-    read -rp "输入数字选择模式 (1-2 默认[1]): " mode_choice
-    mode_choice=${mode_choice:-1}
-    if [[ "$mode_choice" == "1" ]]; then
-        read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
-        quick_confirm=${quick_confirm:-y}
-        if [[ "$quick_confirm" == [Yy] ]]; then
-            port=$(shuf -i 10000-65000 -n 1)
-            password=$(cat /proc/sys/kernel/random/uuid)
+    read -rp "输入数字选择模式 (1-2 默认[1]): " confirm
+    confirm=${confirm:-1}
+    if [[ "$confirm" == "1" ]]; then
+        read -rp "是否快速生成配置文件？(y/n 默认[y]): " confirm
+        confirm=${confirm:-y}
+        if [[ "$confirm" == [Yy] ]]; then
             echo -e "请选择加密方式："
             echo -e "${green}1${reset}、aes-128-gcm"
             echo -e "${green}2${reset}、aes-256-gcm"
@@ -580,9 +579,9 @@ config_shadowsocks() {
             echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
             echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
             echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
-            read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
-            method_choice=${method_choice:-1}
-            case $method_choice in
+            read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+            confirm=${confirm:-1}
+            case $confirm in
                 1) method="aes-128-gcm" ;;
                 2) method="aes-256-gcm" ;;
                 3) method="chacha20-ietf-poly1305" ;;
@@ -591,36 +590,38 @@ config_shadowsocks() {
                 6) method="2022-blake3-chacha20-ietf-poly1305" ;;
                 *) method="aes-128-gcm" ;;
             esac
+        port=$(shuf -i 10000-65000 -n 1)
+        password=$(cat /proc/sys/kernel/random/uuid)
         else
+            echo -e "请选择加密方式："
+            echo -e "${green}1${reset}、aes-128-gcm"
+            echo -e "${green}2${reset}、aes-256-gcm"
+            echo -e "${green}3${reset}、chacha20-ietf-poly1305"
+            echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
+            echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
+            echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
+            read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+            confirm=${confirm:-1}
+            case $confirm in
+                1) method="aes-128-gcm" ;;
+                2) method="aes-256-gcm" ;;
+                3) method="chacha20-ietf-poly1305" ;;
+                4) method="2022-blake3-aes-128-gcm" ;;
+                5) method="2022-blake3-aes-256-gcm" ;;
+                6) method="2022-blake3-chacha20-ietf-poly1305" ;;
+                *) method="aes-128-gcm" ;;
+            esac
             read -p "请输入监听端口 (留空以随机生成端口): " port
             if [[ -z "$port" ]]; then
                 port=$(shuf -i 10000-65000 -n 1)
             elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
                 echo -e "${red}端口号必须在10000到65000之间。${reset}"
-                exit 1
+                start_menu
             fi
-            read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
+            read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 uuid): " password
             if [[ -z "$password" ]]; then
                 password=$(cat /proc/sys/kernel/random/uuid)
             fi
-            echo -e "请选择加密方式："
-            echo -e "${green}1${reset}、aes-128-gcm"
-            echo -e "${green}2${reset}、aes-256-gcm"
-            echo -e "${green}3${reset}、chacha20-ietf-poly1305"
-            echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
-            echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
-            echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
-            read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
-            method_choice=${method_choice:-1}
-            case $method_choice in
-                1) method="aes-128-gcm" ;;
-                2) method="aes-256-gcm" ;;
-                3) method="chacha20-ietf-poly1305" ;;
-                4) method="2022-blake3-aes-128-gcm" ;;
-                5) method="2022-blake3-aes-256-gcm" ;;
-                6) method="2022-blake3-chacha20-ietf-poly1305" ;;
-                *) method="aes-128-gcm" ;;
-            esac
         fi
         config=$(cat "$config_file")
         config=$(echo "$config" | jq --arg port "$port" --arg method "$method" --arg password "$password" '
@@ -628,25 +629,25 @@ config_shadowsocks() {
             .method = $method |
             .password = $password
         ')
-    elif [[ "$mode_choice" == "2" ]]; then
+    elif [[ "$confirm" == "2" ]]; then
         current_config=$(cat "$config_file")
-        current_port=$(echo "$current_config" | jq -r '.server_port')
         current_method=$(echo "$current_config" | jq -r '.method')
+        current_port=$(echo "$current_config" | jq -r '.server_port')
         current_password=$(echo "$current_config" | jq -r '.password')
         echo -e "请选择要修改的项："
         echo -e "${green}1${reset}、端口"
         echo -e "${green}2${reset}、密码"
         echo -e "${green}3${reset}、加密方式"
-        read -rp "输入数字选择 (1-3 默认[1]): " single_choice
-        single_choice=${single_choice:-1}
-        case $single_choice in
+        read -rp "输入数字选择 (1-3 默认[1]): " confirm
+        confirm=${confirm:-1}
+        case $confirm in
             1)
                 read -p "请输入新的监听端口 (10000-65000): " port
                 if [[ -z "$port" ]]; then
                     port=$(shuf -i 10000-65000 -n 1)
                 elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
                     echo -e "${red}端口号必须在10000到65000之间。${reset}"
-                    exit 1
+                    start_menu
                 fi
                 new_config=$(echo "$current_config" | jq --arg port "$port" '.server_port = ($port | tonumber)')
                 method="$current_method"
@@ -669,9 +670,9 @@ config_shadowsocks() {
                 echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
                 echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
                 echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
-                read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
-                method_choice=${method_choice:-1}
-                case $method_choice in
+                read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+                confirm=${confirm:-1}
+                case $confirm in
                     1) method="aes-128-gcm" ;;
                     2) method="aes-256-gcm" ;;
                     3) method="chacha20-ietf-poly1305" ;;
@@ -698,7 +699,7 @@ config_shadowsocks() {
     echo -e "端口: ${green}${port}${reset}"
     echo -e "密码: ${green}${password}${reset}"
     echo -e "加密方式: ${green}${method}${reset}"
-    echo -e "${green}正在修改配置${reset}"
+    echo -e "${green}正在更新配置文件${reset}"
     echo "$config" > "$config_file"
     if ! jq . "$config_file" >/dev/null 2>&1; then
         exit 1
