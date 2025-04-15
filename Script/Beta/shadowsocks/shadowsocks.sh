@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-15 08:36:45
+#!date = 2025-04-15 08:37:23
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -203,7 +203,7 @@ service_shadowsocks() {
     esac
     if [ "$distro" = "alpine" ]; then
         if [ "$action" == "logs" ]; then
-            echo -e "${green}日志查看: Alpine 系统暂不支持${reset}"
+            echo -e "${green}Alpine 系统暂不支持${reset}"
             start_menu
             return
         fi
