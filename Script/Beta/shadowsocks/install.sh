@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-14 21:05:06
+#!date = 2025-04-15 08:16:47
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -227,15 +227,23 @@ download_shell() {
 enable_systfo() {
     kernel_major=$(uname -r | cut -d. -f1)
     if [ "$kernel_major" -ge 3 ]; then
-        # 开启 TCP Fast Open（若文件存在则设置值为 3）
         if [ -f /proc/sys/net/ipv4/tcp_fastopen ]; then
-            echo 3 > /proc/sys/net/ipv4/tcp_fastopen
+            if echo 3 > /proc/sys/net/ipv4/tcp_fastopen; then
+                echo -e "${green}成功启用 TCP Fast Open${reset}"
+            else
+                echo -e "${red}错误：无法设置 TCP Fast Open${reset}" >&2
+            fi
+        else
+            echo -e "${red}文件 /proc/sys/net/ipv4/tcp_fastopen 不存在，跳过设置${reset}"
         fi
-        # 定义 sysctl 配置文件路径
-        SYSCTL_CONF="/etc/sysctl.d/99-systfo.conf"       
-        # 如果配置文件不存在，则写入网络优化参数
-        if [ ! -f "$SYSCTL_CONF" ]; then
-            cat <<EOF > "$SYSCTL_CONF"
+        if [ -d /etc/sysctl.d ]; then
+            sysctl_conf="/etc/sysctl.d/99-systfo.conf"
+        else
+            sysctl_conf="/etc/sysctl.conf"
+        fi
+
+        if [ ! -f "$sysctl_conf" ]; then
+            cat <<'EOF' > "$sysctl_conf"
 fs.file-max = 51200
 net.core.rmem_max = 67108864
 net.core.wmem_max = 67108864
@@ -258,13 +266,23 @@ net.ipv4.tcp_ecn = 1
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 EOF
-            # 应用配置
-            sysctl --system >/dev/null 2>&1
+            if [ "$distro" = "alpine" ]; then
+                if sysctl -p "$sysctl_conf" >/dev/null 2>&1; then
+                    echo -e "${green}网络优化参数已成功应用${reset}"
+                else
+                    echo -e "${red}错误：网络优化参数应用失败${reset}" >&2
+                fi
+            else
+                if sysctl --system >/dev/null 2>&1; then
+                    echo -e "${green}网络优化参数已成功应用${reset}"
+                else
+                    echo -e "${red}错误：网络优化参数应用失败${reset}" >&2
+                fi
+            fi
+        else
+            echo -e "${green}配置文件 ${sysctl_conf} 已存在，跳过写入${reset}"
         fi
-        # 输出成功消息
-        echo -e "${green}TCP Fast Open 已启用并应用网络优化参数${reset}"
     else
-        # 输出内核版本过低的错误消息
         echo -e "${red}系统内核版本过低，无法支持 TCP Fast Open！${reset}"
     fi
 }
@@ -277,12 +295,11 @@ config_shadowsocks() {
         exit 1
     }
     echo -e "${green}开始配置 Shadowsocks ${reset}"
-    # 提示是否快速生成配置文件
     read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
     quick_confirm=${quick_confirm:-y}
     if [[ "$quick_confirm" == [Yy] ]]; then
-        # 自动生成：端口，选择加密方式、密码模式
         PORT=$(shuf -i 10000-65000 -n 1)
+        PASSWORD=$(cat /proc/sys/kernel/random/uuid)
         echo -e "请选择加密方式："
         echo -e "${green}1${reset}、aes-128-gcm"
         echo -e "${green}2${reset}、aes-256-gcm"
@@ -301,9 +318,7 @@ config_shadowsocks() {
             6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
             *) METHOD="aes-128-gcm" ;;
         esac
-        PASSWORD=$(cat /proc/sys/kernel/random/uuid)
     else
-        # 手动输入：端口，选择加密方式、密码模式
         read -p "请输入监听端口 (留空以随机生成端口): " PORT
         if [[ -z "$PORT" ]]; then
             PORT=$(shuf -i 10000-65000 -n 1)
@@ -311,6 +326,10 @@ config_shadowsocks() {
             echo -e "${red}端口号必须在10000到65000之间。${reset}"
             exit 1
         fi
+        read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
+        if [[ -z "$PASSWORD" ]]; then
+            PASSWORD=$(cat /proc/sys/kernel/random/uuid)
+        fi
         echo -e "请选择加密方式："
         echo -e "${green}1${reset}、aes-128-gcm"
         echo -e "${green}2${reset}、aes-256-gcm"
@@ -329,28 +348,19 @@ config_shadowsocks() {
             6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
             *) METHOD="aes-128-gcm" ;;
         esac
-        read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
-        if [[ -z "$PASSWORD" ]]; then
-            PASSWORD=$(cat /proc/sys/kernel/random/uuid)
-        fi
     fi
-    echo -e "${green}生成的配置参数如下：${reset}"
+    echo -e "${green}生成的配置${reset}"
     echo -e "  - 端口: ${green}$PORT${reset}"
-    echo -e "  - 加密方式: ${green}$METHOD${reset}"
     echo -e "  - 密码: ${green}$PASSWORD${reset}"
-    echo -e "${green}读取配置文件模板${reset}"
+    echo -e "  - 加密方式: ${green}$METHOD${reset}"
     config=$(cat "$config_file")
-    echo -e "${green}修改配置文件${reset}"
     config=$(echo "$config" | jq --arg port "$PORT" --arg password "$PASSWORD" --arg method "$METHOD" '
         .server_port = ($port | tonumber) |
         .password = $password |
         .method = $method
     ')
-    echo -e "${green}写入配置文件${reset}"
     echo "$config" > "$config_file"
-    echo -e "${green}验证修改后的配置文件格式${reset}"
     if ! jq . "$config_file" >/dev/null 2>&1; then
-        echo -e "${red}修改后的配置文件格式无效，请检查文件${reset}"
         exit 1
     fi
     service_restart

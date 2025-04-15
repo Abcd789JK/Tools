@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-14 21:22:51
+#!date = 2025-04-15 08:16:47
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -558,23 +558,21 @@ update_shell() {
 config_shadowsocks() {
     local config_file="/root/shadowsocks/config.json"
     echo -e "${green}开始修改 Shadowsocks 配置${reset}"
-
     if [ ! -f "$config_file" ]; then
         echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
         exit 1
     fi
-
     echo -e "请选择配置修改模式："
     echo -e "${green}1${reset}、生成完整配置（同时修改端口、加密方式和密码）"
     echo -e "${green}2${reset}、单独修改某一项"
     read -rp "输入数字选择模式 (1-2 默认[1]): " mode_choice
     mode_choice=${mode_choice:-1}
-
     if [[ "$mode_choice" == "1" ]]; then
         read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
         quick_confirm=${quick_confirm:-y}
         if [[ "$quick_confirm" == [Yy] ]]; then
             port=$(shuf -i 10000-65000 -n 1)
+            password=$(cat /proc/sys/kernel/random/uuid)
             echo -e "请选择加密方式："
             echo -e "${green}1${reset}、aes-128-gcm"
             echo -e "${green}2${reset}、aes-256-gcm"
@@ -593,7 +591,6 @@ config_shadowsocks() {
                 6) method="2022-blake3-chacha20-ietf-poly1305" ;;
                 *) method="aes-128-gcm" ;;
             esac
-            password=$(cat /proc/sys/kernel/random/uuid)
         else
             read -p "请输入监听端口 (留空以随机生成端口): " port
             if [[ -z "$port" ]]; then
@@ -602,7 +599,10 @@ config_shadowsocks() {
                 echo -e "${red}端口号必须在10000到65000之间。${reset}"
                 exit 1
             fi
-
+            read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
+            if [[ -z "$password" ]]; then
+                password=$(cat /proc/sys/kernel/random/uuid)
+            fi
             echo -e "请选择加密方式："
             echo -e "${green}1${reset}、aes-128-gcm"
             echo -e "${green}2${reset}、aes-256-gcm"
@@ -621,13 +621,7 @@ config_shadowsocks() {
                 6) method="2022-blake3-chacha20-ietf-poly1305" ;;
                 *) method="aes-128-gcm" ;;
             esac
-
-            read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
-            if [[ -z "$password" ]]; then
-                password=$(cat /proc/sys/kernel/random/uuid)
-            fi
         fi
-
         config=$(cat "$config_file")
         config=$(echo "$config" | jq --arg port "$port" --arg method "$method" --arg password "$password" '
             .server_port = ($port | tonumber) |
@@ -639,11 +633,10 @@ config_shadowsocks() {
         current_port=$(echo "$current_config" | jq -r '.server_port')
         current_method=$(echo "$current_config" | jq -r '.method')
         current_password=$(echo "$current_config" | jq -r '.password')
-
         echo -e "请选择要修改的项："
         echo -e "${green}1${reset}、端口"
-        echo -e "${green}2${reset}、加密方式"
-        echo -e "${green}3${reset}、密码"
+        echo -e "${green}2${reset}、密码"
+        echo -e "${green}3${reset}、加密方式"
         read -rp "输入数字选择 (1-3 默认[1]): " single_choice
         single_choice=${single_choice:-1}
         case $single_choice in
@@ -660,6 +653,15 @@ config_shadowsocks() {
                 password="$current_password"
                 ;;
             2)
+                read -rp "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
+                if [[ -z "$password" ]]; then
+                    password=$(cat /proc/sys/kernel/random/uuid)
+                fi
+                new_config=$(echo "$current_config" | jq --arg password "$password" '.password = $password')
+                port="$current_port"
+                method="$current_method"
+                ;;
+            3)
                 echo -e "请选择加密方式："
                 echo -e "${green}1${reset}、aes-128-gcm"
                 echo -e "${green}2${reset}、aes-256-gcm"
@@ -682,15 +684,6 @@ config_shadowsocks() {
                 port="$current_port"
                 password="$current_password"
                 ;;
-            3)
-                read -rp "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
-                if [[ -z "$password" ]]; then
-                    password=$(cat /proc/sys/kernel/random/uuid)
-                fi
-                new_config=$(echo "$current_config" | jq --arg password "$password" '.password = $password')
-                port="$current_port"
-                method="$current_method"
-                ;;
             *)
                 echo -e "${red}无效选项${reset}"
                 exit 1
@@ -701,22 +694,17 @@ config_shadowsocks() {
         echo -e "${red}无效的修改模式${reset}"
         exit 1
     fi
-
-    # 只执行一次配置展示
-    echo -e "${green}更新后的配置：${reset}"
+    echo -e "${green}更新后的配置${reset}"
     echo -e "  - 端口: ${green}${port}${reset}"
-    echo -e "  - 加密方式: ${green}${method}${reset}"
     echo -e "  - 密码: ${green}${password}${reset}"
+    echo -e "  - 加密方式: ${green}${method}${reset}"
 
-    echo -e "${green}写入配置文件${reset}"
+    echo -e "${green}正在修改配置${reset}"
     echo "$config" > "$config_file"
-
-    echo -e "${green}验证修改后的配置文件格式${reset}"
     if ! jq . "$config_file" >/dev/null 2>&1; then
-        echo -e "${red}修改后的配置文件格式无效，请检查文件${reset}"
         exit 1
     fi
-
+    echo -e "${green}恭喜你！修改成功${reset}"
     service_restart
     start_menu
 }
