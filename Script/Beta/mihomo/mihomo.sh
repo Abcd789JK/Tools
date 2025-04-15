@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-14 14:11:08
+#!date = 2025-04-15 21:56:39
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -614,61 +614,91 @@ update_shell() {
 config_mihomo() {
     check_installation || { start_menu; return; }
     check_network
-    local folders="/root/mihomo"
-    local config_file="/root/mihomo/config.yaml"
-    local tun_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
-    local tproxy_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomotp.yaml"
-    local iface ipv4 ipv6 config_url
-    iface=$(ip route | awk '/default/ {print $5}')
-    ipv4=$(ip addr show "$iface" | awk '/inet / {print $2}' | cut -d/ -f1)
-    ipv6=$(ip addr show "$iface" | awk '/inet6 / {print $2}' | cut -d/ -f1)
-    echo -e "${green}请选择运行模式${reset}"
-    echo -e "${cyan}-------------------------${reset}"
-    echo -e "${yellow}1. TUN 模式${reset}"
-    echo -e "${yellow}2. TProxy 模式${reset}"
-    echo -e "${cyan}-------------------------${reset}"
-    read -p "$(echo -e "${green}请输入选择(1/2): ${reset}")" confirm
-    confirm=${confirm:-1}
-    case "$confirm" in
-        1)
-            config_url="$tun_config_url"
-            ;;
-        2)
-            config_url="$tproxy_config_url"
-            ;;
-        *)
-            echo -e "${red}无效选择，跳过配置文件下载。${reset}"
-            return
+    echo -e "${green}开始修改 mihomo 配置${reset}"
+    echo -e "${yellow}请选择操作：${reset}"
+    echo "1. 新增机场订阅"
+    echo "2. 修改机场订阅"
+    echo "3. 删除机场订阅"
+    read -p "输入选项数字：" choice
+    case "$choice" in
+        1) add_provider ;;
+        2) modify_provider ;;
+        3) delete_provider ;;
+        *) echo "无效选项"; start_menu ;;
     esac
-    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$config_url")" || { 
-        echo -e "${red}配置文件下载失败${reset}"
+}
+
+add_provider() {
+    local config_file="/root/mihomo/config.yaml"
+    if [ ! -f "$config_file" ]; then
+        echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
         exit 1
-    }
-    local proxy_providers="proxy-providers:"
-    local counter=1
+    fi
+    local current_count
+    current_count=$(grep -c "provider_" "$config_file")
+    [ -z "$current_count" ] && current_count=0
+    local proxy_providers=""
+    local counter=$((current_count + 1))
+
     while true; do
-        read -p "$(echo -e "${yellow}请输入机场的订阅连接: ${reset}")" airport_url
+        read -p "$(echo -e "${yellow}请输入机场的订阅链接: ${reset}")" airport_url
         read -p "$(echo -e "${yellow}请输入机场的名称: ${reset}")" airport_name
-        proxy_providers="${proxy_providers}
+        if [ -z "$proxy_providers" ]; then
+            proxy_providers="  provider_$(printf "%02d" $counter):
+    url: \"${airport_url}\"
+    type: http
+    interval: 86400
+    health-check: {enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300}
+    override:
+      additional-prefix: \"[${airport_name}]\""
+        else
+            proxy_providers="${proxy_providers}
   provider_$(printf "%02d" $counter):
     url: \"${airport_url}\"
     type: http
     interval: 86400
-    health-check: {enable: true,url: "https://www.gstatic.com/generate_204",interval: 300}
+    health-check: {enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300}
     override:
       additional-prefix: \"[${airport_name}]\""
+        fi
         counter=$((counter + 1))
         read -p "$(echo -e "${yellow}是否继续输入订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
-        if [[ "$cont" =~ ^[nN]$ ]]; then
-            break
-        fi
+        [[ "$cont" =~ ^[nN]$ ]] && break
     done
-    awk -v providers="$proxy_providers" '
-      /^# 机场配置/ { print; print providers; next }
-      { print }
-    ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+    awk -v new_providers="$proxy_providers" '
+    BEGIN { in_pp = 0; inserted = 0; blank_buffer = "" }
+    {
+        if ($0 ~ /^proxy-providers:/) {
+            print $0;
+            in_pp = 1;
+            next;
+        }
+        if (in_pp == 1 && $0 ~ /^[[:space:]]*$/) {
+            blank_buffer = blank_buffer $0 "\n";
+            next;
+        }
+        if (in_pp == 1 && $0 !~ /^[[:space:]]/) {
+            if (inserted == 0) {
+                print new_providers;
+                print "";
+                inserted = 1;
+                in_pp = 0;
+            }
+            print $0;
+            next;
+        }
+        print $0;
+    }
+    END {
+       if (in_pp == 1 && inserted == 0) {
+           print new_providers;
+           print "";
+       }
+    }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
     service_restart
-    echo -e "${green}配置完成${reset}"
+    echo -e "${green}新增完成${reset}"
     start_menu
 }
 
