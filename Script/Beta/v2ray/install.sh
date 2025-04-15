@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-15 11:34:37
+#!date = 2025-04-15 13:31:51
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -223,11 +223,8 @@ config_v2ray() {
         echo -e "${red}配置文件下载失败${reset}"
         exit 1
     }
-    echo -e "${green}开始配置 v2ray ${reset}"
-    read -rp "是否快速生成配置文件？(y/n 默认[y]): " mode
-    mode=${mode:-y}
-    if [[ "$mode" == [Yy] ]]; then
-        echo -e "请选择加密协议"
+    select_protocol() {
+        echo -e "请选择加密协议："
         echo -e "${green}1${reset}. vmess+tcp"
         echo -e "${green}2${reset}. vmess+ws"
         echo -e "${green}3${reset}. vmess+tcp+tls"
@@ -238,29 +235,22 @@ config_v2ray() {
             1) method="vmess+tcp" ;;
             2) method="vmess+ws" ;;
             3) method="vmess+tcp+tls" ;;
-            4) method="vmess+ws+tls" ;;    
+            4) method="vmess+ws+tls" ;;
             *) method="vmess+tcp" ;;
         esac
+    }
+    echo -e "${green}开始配置 v2ray ${reset}"
+    read -rp "是否快速生成配置文件？(y/n 默认[y]): " mode
+    mode=${mode:-y}
+    if [[ "$mode" == [Yy] ]]; then
+        select_protocol
         port=$(shuf -i 10000-65000 -n 1)
         uuid=$(cat /proc/sys/kernel/random/uuid)
         if [[ "$moed" == "2" || "$moed" == "4" ]]; then
             ws_path=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
         fi
     else
-        echo -e "请选择加密协议"
-        echo -e "${green}1${reset}. vmess+tcp"
-        echo -e "${green}2${reset}. vmess+ws"
-        echo -e "${green}3${reset}. vmess+tcp+tls"
-        echo -e "${green}4${reset}. vmess+ws+tls"
-        read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
-        confirm=${confirm:-1}
-        case $confirm in
-            1) method="vmess+tcp" ;;
-            2) method="vmess+ws" ;;
-            3) method="vmess+tcp+tls" ;;
-            4) method="vmess+ws+tls" ;;    
-            *) method="vmess+tcp" ;;
-        esac
+        select_protocol
         read -p "请输入监听端口 (留空以随机生成端口): " port
         if [[ -z "$port" ]]; then
             port=$(shuf -i 10000-65000 -n 1)

@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-15 11:34:37
+#!date = 2025-04-15 13:31:51
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -746,7 +746,6 @@ config_v2ray() {
                 exit 1
                 ;;
         esac
-        config="$new_config"
     else
         echo -e "${red}无效的修改模式${reset}"
         exit 1
