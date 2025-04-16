@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-16 14:07:23
+#!date = 2025-04-16 14:14:03
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -615,16 +615,16 @@ config_mihomo() {
     check_installation || { start_menu; return; }
     check_network
     echo -e "${green}开始修改 mihomo 配置${reset}"
-    echo -e "${cyan}-------------------------${reset}"
+    echo "================================="
     echo -e "${red}操作说明："
     echo -e "${red}    1. 订阅编号, 默认是 01 开始依次"
     echo -e "${red}    2. 订阅不能全部删除，至少保留一个${reset}"
-    echo -e "${cyan}-------------------------${reset}"
+    echo "---------------------------------"
     echo -e "${green}1${reset}. 新增机场订阅"
     echo -e "${green}2${reset}. 修改机场订阅"
     echo -e "${green}3${reset}. 删除机场订阅"
     echo -e "${green}4${reset}. 切换运行模式"
-    echo -e "${cyan}-------------------------${reset}"
+    echo "---------------------------------"
     read -p "$(echo -e "${green}输入选项数字: ${reset}")" choice
     case "$choice" in
         1) add_provider ;;
@@ -908,10 +908,10 @@ mode_mihomo() {
 
     echo -e "${green}当前运行模式：$current_mode${reset}"
     echo -e "${green}请选择要切换的运行模式（推荐使用 TUN 模式）${reset}"
-    echo -e "${cyan}-------------------------${reset}"
+    echo "================================="
     echo -e "${green}1${reset}. TUN 模式"
     echo -e "${green}2${reset}. TProxy 模式"
-    echo -e "${cyan}-------------------------${reset}"
+    echo "---------------------------------"
     read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" confirm
     confirm=${confirm:-1}
 
@@ -984,10 +984,10 @@ switch_version() {
         return
     fi
     echo -e "${green}请选择版本${reset}"
-    echo -e "${cyan}-------------------------${reset}"
+    echo "================================="
     echo -e "${green}1${reset}. 测试版 (Prerelease-Alpha)"
     echo -e "${green}2${reset}. 正式版 (Latest)"
-    echo -e "${cyan}-------------------------${reset}"
+    echo "---------------------------------"
     read -p "$(echo -e "${yellow}请输入选项 (1/2): ${reset}")" choice
     case "$choice" in
         1)
