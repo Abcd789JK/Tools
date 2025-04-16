@@ -1,6 +1,6 @@
 #!name = mihomo 配置文件
 #!desc = 说明：理论上适用于所有的 Meta 内核，使用最新的 mrs 规则
-#!date = 2025-04-16 10:44:54
+#!date = 2025-04-16 11:23:06
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
@@ -43,19 +43,10 @@ sniffer:
     - "Mijia Cloud"
     - "+.push.apple.com"
 
+# 模式配置
 iptables: 
   enable: true
   inbound-interface: eth0
-
-tun:
-  enable: false
-  stack: mixed
-  dns-hijack:
-    - "any:53"
-    - "tcp://any:53"
-  auto-route: true
-  auto-redirect: true
-  auto-detect-interface: true
 
 dns:
   enable: true
