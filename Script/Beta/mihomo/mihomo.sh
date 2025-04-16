@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-16 10:44:54
+#!date = 2025-04-16 11:50:04
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -891,10 +891,9 @@ delete_provider() {
     start_menu
 }
 
-switch_mihomo_mode() {
+mode_mihomo() {
     local config_file="/root/mihomo/config.yaml"
 
-    # 获取当前模式（避免误报，读取并忽略注释）
     local tun_enabled=$(grep -E '^\s*tun:\s*$' -A 10 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
     local ipt_enabled=$(grep -E '^\s*iptables:\s*$' -A 5 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
     local current_mode="未知"
@@ -914,22 +913,45 @@ switch_mihomo_mode() {
     read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" confirm
     confirm=${confirm:-1}
 
-    if [[ "$confirm" == "1" ]]; then
-        echo -e "${green}切换到 TUN 模式...${reset}"
-        sed -i -E '/^(\s*)iptables:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 false/' "$config_file"
-        sed -i -E '/^(\s*)tun:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 true/' "$config_file"
+    local mode_line=$(grep -n "^# 模式配置" "$config_file" | cut -d: -f1)
+    if [[ -n "$mode_line" ]]; then
+        local next_line=$((mode_line + 1))
+        local block_start=$(sed -n "${next_line},\$p" "$config_file" | grep -En '^\s*(tun:|iptables:)\s*$' | head -n1 | cut -d: -f1)
 
-    elif [[ "$confirm" == "2" ]]; then
-        echo -e "${green}切换到 TProxy 模式...${reset}"
-        sed -i -E '/^(\s*)iptables:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 true/' "$config_file"
-        sed -i -E '/^(\s*)tun:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 false/' "$config_file"
-
-    else
-        echo -e "${yellow}无效输入，默认切换为 TUN 模式${reset}"
-        sed -i -E '/^(\s*)iptables:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 false/' "$config_file"
-        sed -i -E '/^(\s*)tun:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 true/' "$config_file"
+        if [[ -n "$block_start" ]]; then
+            block_start=$((mode_line + block_start))
+            local block_end=$(sed -n "${block_start},\$p" "$config_file" | grep -n '^[^[:space:]]' | grep -v "^1:" | head -n1 | cut -d: -f1)
+            if [[ -n "$block_end" ]]; then
+                block_end=$((block_start + block_end - 2))
+            else
+                block_end=$(wc -l < "$config_file")
+            fi
+            sed -i "${block_start},${block_end}d" "$config_file"
+        fi
     fi
-    
+
+    if [[ "$confirm" == "1" ]]; then
+        sed -i "/# 模式配置/a\
+tun:\n\
+  enable: true\n\
+  stack: mixed\n\
+  dns-hijack:\n\
+    - \"any:53\"\n\
+    - \"tcp://any:53\"\n\
+  auto-route: true\n\
+  auto-redirect: true\n\
+  auto-detect-interface: true\n" "$config_file"
+    elif [[ "$confirm" == "2" ]]; then
+        iface=$(ip route | grep default | awk '{print $5}' | head -n1)
+        sed -i "/# 模式配置/a\
+iptables:\n\
+  enable: true\n\
+  inbound-interface: ${iface}\n" "$config_file"
+    else
+        echo -e "${red}无效选择，已取消操作。${reset}"
+        return
+    fi
+
     service_restart
     start_menu
 }
@@ -1051,7 +1073,7 @@ menu() {
         9) switch_version ;;
         20) config_mihomo ;;
         30) logs_mihomo ;;
-        40) switch_mihomo_mode ;;
+        40) mode_mihomo ;;
         10) exit 0 ;;
         0) update_shell ;;
         *) echo -e "${red}无效选项，请重新选择${reset}" 
