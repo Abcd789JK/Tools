@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本
 #!desc = 安装 & 配置
-#!date = 2025-04-12 13:26:27
+#!date = 2025-04-16 10:45:33
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -139,7 +139,7 @@ get_schema() {
 #############################
 update_system() {
     eval "$pkg_update"
-    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip"
+    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq"
 }
 
 #############################
