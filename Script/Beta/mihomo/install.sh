@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-16 14:07:23
+#!date = 2025-04-16 20:37:24
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -256,9 +256,8 @@ download_shell() {
 #       配置文件生成函数     #
 #############################
 get_network_info() {
-  local default_iface
+  local default_iface ipv4 ipv6
   default_iface=$(ip route | awk '/default/ {print $5}' | head -n 1)
-  local ipv4 ipv6
   ipv4=$(ip addr show "$default_iface" | awk '/inet / {print $2}' | cut -d/ -f1)
   ipv6=$(ip addr show "$default_iface" | awk '/inet6 / {print $2}' | cut -d/ -f1)
   echo "$default_iface $ipv4 $ipv6"
