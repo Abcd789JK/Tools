@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-05 16:24:43
+#!date = 2025-04-16 09:41:32
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -295,7 +295,7 @@ config_mihomo() {
     url: \"${airport_url}\"
     type: http
     interval: 86400
-    health-check: {enable: true,url: "https://www.gstatic.com/generate_204",interval: 300}
+    health-check: {enable: true,url: \"https://www.gstatic.com/generate_204\",interval: 300}
     override:
       additional-prefix: \"[${airport_name}]\""
         counter=$((counter + 1))

@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-15 21:56:39
+#!date = 2025-04-16 09:41:32
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.02"
+sh_ver="0.0.03"
 use_cdn=false
 distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
 arch=""           # 转换后的系统架构
@@ -641,8 +641,8 @@ add_provider() {
     local counter=$((current_count + 1))
 
     while true; do
-        read -p "$(echo -e "${yellow}请输入机场的订阅链接: ${reset}")" airport_url
-        read -p "$(echo -e "${yellow}请输入机场的名称: ${reset}")" airport_name
+        read -p "$(echo -e "${green}请输入机场的订阅链接: ${reset}")" airport_url
+        read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" airport_name
         if [ -z "$proxy_providers" ]; then
             proxy_providers="  provider_$(printf "%02d" $counter):
     url: \"${airport_url}\"
@@ -699,6 +699,194 @@ add_provider() {
 
     service_restart
     echo -e "${green}新增完成${reset}"
+    start_menu
+}
+
+modify_provider() {
+    local config_file="/root/mihomo/config.yaml"
+    local total_providers
+    total_providers=$(awk '/^proxy-providers:/, /^proxies:/ { if ($0 ~ /^[[:space:]]*provider_/) count++ } END { print count+0 }' "$config_file")
+
+    if [ "$total_providers" -eq 0 ]; then
+        echo -e "${red}当前没有任何机场订阅可供修改。${reset}"
+        start_menu
+        return
+    fi
+
+    echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
+
+    while true; do
+        read -p "请输入要修改的 provider 编号（如 01、02）：" number
+        if ! awk "/^proxy-providers:/, /^proxies:/" "$config_file" | grep -q "^  provider_${number}:"; then
+            echo -e "${red}未找到编号为 ${number} 的机场订阅，请重新输入。${reset}"
+            continue
+        fi
+
+        read -p "新的订阅链接：" new_url
+        read -p "新的机场名称：" new_name
+
+        awk -v num="$number" -v url="$new_url" -v name="$new_name" '
+        BEGIN {
+            in_block = 0
+            in_section = 0
+        }
+        {
+            if ($0 ~ /^proxy-providers:/) {
+                in_section = 1
+                print
+                next
+            }
+
+            if ($0 ~ /^proxies:/) {
+                in_section = 0
+                print $0
+                next
+            }
+
+            if (in_section) {
+                if ($0 ~ "^  provider_" num ":") {
+                    print $0
+                    in_block = 1
+                    next
+                }
+
+                if (in_block == 1 && $0 ~ "^  provider_") {
+                    in_block = 0
+                }
+
+                if (in_block == 1) {
+                    if ($0 ~ "^[[:space:]]*url:") {
+                        print "    url: \"" url "\""
+                        next
+                    }
+                    if ($0 ~ "^[[:space:]]*additional-prefix:") {
+                        print "      additional-prefix: \"[" name "]\""
+                        next
+                    }
+                }
+            }
+
+            print
+        }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+        echo -e "${green}编号为 ${number} 的机场订阅已修改完成。${reset}"
+        read -p "$(echo -e "${yellow}是否继续修改其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
+        [[ "$cont" =~ ^[nN]$ ]] && break
+    done
+
+    service_restart
+    start_menu
+}
+
+delete_provider() {
+    local config_file="/root/mihomo/config.yaml"
+
+    # 获取 provider 总数函数
+    get_provider_count() {
+        grep -c "^  provider_" "$config_file"
+    }
+
+    local total_providers
+    total_providers=$(get_provider_count)
+
+    if [ "$total_providers" -eq 0 ]; then
+        echo -e "${red}当前没有任何机场订阅可供删除。${reset}"
+        start_menu
+        return
+    fi
+
+    echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
+
+    while true; do
+        read -p "请输入要删除的 provider 编号（如 01、02）: " number
+        if ! grep -q "^  provider_${number}:" "$config_file"; then
+            echo -e "${red}未找到编号为 ${number} 的机场订阅，请重新输入。${reset}"
+            continue
+        fi
+
+        # 删除 provider 块
+        awk -v del_id="provider_${number}:" '
+        BEGIN {
+            inProviders = 0
+            block = ""
+        }
+        {
+            if ($0 ~ /^proxy-providers:/) {
+                print $0
+                inProviders = 1
+                next
+            }
+
+            if (inProviders && $0 ~ /^proxies:[[:space:]]*$/) {
+                if (block != "") {
+                    if (block !~ ("^[[:space:]]*" del_id)) {
+                        printf "%s", block
+                    }
+                }
+                print ""
+                print $0
+                inProviders = 0
+                next
+            }
+
+            if (inProviders && $0 ~ /^[[:space:]]*$/) {
+                next
+            }
+
+            if (inProviders) {
+                if ($0 ~ /^[[:space:]]*provider_[0-9]+:/) {
+                    if (block != "") {
+                        if (block !~ ("^[[:space:]]*" del_id)) {
+                            printf "%s", block
+                        }
+                    }
+                    block = $0 "\n"
+                } else {
+                    block = block $0 "\n"
+                }
+                next
+            }
+
+            print $0
+        }
+        END {
+            if (inProviders && block != "") {
+                if (block !~ ("^[[:space:]]*" del_id)) {
+                    printf "%s\n", block
+                }
+            }
+        }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+        # 重新编号
+        awk '
+        BEGIN { in_pp = 0; count = 1 }
+        {
+            if ($0 ~ /^proxy-providers:/) {
+                print $0;
+                in_pp = 1;
+                next;
+            }
+            if (in_pp == 1 && $0 ~ /^[[:space:]]*provider_[0-9]+:/) {
+                sub(/provider_[0-9]+:/, sprintf("provider_%02d:", count));
+                count++;
+            }
+            print $0;
+        }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+        # 删除成功后的反馈
+        total_providers=$(get_provider_count)
+        echo -e "${green}编号为 ${number} 的机场订阅已删除，当前剩余 ${total_providers} 个。${reset}"
+
+        if [ "$total_providers" -eq 0 ]; then
+            echo -e "${yellow}没有剩余订阅可删除。${reset}"
+            break
+        fi
+
+        read -p "$(echo -e "${yellow}是否继续删除其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
+        [[ "$cont" =~ ^[nN]$ ]] && break
+    done
+
+    service_restart
     start_menu
 }
 
