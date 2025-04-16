@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-16 14:07:23
+#!date = 2025-04-16 14:10:10
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -1044,7 +1044,7 @@ menu() {
     echo "================================="
     echo -e "${green} 0${reset}. 更新脚本"
     echo -e "${green}10${reset}. 退出脚本"
-    echo -e "${green}20${reset}. 更换订阅"
+    echo -e "${green}20${reset}. 配置管理"
     echo -e "${green}30${reset}. 查看日志"
     echo "---------------------------------"
     echo -e "${green} 1${reset}. 安装 mihomo"
