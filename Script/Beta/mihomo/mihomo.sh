@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-16 11:50:04
+#!date = 2025-04-16 11:52:18
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -952,6 +952,7 @@ iptables:\n\
         return
     fi
 
+    echo -e "${green}已换运行模式为：$current_mode${reset}"
     service_restart
     start_menu
 }
