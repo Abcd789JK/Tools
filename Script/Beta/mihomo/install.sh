@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-16 10:44:54
+#!date = 2025-04-16 10:52:32
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -289,8 +289,8 @@ config_mihomo() {
     local proxy_providers="proxy-providers:"
     local counter=1
     while true; do
-        read -p "$(echo -e "${yellow}请输入机场的订阅连接: ${reset}")" airport_url
-        read -p "$(echo -e "${yellow}请输入机场的名称: ${reset}")" airport_name
+        read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" airport_url
+        read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" airport_name
         proxy_providers="${proxy_providers}
   provider_$(printf "%02d" $counter):
     url: \"${airport_url}\"
