@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-16 09:41:32
+#!date = 2025-04-16 10:44:54
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -111,7 +111,7 @@ get_url() {
 #############################
 update_system() {
     eval "$pkg_update"
-    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip"
+    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq"
 }
 
 #############################
@@ -262,6 +262,7 @@ config_mihomo() {
     iface=$(ip route | awk '/default/ {print $5}')
     ipv4=$(ip addr show "$iface" | awk '/inet / {print $2}' | cut -d/ -f1)
     ipv6=$(ip addr show "$iface" | awk '/inet6 / {print $2}' | cut -d/ -f1)
+    local config_file="/root/mihomo/config.yaml"
     echo -e "${green}请选择运行模式(推荐使用 TUN 模式)${reset}"
     echo -e "${cyan}-------------------------${reset}"
     echo -e "${green}1. TUN 模式${reset}"

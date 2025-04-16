@@ -1,6 +1,6 @@
-#!name = mihomo TUN 配置文件
+#!name = mihomo 配置文件
 #!desc = 说明：理论上适用于所有的 Meta 内核，使用最新的 mrs 规则
-#!date = 2025-04-01 09:47:20
+#!date = 2025-04-16 10:44:54
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
@@ -11,15 +11,17 @@ proxies:
     type: direct
     udp: true
 
-mixed-port: 7890
 ipv6: true
 allow-lan: true
+mixed-port: 7890
+tproxy-port: 7891
 unified-delay: true
 tcp-concurrent: true
-external-controller: 0.0.0.0:9090
-external-ui: ui
-external-ui-url: "https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
 
+external-ui: ui
+external-controller: 0.0.0.0:9090
+external-ui-url: "https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
+ 
 find-process-mode: strict
 global-client-fingerprint: chrome
 
@@ -41,6 +43,10 @@ sniffer:
     - "Mijia Cloud"
     - "+.push.apple.com"
 
+iptables: 
+  enable: false
+  inbound-interface: eth0
+
 tun:
   enable: true
   stack: mixed
@@ -54,6 +60,7 @@ tun:
 dns:
   enable: true
   ipv6: true
+  listen: 0.0.0.0:1053
   enhanced-mode: fake-ip
   fake-ip-filter:
     - "*"

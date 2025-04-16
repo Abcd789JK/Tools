@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-16 09:41:32
+#!date = 2025-04-16 10:44:54
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.03"
+sh_ver="0.0.04"
 use_cdn=false
 distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
 arch=""           # 转换后的系统架构
@@ -639,6 +639,7 @@ add_provider() {
     [ -z "$current_count" ] && current_count=0
     local proxy_providers=""
     local counter=$((current_count + 1))
+    echo -e "${yellow}当前共有 ${current_count} 个机场订阅。${reset}"
 
     while true; do
         read -p "$(echo -e "${green}请输入机场的订阅链接: ${reset}")" airport_url
@@ -890,6 +891,49 @@ delete_provider() {
     start_menu
 }
 
+switch_mihomo_mode() {
+    local config_file="/root/mihomo/config.yaml"
+
+    # 获取当前模式（避免误报，读取并忽略注释）
+    local tun_enabled=$(grep -E '^\s*tun:\s*$' -A 10 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
+    local ipt_enabled=$(grep -E '^\s*iptables:\s*$' -A 5 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
+    local current_mode="未知"
+
+    if [[ "$tun_enabled" == "true" ]]; then
+        current_mode="TUN"
+    elif [[ "$ipt_enabled" == "true" ]]; then
+        current_mode="TProxy"
+    fi
+
+    echo -e "${green}当前运行模式：$current_mode${reset}"
+    echo -e "${green}请选择要切换的运行模式（推荐使用 TUN 模式）${reset}"
+    echo -e "${cyan}-------------------------${reset}"
+    echo -e "${green}1. TUN 模式${reset}"
+    echo -e "${green}2. TProxy 模式${reset}"
+    echo -e "${cyan}-------------------------${reset}"
+    read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" confirm
+    confirm=${confirm:-1}
+
+    if [[ "$confirm" == "1" ]]; then
+        echo -e "${green}切换到 TUN 模式...${reset}"
+        sed -i -E '/^(\s*)iptables:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 false/' "$config_file"
+        sed -i -E '/^(\s*)tun:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 true/' "$config_file"
+
+    elif [[ "$confirm" == "2" ]]; then
+        echo -e "${green}切换到 TProxy 模式...${reset}"
+        sed -i -E '/^(\s*)iptables:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 true/' "$config_file"
+        sed -i -E '/^(\s*)tun:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 false/' "$config_file"
+
+    else
+        echo -e "${yellow}无效输入，默认切换为 TUN 模式${reset}"
+        sed -i -E '/^(\s*)iptables:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 false/' "$config_file"
+        sed -i -E '/^(\s*)tun:\s*$/,/^[^ ]/s/^(\s*enable:).*/\1 true/' "$config_file"
+    fi
+    
+    service_restart
+    start_menu
+}
+
 #############################
 #       版本切换函数       #
 #############################
@@ -978,6 +1022,7 @@ menu() {
     echo -e "${green}10${reset}. 退出脚本"
     echo -e "${green}20${reset}. 更换订阅"
     echo -e "${green}30${reset}. 查看日志"
+    echo -e "${green}40${reset}. 切换模式"
     echo "---------------------------------"
     echo -e "${green} 1${reset}. 安装 mihomo"
     echo -e "${green} 2${reset}. 更新 mihomo"
@@ -1006,6 +1051,7 @@ menu() {
         9) switch_version ;;
         20) config_mihomo ;;
         30) logs_mihomo ;;
+        40) switch_mihomo_mode ;;
         10) exit 0 ;;
         0) update_shell ;;
         *) echo -e "${red}无效选项，请重新选择${reset}" 
