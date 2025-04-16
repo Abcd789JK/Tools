@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-16 10:52:32
+#!date = 2025-04-16 11:38:15
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -257,12 +257,11 @@ config_mihomo() {
     local folders="/root/mihomo"
     local config_file="/root/mihomo/config.yaml"
     local tun_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
-    local tproxy_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomotp.yaml"
     local iface ipv4 ipv6 config_url
     iface=$(ip route | awk '/default/ {print $5}')
     ipv4=$(ip addr show "$iface" | awk '/inet / {print $2}' | cut -d/ -f1)
     ipv6=$(ip addr show "$iface" | awk '/inet6 / {print $2}' | cut -d/ -f1)
-    local config_file="/root/mihomo/config.yaml"
+
     echo -e "${green}请选择运行模式(推荐使用 TUN 模式)${reset}"
     echo -e "${cyan}-------------------------${reset}"
     echo -e "${green}1. TUN 模式${reset}"
@@ -272,20 +271,57 @@ config_mihomo() {
     confirm=${confirm:-1}
     case "$confirm" in
         1)
-            config_url="$tun_config_url"
+            mode_config=$(cat <<EOF
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+EOF
+)
             ;;
         2)
-            config_url="$tproxy_config_url"
+            mode_config=$(cat <<EOF
+iptables:
+  enable: true
+  inbound-interface: $iface
+
+EOF
+)
             ;;
         *)
             echo -e "${red}无效选择，使用默认 TUN 配置。${reset}"
-            config_url="$tun_config_url"
+            mode_config=$(cat <<EOF
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+EOF
+)
             ;;
     esac
-    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$config_url")" || { 
+
+    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$tun_config_url")" || { 
         echo -e "${red}配置文件下载失败${reset}"
         exit 1
     }
+
+    awk -v config="$mode_config" '
+      /^# 模式配置/ { print; print config; next }
+      { print }
+    ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
     local proxy_providers="proxy-providers:"
     local counter=1
     while true; do
@@ -305,10 +341,12 @@ config_mihomo() {
             break
         fi
     done
+
     awk -v providers="$proxy_providers" '
       /^# 机场配置/ { print; print providers; next }
       { print }
     ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
     service_restart
     echo -e "${green}配置完成，配置文件已保存到：${yellow}${config_file}${reset}"
     echo -e "${green}mihomo 配置完成，正在启动中${reset}"
