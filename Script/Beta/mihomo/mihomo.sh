@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-16 11:52:18
+#!date = 2025-04-16 11:55:57
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -941,18 +941,21 @@ tun:\n\
   auto-route: true\n\
   auto-redirect: true\n\
   auto-detect-interface: true\n" "$config_file"
+        current_mode="TUN"
     elif [[ "$confirm" == "2" ]]; then
         iface=$(ip route | grep default | awk '{print $5}' | head -n1)
         sed -i "/# 模式配置/a\
 iptables:\n\
   enable: true\n\
   inbound-interface: ${iface}\n" "$config_file"
+        current_mode="TProxy"
     else
         echo -e "${red}无效选择，已取消操作。${reset}"
         return
     fi
 
     echo -e "${green}已换运行模式为：$current_mode${reset}"
+
     service_restart
     start_menu
 }
