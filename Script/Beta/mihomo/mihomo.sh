@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-16 11:55:57
+#!date = 2025-04-16 14:07:23
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,11 +20,11 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.04"
+sh_ver="0.0.05"
 use_cdn=false
-distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
-arch=""           # 转换后的系统架构
-arch_raw=""       # 原始系统架构信息
+distro="unknown"  # 系统类型
+arch=""           # 系统架构
+arch_raw=""       # 原始架构
 
 #############################
 #       系统检测函数       #
@@ -211,7 +211,7 @@ service_mihomo() {
     esac
     if [ "$distro" = "alpine" ]; then
         if [ "$action" == "logs" ]; then
-            echo -e "${green}日志查看：请使用 logread 或查看 /var/log/messages${reset}"
+            echo -e "${green}日志查看: Alipne系统, 暂不支持${reset}"
             start_menu
             return
         fi
@@ -615,15 +615,22 @@ config_mihomo() {
     check_installation || { start_menu; return; }
     check_network
     echo -e "${green}开始修改 mihomo 配置${reset}"
-    echo -e "${yellow}请选择操作：${reset}"
-    echo "1. 新增机场订阅"
-    echo "2. 修改机场订阅"
-    echo "3. 删除机场订阅"
-    read -p "输入选项数字：" choice
+    echo -e "${cyan}-------------------------${reset}"
+    echo -e "${red}操作说明："
+    echo -e "${red}    1. 订阅编号, 默认是 01 开始依次"
+    echo -e "${red}    2. 订阅不能全部删除，至少保留一个${reset}"
+    echo -e "${cyan}-------------------------${reset}"
+    echo -e "${green}1${reset}. 新增机场订阅"
+    echo -e "${green}2${reset}. 修改机场订阅"
+    echo -e "${green}3${reset}. 删除机场订阅"
+    echo -e "${green}4${reset}. 切换运行模式"
+    echo -e "${cyan}-------------------------${reset}"
+    read -p "$(echo -e "${green}输入选项数字: ${reset}")" choice
     case "$choice" in
         1) add_provider ;;
         2) modify_provider ;;
         3) delete_provider ;;
+        4) mode_mihomo ;;
         *) echo "无效选项"; start_menu ;;
     esac
 }
@@ -717,14 +724,13 @@ modify_provider() {
     echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
 
     while true; do
-        read -p "请输入要修改的 provider 编号（如 01、02）：" number
+        read -p "$(echo -e "${green}请输入要修改的 provider 编号(如 01、02): ${reset}")" number
         if ! awk "/^proxy-providers:/, /^proxies:/" "$config_file" | grep -q "^  provider_${number}:"; then
             echo -e "${red}未找到编号为 ${number} 的机场订阅，请重新输入。${reset}"
             continue
         fi
-
-        read -p "新的订阅链接：" new_url
-        read -p "新的机场名称：" new_name
+        read -p "$(echo -e "${green}新的订阅链接: ${reset}")" new_url
+        read -p "$(echo -e "${green}新的机场名称: ${reset}")" new_name
 
         awk -v num="$number" -v url="$new_url" -v name="$new_name" '
         BEGIN {
@@ -782,7 +788,6 @@ modify_provider() {
 delete_provider() {
     local config_file="/root/mihomo/config.yaml"
 
-    # 获取 provider 总数函数
     get_provider_count() {
         grep -c "^  provider_" "$config_file"
     }
@@ -799,13 +804,12 @@ delete_provider() {
     echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
 
     while true; do
-        read -p "请输入要删除的 provider 编号（如 01、02）: " number
+        read -p "$(echo -e "${green}请输入要删除的 provider 编号(如 01、02): ${reset}")" number
         if ! grep -q "^  provider_${number}:" "$config_file"; then
             echo -e "${red}未找到编号为 ${number} 的机场订阅，请重新输入。${reset}"
             continue
         fi
 
-        # 删除 provider 块
         awk -v del_id="provider_${number}:" '
         BEGIN {
             inProviders = 0
@@ -858,7 +862,6 @@ delete_provider() {
             }
         }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
 
-        # 重新编号
         awk '
         BEGIN { in_pp = 0; count = 1 }
         {
@@ -874,7 +877,6 @@ delete_provider() {
             print $0;
         }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
 
-        # 删除成功后的反馈
         total_providers=$(get_provider_count)
         echo -e "${green}编号为 ${number} 的机场订阅已删除，当前剩余 ${total_providers} 个。${reset}"
 
@@ -907,8 +909,8 @@ mode_mihomo() {
     echo -e "${green}当前运行模式：$current_mode${reset}"
     echo -e "${green}请选择要切换的运行模式（推荐使用 TUN 模式）${reset}"
     echo -e "${cyan}-------------------------${reset}"
-    echo -e "${green}1. TUN 模式${reset}"
-    echo -e "${green}2. TProxy 模式${reset}"
+    echo -e "${green}1${reset}. TUN 模式"
+    echo -e "${green}2${reset}. TProxy 模式"
     echo -e "${cyan}-------------------------${reset}"
     read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" confirm
     confirm=${confirm:-1}
@@ -983,8 +985,8 @@ switch_version() {
     fi
     echo -e "${green}请选择版本${reset}"
     echo -e "${cyan}-------------------------${reset}"
-    echo -e "${green}1. 测试版 (Prerelease-Alpha)${reset}"
-    echo -e "${green}2. 正式版 (Latest)${reset}"
+    echo -e "${green}1${reset}. 测试版 (Prerelease-Alpha)"
+    echo -e "${green}2${reset}. 正式版 (Latest)"
     echo -e "${cyan}-------------------------${reset}"
     read -p "$(echo -e "${yellow}请输入选项 (1/2): ${reset}")" choice
     case "$choice" in
@@ -1000,11 +1002,7 @@ switch_version() {
             echo -e "${yellow}已经切换到测试版${reset}"
             echo -e "${yellow}等待 3 秒后重启生效${reset}"
             sleep 3s
-            if [ "$distro" = "alpine" ]; then
-                rc-service mihomo restart
-            else
-                systemctl restart mihomo
-            fi
+            service_restart
             echo -e "${yellow}当前软件版本${reset}：【 ${green}${version}${reset} 】"
             start_menu
             ;;
@@ -1040,15 +1038,14 @@ menu() {
     echo "================================="
     echo -e "${green}欢迎使用 mihomo 一键脚本${reset}"
     echo -e "${green}作者：${yellow}ChatGPT JK789${reset}"
-    echo -e "${red}使用说明：${reset}"
-    echo -e "${red} 1. 更换订阅不能保存原有机场订阅"
-    echo -e "${red} 2. 需要全部重新添加机场订阅${reset}"
+    echo -e "${red}使用说明: "
+    echo -e "${red}    1. 更换订阅不能保存原有机场订阅"
+    echo -e "${red}    2. 需要全部重新添加机场订阅${reset}"
     echo "================================="
     echo -e "${green} 0${reset}. 更新脚本"
     echo -e "${green}10${reset}. 退出脚本"
-    echo -e "${green}20${reset}. 更换订阅"
+    echo -e "${green}20${reset}. 配置管理"
     echo -e "${green}30${reset}. 查看日志"
-    echo -e "${green}40${reset}. 切换模式"
     echo "---------------------------------"
     echo -e "${green} 1${reset}. 安装 mihomo"
     echo -e "${green} 2${reset}. 更新 mihomo"
@@ -1077,7 +1074,6 @@ menu() {
         9) switch_version ;;
         20) config_mihomo ;;
         30) logs_mihomo ;;
-        40) mode_mihomo ;;
         10) exit 0 ;;
         0) update_shell ;;
         *) echo -e "${red}无效选项，请重新选择${reset}" 

@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-05 16:04:29
+#!date = 2025-04-16 14:07:23
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,11 +20,11 @@ reset="\033[0m"   # 重置
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.1.8"
+sh_ver="0.1.9"
 use_cdn=false
-distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
-arch=""           # 系统架构（转换后的标准格式）
-arch_raw=""       # 原始架构信息
+distro="unknown"  # 系统类型
+arch=""           # 系统架构
+arch_raw=""       # 原始架构
 
 #############################
 #       系统检测函数       #
@@ -33,20 +33,33 @@ check_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         case "$ID" in
-            debian)
-                distro="debian"
-                ;;
-            ubuntu)
-                distro="ubuntu"
+            debian|ubuntu)
+                distro="$ID"
+                pkg_update="apt update && apt upgrade -y"
+                pkg_install="apt install -y"
+                service_enable() { systemctl enable mihomo; }
+                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
                 ;;
             alpine)
                 distro="alpine"
+                pkg_update="apk update && apk upgrade"
+                pkg_install="apk add"
+                service_enable() { rc-update add mihomo default; }
+                service_restart() { rc-service mihomo restart; }
                 ;;
             fedora)
                 distro="fedora"
+                pkg_update="dnf upgrade --refresh -y"
+                pkg_install="dnf install -y"
+                service_enable() { systemctl enable mihomo; }
+                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
                 ;;
             arch)
                 distro="arch"
+                pkg_update="pacman -Syu --noconfirm"
+                pkg_install="pacman -S --noconfirm"
+                service_enable() { systemctl enable mihomo; }
+                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
                 ;;
             *)
                 echo -e "${red}不支持的系统：${ID}${reset}"
@@ -198,7 +211,7 @@ service_mihomo() {
     esac
     if [ "$distro" = "alpine" ]; then
         if [ "$action" == "logs" ]; then
-            echo -e "${green}日志查看：请使用 logread 或查看 /var/log/messages${reset}"
+            echo -e "${green}日志查看: Alipne系统, 暂不支持${reset}"
             start_menu
             return
         fi
@@ -551,11 +564,7 @@ update_mihomo() {
     fi
     sleep 2s
     echo -e "${yellow}更新完成，当前版本已更新为：${reset}【 ${green}${latest_version}${reset} 】"
-    if [ "$distro" = "alpine" ]; then
-        rc-service mihomo restart
-    else
-        systemctl restart mihomo
-    fi
+    service_restart
     start_menu
 }
 
@@ -605,66 +614,351 @@ update_shell() {
 config_mihomo() {
     check_installation || { start_menu; return; }
     check_network
-    local folders="/root/mihomo"
-    local config_file="/root/mihomo/config.yaml"
-    local tun_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
-    local tproxy_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomotp.yaml"
-    local iface ipv4 ipv6 config_url
-    iface=$(ip route | awk '/default/ {print $5}')
-    ipv4=$(ip addr show "$iface" | awk '/inet / {print $2}' | cut -d/ -f1)
-    ipv6=$(ip addr show "$iface" | awk '/inet6 / {print $2}' | cut -d/ -f1)
-    echo -e "${green}请选择运行模式${reset}"
+    echo -e "${green}开始修改 mihomo 配置${reset}"
     echo -e "${cyan}-------------------------${reset}"
-    echo -e "${yellow}1. TUN 模式${reset}"
-    echo -e "${yellow}2. TProxy 模式${reset}"
+    echo -e "${red}操作说明："
+    echo -e "${red}    1. 订阅编号, 默认是 01 开始依次"
+    echo -e "${red}    2. 订阅不能全部删除，至少保留一个${reset}"
     echo -e "${cyan}-------------------------${reset}"
-    read -p "$(echo -e "${green}请输入选择(1/2): ${reset}")" confirm
-    confirm=${confirm:-1}
-    case "$confirm" in
-        1)
-            config_url="$tun_config_url"
-            ;;
-        2)
-            config_url="$tproxy_config_url"
-            ;;
-        *)
-            echo -e "${red}无效选择，跳过配置文件下载。${reset}"
-            return
+    echo -e "${green}1${reset}. 新增机场订阅"
+    echo -e "${green}2${reset}. 修改机场订阅"
+    echo -e "${green}3${reset}. 删除机场订阅"
+    echo -e "${green}4${reset}. 切换运行模式"
+    echo -e "${cyan}-------------------------${reset}"
+    read -p "$(echo -e "${green}输入选项数字: ${reset}")" choice
+    case "$choice" in
+        1) add_provider ;;
+        2) modify_provider ;;
+        3) delete_provider ;;
+        4) mode_mihomo ;;
+        *) echo "无效选项"; start_menu ;;
     esac
-    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$config_url")" || { 
-        echo -e "${red}配置文件下载失败${reset}"
+}
+
+add_provider() {
+    local config_file="/root/mihomo/config.yaml"
+    if [ ! -f "$config_file" ]; then
+        echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
         exit 1
-    }
-    local proxy_providers="proxy-providers:"
-    local counter=1
+    fi
+    local current_count
+    current_count=$(grep -c "provider_" "$config_file")
+    [ -z "$current_count" ] && current_count=0
+    local proxy_providers=""
+    local counter=$((current_count + 1))
+    echo -e "${yellow}当前共有 ${current_count} 个机场订阅。${reset}"
+
     while true; do
-        read -p "$(echo -e "${yellow}请输入机场的订阅连接: ${reset}")" airport_url
-        read -p "$(echo -e "${yellow}请输入机场的名称: ${reset}")" airport_name
-        proxy_providers="${proxy_providers}
+        read -p "$(echo -e "${green}请输入机场的订阅链接: ${reset}")" airport_url
+        read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" airport_name
+        if [ -z "$proxy_providers" ]; then
+            proxy_providers="  provider_$(printf "%02d" $counter):
+    url: \"${airport_url}\"
+    type: http
+    interval: 86400
+    health-check: {enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300}
+    override:
+      additional-prefix: \"[${airport_name}]\""
+        else
+            proxy_providers="${proxy_providers}
   provider_$(printf "%02d" $counter):
     url: \"${airport_url}\"
     type: http
     interval: 86400
-    health-check: {enable: true,url: "https://www.gstatic.com/generate_204",interval: 300}
+    health-check: {enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300}
     override:
       additional-prefix: \"[${airport_name}]\""
+        fi
         counter=$((counter + 1))
         read -p "$(echo -e "${yellow}是否继续输入订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
-        if [[ "$cont" =~ ^[nN]$ ]]; then
+        [[ "$cont" =~ ^[nN]$ ]] && break
+    done
+
+    awk -v new_providers="$proxy_providers" '
+    BEGIN { in_pp = 0; inserted = 0; blank_buffer = "" }
+    {
+        if ($0 ~ /^proxy-providers:/) {
+            print $0;
+            in_pp = 1;
+            next;
+        }
+        if (in_pp == 1 && $0 ~ /^[[:space:]]*$/) {
+            blank_buffer = blank_buffer $0 "\n";
+            next;
+        }
+        if (in_pp == 1 && $0 !~ /^[[:space:]]/) {
+            if (inserted == 0) {
+                print new_providers;
+                print "";
+                inserted = 1;
+                in_pp = 0;
+            }
+            print $0;
+            next;
+        }
+        print $0;
+    }
+    END {
+       if (in_pp == 1 && inserted == 0) {
+           print new_providers;
+           print "";
+       }
+    }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+    service_restart
+    echo -e "${green}新增完成${reset}"
+    start_menu
+}
+
+modify_provider() {
+    local config_file="/root/mihomo/config.yaml"
+    local total_providers
+    total_providers=$(awk '/^proxy-providers:/, /^proxies:/ { if ($0 ~ /^[[:space:]]*provider_/) count++ } END { print count+0 }' "$config_file")
+
+    if [ "$total_providers" -eq 0 ]; then
+        echo -e "${red}当前没有任何机场订阅可供修改。${reset}"
+        start_menu
+        return
+    fi
+
+    echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
+
+    while true; do
+        read -p "$(echo -e "${green}请输入要修改的 provider 编号(如 01、02): ${reset}")" number
+        if ! awk "/^proxy-providers:/, /^proxies:/" "$config_file" | grep -q "^  provider_${number}:"; then
+            echo -e "${red}未找到编号为 ${number} 的机场订阅，请重新输入。${reset}"
+            continue
+        fi
+        read -p "$(echo -e "${green}新的订阅链接: ${reset}")" new_url
+        read -p "$(echo -e "${green}新的机场名称: ${reset}")" new_name
+
+        awk -v num="$number" -v url="$new_url" -v name="$new_name" '
+        BEGIN {
+            in_block = 0
+            in_section = 0
+        }
+        {
+            if ($0 ~ /^proxy-providers:/) {
+                in_section = 1
+                print
+                next
+            }
+
+            if ($0 ~ /^proxies:/) {
+                in_section = 0
+                print $0
+                next
+            }
+
+            if (in_section) {
+                if ($0 ~ "^  provider_" num ":") {
+                    print $0
+                    in_block = 1
+                    next
+                }
+
+                if (in_block == 1 && $0 ~ "^  provider_") {
+                    in_block = 0
+                }
+
+                if (in_block == 1) {
+                    if ($0 ~ "^[[:space:]]*url:") {
+                        print "    url: \"" url "\""
+                        next
+                    }
+                    if ($0 ~ "^[[:space:]]*additional-prefix:") {
+                        print "      additional-prefix: \"[" name "]\""
+                        next
+                    }
+                }
+            }
+
+            print
+        }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+        echo -e "${green}编号为 ${number} 的机场订阅已修改完成。${reset}"
+        read -p "$(echo -e "${yellow}是否继续修改其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
+        [[ "$cont" =~ ^[nN]$ ]] && break
+    done
+
+    service_restart
+    start_menu
+}
+
+delete_provider() {
+    local config_file="/root/mihomo/config.yaml"
+
+    get_provider_count() {
+        grep -c "^  provider_" "$config_file"
+    }
+
+    local total_providers
+    total_providers=$(get_provider_count)
+
+    if [ "$total_providers" -eq 0 ]; then
+        echo -e "${red}当前没有任何机场订阅可供删除。${reset}"
+        start_menu
+        return
+    fi
+
+    echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
+
+    while true; do
+        read -p "$(echo -e "${green}请输入要删除的 provider 编号(如 01、02): ${reset}")" number
+        if ! grep -q "^  provider_${number}:" "$config_file"; then
+            echo -e "${red}未找到编号为 ${number} 的机场订阅，请重新输入。${reset}"
+            continue
+        fi
+
+        awk -v del_id="provider_${number}:" '
+        BEGIN {
+            inProviders = 0
+            block = ""
+        }
+        {
+            if ($0 ~ /^proxy-providers:/) {
+                print $0
+                inProviders = 1
+                next
+            }
+
+            if (inProviders && $0 ~ /^proxies:[[:space:]]*$/) {
+                if (block != "") {
+                    if (block !~ ("^[[:space:]]*" del_id)) {
+                        printf "%s", block
+                    }
+                }
+                print ""
+                print $0
+                inProviders = 0
+                next
+            }
+
+            if (inProviders && $0 ~ /^[[:space:]]*$/) {
+                next
+            }
+
+            if (inProviders) {
+                if ($0 ~ /^[[:space:]]*provider_[0-9]+:/) {
+                    if (block != "") {
+                        if (block !~ ("^[[:space:]]*" del_id)) {
+                            printf "%s", block
+                        }
+                    }
+                    block = $0 "\n"
+                } else {
+                    block = block $0 "\n"
+                }
+                next
+            }
+
+            print $0
+        }
+        END {
+            if (inProviders && block != "") {
+                if (block !~ ("^[[:space:]]*" del_id)) {
+                    printf "%s\n", block
+                }
+            }
+        }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+        awk '
+        BEGIN { in_pp = 0; count = 1 }
+        {
+            if ($0 ~ /^proxy-providers:/) {
+                print $0;
+                in_pp = 1;
+                next;
+            }
+            if (in_pp == 1 && $0 ~ /^[[:space:]]*provider_[0-9]+:/) {
+                sub(/provider_[0-9]+:/, sprintf("provider_%02d:", count));
+                count++;
+            }
+            print $0;
+        }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+        total_providers=$(get_provider_count)
+        echo -e "${green}编号为 ${number} 的机场订阅已删除，当前剩余 ${total_providers} 个。${reset}"
+
+        if [ "$total_providers" -eq 0 ]; then
+            echo -e "${yellow}没有剩余订阅可删除。${reset}"
             break
         fi
+
+        read -p "$(echo -e "${yellow}是否继续删除其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
+        [[ "$cont" =~ ^[nN]$ ]] && break
     done
-    awk -v providers="$proxy_providers" '
-      /^# 机场配置/ { print; print providers; next }
-      { print }
-    ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
-    if [ "$distro" = "alpine" ]; then
-        rc-service mihomo restart
-    else
-        systemctl daemon-reload
-        systemctl restart mihomo
+
+    service_restart
+    start_menu
+}
+
+mode_mihomo() {
+    local config_file="/root/mihomo/config.yaml"
+
+    local tun_enabled=$(grep -E '^\s*tun:\s*$' -A 10 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
+    local ipt_enabled=$(grep -E '^\s*iptables:\s*$' -A 5 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
+    local current_mode="未知"
+
+    if [[ "$tun_enabled" == "true" ]]; then
+        current_mode="TUN"
+    elif [[ "$ipt_enabled" == "true" ]]; then
+        current_mode="TProxy"
     fi
-    echo -e "${green}配置完成${reset}"
+
+    echo -e "${green}当前运行模式：$current_mode${reset}"
+    echo -e "${green}请选择要切换的运行模式（推荐使用 TUN 模式）${reset}"
+    echo -e "${cyan}-------------------------${reset}"
+    echo -e "${green}1${reset}. TUN 模式"
+    echo -e "${green}2${reset}. TProxy 模式"
+    echo -e "${cyan}-------------------------${reset}"
+    read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" confirm
+    confirm=${confirm:-1}
+
+    local mode_line=$(grep -n "^# 模式配置" "$config_file" | cut -d: -f1)
+    if [[ -n "$mode_line" ]]; then
+        local next_line=$((mode_line + 1))
+        local block_start=$(sed -n "${next_line},\$p" "$config_file" | grep -En '^\s*(tun:|iptables:)\s*$' | head -n1 | cut -d: -f1)
+
+        if [[ -n "$block_start" ]]; then
+            block_start=$((mode_line + block_start))
+            local block_end=$(sed -n "${block_start},\$p" "$config_file" | grep -n '^[^[:space:]]' | grep -v "^1:" | head -n1 | cut -d: -f1)
+            if [[ -n "$block_end" ]]; then
+                block_end=$((block_start + block_end - 2))
+            else
+                block_end=$(wc -l < "$config_file")
+            fi
+            sed -i "${block_start},${block_end}d" "$config_file"
+        fi
+    fi
+
+    if [[ "$confirm" == "1" ]]; then
+        sed -i "/# 模式配置/a\
+tun:\n\
+  enable: true\n\
+  stack: mixed\n\
+  dns-hijack:\n\
+    - \"any:53\"\n\
+    - \"tcp://any:53\"\n\
+  auto-route: true\n\
+  auto-redirect: true\n\
+  auto-detect-interface: true\n" "$config_file"
+        current_mode="TUN"
+    elif [[ "$confirm" == "2" ]]; then
+        iface=$(ip route | grep default | awk '{print $5}' | head -n1)
+        sed -i "/# 模式配置/a\
+iptables:\n\
+  enable: true\n\
+  inbound-interface: ${iface}\n" "$config_file"
+        current_mode="TProxy"
+    else
+        echo -e "${red}无效选择，已取消操作。${reset}"
+        return
+    fi
+
+    echo -e "${green}已换运行模式为：$current_mode${reset}"
+
+    service_restart
     start_menu
 }
 
@@ -691,8 +985,8 @@ switch_version() {
     fi
     echo -e "${green}请选择版本${reset}"
     echo -e "${cyan}-------------------------${reset}"
-    echo -e "${green}1. 测试版 (Prerelease-Alpha)${reset}"
-    echo -e "${green}2. 正式版 (Latest)${reset}"
+    echo -e "${green}1${reset}. 测试版 (Prerelease-Alpha)"
+    echo -e "${green}2${reset}. 正式版 (Latest)"
     echo -e "${cyan}-------------------------${reset}"
     read -p "$(echo -e "${yellow}请输入选项 (1/2): ${reset}")" choice
     case "$choice" in
@@ -708,11 +1002,7 @@ switch_version() {
             echo -e "${green}已经切换到测试版${reset}"
             echo -e "${green}等待 3 秒后重启生效${reset}"
             sleep 3s
-            if [ "$distro" = "alpine" ]; then
-                rc-service mihomo restart
-            else
-                systemctl restart mihomo
-            fi
+            service_restart
             echo -e "${yellow}当前软件版本${reset}：【 ${green}${version}${reset} 】"
             start_menu
             ;;
@@ -728,11 +1018,7 @@ switch_version() {
             echo -e "${green}已经切换到正式版${reset}"
             echo -e "${green}等待 3 秒后重启生效${reset}"
             sleep 3s
-            if [ "$distro" = "alpine" ]; then
-                rc-service mihomo restart
-            else
-                systemctl restart mihomo
-            fi
+            service_restart
             echo -e "${yellow}当前软件版本${reset}：【 ${green}v${version}${reset} 】"
             start_menu
             ;;
@@ -752,9 +1038,9 @@ menu() {
     echo "================================="
     echo -e "${green}欢迎使用 mihomo 一键脚本${reset}"
     echo -e "${green}作者：${yellow}ChatGPT JK789${reset}"
-    echo -e "${red}使用说明：${reset}"
-    echo -e "${red} 1. 更换订阅不能保存原有机场订阅"
-    echo -e "${red} 2. 需要全部重新添加机场订阅${reset}"
+    echo -e "${red}使用说明: "
+    echo -e "${red}    1. 更换订阅不能保存原有机场订阅"
+    echo -e "${red}    2. 需要全部重新添加机场订阅${reset}"
     echo "================================="
     echo -e "${green} 0${reset}. 更新脚本"
     echo -e "${green}10${reset}. 退出脚本"

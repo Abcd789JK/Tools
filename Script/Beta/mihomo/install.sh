@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-16 11:38:15
+#!date = 2025-04-16 14:07:23
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -15,16 +15,16 @@ green="\033[32m"  # 绿色
 yellow="\033[33m" # 黄色
 blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
-reset="\033[0m"   # 重置颜色
+reset="\033[0m"   # 重置
 
 #############################
 #       全局变量定义       #
 #############################
 sh_ver="1.0.0"
 use_cdn=false
-distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
+distro="unknown"  # 系统类型
 arch=""           # 系统架构
-arch_raw=""       # 原始架构信息
+arch_raw=""       # 原始架构
 
 #############################
 #       系统检测函数       #
@@ -147,13 +147,15 @@ get_schema() {
 #############################
 check_ip_forward() {
     local sysctl_file="/etc/sysctl.conf"
-    if ! sysctl net.ipv4.ip_forward | grep -q "1"; then
+    sed -i 's/^#[[:space:]]*\(net\.ipv4\.ip_forward\s*=\s*1\)/\1/' "$sysctl_file"
+    if ! sysctl net.ipv4.ip_forward | grep -qE '=\s*1'; then
         sysctl -w net.ipv4.ip_forward=1
-        grep -q "net.ipv4.ip_forward=1" "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
+        grep -Eq '^net\.ipv4\.ip_forward\s*=\s*1' "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
     fi
-    if ! sysctl net.ipv6.conf.all.forwarding | grep -q "1"; then
+    sed -i 's/^#[[:space:]]*\(net\.ipv6\.conf\.all\.forwarding\s*=\s*1\)/\1/' "$sysctl_file"
+    if ! sysctl net.ipv6.conf.all.forwarding | grep -qE '=\s*1'; then
         sysctl -w net.ipv6.conf.all.forwarding=1
-        grep -q "net.ipv6.conf.all.forwarding=1" "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
+        grep -Eq '^net\.ipv6\.conf\.all\.forwarding\s*=\s*1' "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
     fi
     sysctl -p > /dev/null
 }
@@ -253,25 +255,22 @@ download_shell() {
 #############################
 #       配置文件生成函数     #
 #############################
-config_mihomo() {
-    local folders="/root/mihomo"
-    local config_file="/root/mihomo/config.yaml"
-    local tun_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
-    local iface ipv4 ipv6 config_url
-    iface=$(ip route | awk '/default/ {print $5}')
-    ipv4=$(ip addr show "$iface" | awk '/inet / {print $2}' | cut -d/ -f1)
-    ipv6=$(ip addr show "$iface" | awk '/inet6 / {print $2}' | cut -d/ -f1)
+get_network_info() {
+  local default_iface
+  default_iface=$(ip route | awk '/default/ {print $5}' | head -n 1)
+  local ipv4 ipv6
+  ipv4=$(ip addr show "$default_iface" | awk '/inet / {print $2}' | cut -d/ -f1)
+  ipv6=$(ip addr show "$default_iface" | awk '/inet6 / {print $2}' | cut -d/ -f1)
+  echo "$default_iface $ipv4 $ipv6"
+}
 
-    echo -e "${green}请选择运行模式(推荐使用 TUN 模式)${reset}"
-    echo -e "${cyan}-------------------------${reset}"
-    echo -e "${green}1. TUN 模式${reset}"
-    echo -e "${green}2. TProxy 模式${reset}"
-    echo -e "${cyan}-------------------------${reset}"
-    read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" confirm
-    confirm=${confirm:-1}
-    case "$confirm" in
-        1)
-            mode_config=$(cat <<EOF
+generate_mode_config() {
+  local iface=$1
+  local choice=$2
+  local mode_config
+  case "$choice" in
+    1)
+      mode_config=$(cat <<EOF
 tun:
   enable: true
   stack: mixed
@@ -281,22 +280,20 @@ tun:
   auto-route: true
   auto-redirect: true
   auto-detect-interface: true
-
 EOF
 )
-            ;;
-        2)
-            mode_config=$(cat <<EOF
+      ;;
+    2)
+      mode_config=$(cat <<EOF
 iptables:
   enable: true
   inbound-interface: $iface
-
 EOF
 )
-            ;;
-        *)
-            echo -e "${red}无效选择，使用默认 TUN 配置。${reset}"
-            mode_config=$(cat <<EOF
+      ;;
+    *)
+      echo -e "${red}无效选择，使用默认 TUN 配置。${reset}"
+      mode_config=$(cat <<EOF
 tun:
   enable: true
   stack: mixed
@@ -306,56 +303,83 @@ tun:
   auto-route: true
   auto-redirect: true
   auto-detect-interface: true
-
 EOF
 )
-            ;;
-    esac
+      ;;
+  esac
+  echo "$mode_config"
+}
 
-    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$tun_config_url")" || { 
-        echo -e "${red}配置文件下载失败${reset}"
-        exit 1
-    }
-
-    awk -v config="$mode_config" '
-      /^# 模式配置/ { print; print config; next }
-      { print }
-    ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
-
-    local proxy_providers="proxy-providers:"
-    local counter=1
-    while true; do
-        read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" airport_url
-        read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" airport_name
-        proxy_providers="${proxy_providers}
+collect_proxy_providers() {
+  local providers="proxy-providers:"
+  local counter=1
+  while true; do
+    read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
+    read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
+    providers="${providers}
   provider_$(printf "%02d" $counter):
-    url: \"${airport_url}\"
+    url: \"${subscription_url}\"
     type: http
     interval: 86400
-    health-check: {enable: true,url: \"https://www.gstatic.com/generate_204\",interval: 300}
+    health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
     override:
-      additional-prefix: \"[${airport_name}]\""
-        counter=$((counter + 1))
-        read -p "$(echo -e "${yellow}是否继续输入订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
-        if [[ "$cont" =~ ^[nN]$ ]]; then
-            break
-        fi
-    done
+      additional-prefix: \"[${subscription_name}]\""
+    counter=$((counter + 1))
+    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
+    if [[ "$cont" =~ ^[nN]$ ]]; then
+      break
+    fi
+  done
+  echo "$providers"
+}
 
-    awk -v providers="$proxy_providers" '
-      /^# 机场配置/ { print; print providers; next }
-      { print }
-    ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+config_mihomo() {
+  local root_folder="/root/mihomo"
+  local config_file="/root/mihomo/config.yaml"
+  local remote_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
 
-    service_restart
-    echo -e "${green}配置完成，配置文件已保存到：${yellow}${config_file}${reset}"
-    echo -e "${green}mihomo 配置完成，正在启动中${reset}"
-    echo -e "${red}管理面板地址和管理命令${reset}"
-    echo -e "${cyan}=========================${reset}"
-    echo -e "${green}http://$ipv4:9090/ui${reset}"
-    echo -e "${green}命令: mihomo 进入管理菜单${reset}"
-    echo -e "${cyan}=========================${reset}"
-    echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
+  mkdir -p "$root_folder"
+
+  read default_iface ipv4 ipv6 <<< "$(get_network_info)"
+
+  echo -e "${green}请选择运行模式 (推荐使用 TUN 模式)${reset}"
+  echo -e "${cyan}-------------------------${reset}"
+  echo -e "${green}1${reset}. TUN 模式"
+  echo -e "${green}2${reset}. TProxy 模式"
+  echo -e "${cyan}-------------------------${reset}"
+  read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" mode_choice
+  mode_choice=${mode_choice:-1}
+  local mode_config
+  mode_config=$(generate_mode_config "$default_iface" "$mode_choice")
+
+  wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$remote_config_url")" || { 
+    echo -e "${red}配置文件下载失败${reset}"
+    exit 1
+  }
+
+  awk -v config="$mode_config" '
+    /^# 模式配置/ { print; print config; next }
+    { print }
+  ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+  local proxy_providers
+  proxy_providers=$(collect_proxy_providers)
+  awk -v providers="$proxy_providers" '
+    /^# 机场配置/ { print; print providers; next }
+    { print }
+  ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+  service_restart
+
+  echo -e "${green}配置完成，配置文件已保存到：${yellow}${config_file}${reset}"
+  echo -e "${green}mihomo 配置完成，正在启动中${reset}"
+  echo -e "${red}管理面板地址和管理命令${reset}"
+  echo -e "${cyan}=========================${reset}"
+  echo -e "${green}http://$ipv4:9090/ui${reset}"
+  echo -e ""
+  echo -e "${green}输入: mihomo 进入管理菜单${reset}"
+  echo -e "${cyan}=========================${reset}"
+  echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
 }
 
 #############################
