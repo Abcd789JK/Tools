@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-14 16:16:08
+#!date = 2025-04-22 09:44:11
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,9 +20,9 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.2"
+sh_ver="0.0.3"
 use_cdn=false
-distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
+distro="unknown"  # 系统类型
 arch=""           # 转换后的系统架构
 arch_raw=""       # 原始系统架构信息
 
@@ -556,123 +556,124 @@ update_shell() {
 #       配置管理函数       #
 #############################
 config_shadowsocks() {
+    check_installation || { start_menu; return; }
     local config_file="/root/shadowsocks/config.json"
-    local config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/shadowsocks.json"
-    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$config_url")" || { 
-        echo -e "${red}配置文件下载失败${reset}"
+    echo -e "${green}开始修改 Shadowsocks 配置${reset}"
+    if [ ! -f "$config_file" ]; then
+        echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
         exit 1
+    fi
+    select_protocol() {
+        echo -e "请选择加密方式："
+        echo -e "${green}1${reset}. aes-128-gcm"
+        echo -e "${green}2${reset}. aes-256-gcm"
+        echo -e "${green}3${reset}. chacha20-ietf-poly1305"
+        echo -e "${green}4${reset}. 2022-blake3-aes-128-gcm"
+        echo -e "${green}5${reset}. 2022-blake3-aes-256-gcm"
+        echo -e "${green}6${reset}. 2022-blake3-chacha20-poly1305"
+        read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+        confirm=${confirm:-1}
+        case $confirm in
+            1) method="aes-128-gcm" ;;
+            2) method="aes-256-gcm" ;;
+             3) method="chacha20-ietf-poly1305" ;;
+            4) method="2022-blake3-aes-128-gcm" ;;
+            5) method="2022-blake3-aes-256-gcm" ;;
+            6) method="2022-blake3-chacha20-poly1305" ;;
+            *) method="aes-128-gcm" ;;
+        esac
     }
-    echo -e "${green}开始配置 Shadowsocks ${reset}"
-    
-    # 提示是否快速生成配置文件
-    read -rp "是否快速生成配置文件？(y/n 默认[y]): " quick_confirm
-    quick_confirm=${quick_confirm:-y}
-    
-    if [[ "$quick_confirm" == [Yy] ]]; then
-        # 自动随机生成端口
-        PORT=$(shuf -i 10000-65000 -n 1)
-        
-        # 选择加密方式
-        echo -e "请选择加密方式："
-        echo -e "${green}1${reset}、aes-128-gcm"
-        echo -e "${green}2${reset}、aes-256-gcm"
-        echo -e "${green}3${reset}、chacha20-ietf-poly1305"
-        echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
-        echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
-        echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
-        read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
-        method_choice=${method_choice:-1}
-        case $method_choice in
-            1) METHOD="aes-128-gcm" ;;
-            2) METHOD="aes-256-gcm" ;;
-            3) METHOD="chacha20-ietf-poly1305" ;;
-            4) METHOD="2022-blake3-aes-128-gcm" ;;
-            5) METHOD="2022-blake3-aes-256-gcm" ;;
-            6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
-            *) METHOD="aes-128-gcm" ;;
-        esac
-
-        # 选择认证方式：自定义密码或自动生成 UUID
-        echo -e "请选择认证模式："
-        echo -e "${green}1${reset}、自定义密码"
-        echo -e "${green}2${reset}、自动生成 UUID 当作密码"
-        read -rp "输入数字选择认证模式 (1-2 默认[1]): " auth_choice
-        auth_choice=${auth_choice:-1}
-        if [[ "$auth_choice" == "1" ]]; then
-            read -rp "请输入 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
-            if [[ -z "$PASSWORD" ]]; then
-                PASSWORD=$(cat /proc/sys/kernel/random/uuid)
-            fi
+    echo -e "请选择配置修改模式："
+    echo -e "${green}1${reset}. 生成新的配置"
+    echo -e "${green}2${reset}. 单独修改一项"
+    read -rp "输入数字选择模式 (1-2 默认[1]): " moua
+    moua=${moua:-1}
+    if [[ "$moua" == "1" ]]; then
+        read -rp "是否快速生成配置文件？(y/n 默认[y]): " moub
+        moub=${moub:-y}
+        if [[ "$moub" == [Yy] ]]; then
+        select_protocol
+        port=$(shuf -i 10000-65000 -n 1)
+        password=$(cat /proc/sys/kernel/random/uuid)
         else
-            PASSWORD=$(cat /proc/sys/kernel/random/uuid)
+            select_protocol
+            read -p "请输入监听端口 (留空以随机生成端口): " port
+            if [[ -z "$port" ]]; then
+                port=$(shuf -i 10000-65000 -n 1)
+            elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
+                echo -e "${red}端口号必须在10000到65000之间。${reset}"
+                start_menu
+            fi
+            read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 uuid): " password
+            if [[ -z "$password" ]]; then
+                password=$(cat /proc/sys/kernel/random/uuid)
+            fi
         fi
+        config=$(cat "$config_file")
+        config=$(echo "$config" | jq --arg port "$port" --arg method "$method" --arg password "$password" '
+            .server_port = ($port | tonumber) |
+            .method = $method |
+            .password = $password
+        ')
+    elif [[ "$moua" == "2" ]]; then
+        current_config=$(cat "$config_file")
+        current_method=$(echo "$current_config" | jq -r '.method')
+        current_port=$(echo "$current_config" | jq -r '.server_port')
+        current_password=$(echo "$current_config" | jq -r '.password')
+        echo -e "请选择要修改的项："
+        echo -e "${green}1${reset}. 端口"
+        echo -e "${green}2${reset}. 密码"
+        echo -e "${green}3${reset}. 加密方式"
+        read -rp "输入数字选择 (1-3 默认[1]): " mouc
+        mouc=${mouc:-1}
+        case $mouc in
+            1)
+                read -p "请输入新的监听端口 (10000-65000): " port
+                if [[ -z "$port" ]]; then
+                    port=$(shuf -i 10000-65000 -n 1)
+                elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
+                    echo -e "${red}端口号必须在10000到65000之间。${reset}"
+                    start_menu
+                fi
+                new_config=$(echo "$current_config" | jq --arg port "$port" '.server_port = ($port | tonumber)')
+                method="$current_method"
+                password="$current_password"
+                ;;
+            2)
+                read -rp "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
+                if [[ -z "$password" ]]; then
+                    password=$(cat /proc/sys/kernel/random/uuid)
+                fi
+                new_config=$(echo "$current_config" | jq --arg password "$password" '.password = $password')
+                port="$current_port"
+                method="$current_method"
+                ;;
+            3)
+                select_protocol
+                new_config=$(echo "$current_config" | jq --arg method "$method" '.method = $method')
+                port="$current_port"
+                password="$current_password"
+                ;;
+            *)
+                echo -e "${red}无效选项${reset}"
+                exit 1
+                ;;
+        esac
     else
-        # 手动模式：用户输入端口、加密方式以及认证信息
-        read -p "请输入监听端口 (留空以随机生成端口): " PORT
-        if [[ -z "$PORT" ]]; then
-            PORT=$(shuf -i 10000-65000 -n 1)
-        elif [[ "$PORT" -lt 10000 || "$PORT" -gt 65000 ]]; then
-            echo -e "${red}端口号必须在10000到65000之间。${reset}"
-            exit 1
-        fi
-        
-        echo -e "请选择加密方式："
-        echo -e "${green}1${reset}、aes-128-gcm"
-        echo -e "${green}2${reset}、aes-256-gcm"
-        echo -e "${green}3${reset}、chacha20-ietf-poly1305"
-        echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
-        echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
-        echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
-        read -rp "输入数字选择加密方式 (1-6 默认[1]): " method_choice
-        method_choice=${method_choice:-1}
-        case $method_choice in
-            1) METHOD="aes-128-gcm" ;;
-            2) METHOD="aes-256-gcm" ;;
-            3) METHOD="chacha20-ietf-poly1305" ;;
-            4) METHOD="2022-blake3-aes-128-gcm" ;;
-            5) METHOD="2022-blake3-aes-256-gcm" ;;
-            6) METHOD="2022-blake3-chacha20-ietf-poly1305" ;;         
-            *) METHOD="aes-128-gcm" ;;
-        esac
-        
-        echo -e "请选择认证模式："
-        echo -e "${green}1${reset}、自定义密码"
-        echo -e "${green}2${reset}、自动生成 UUID 当作密码"
-        read -rp "输入数字选择认证模式 (1-2 默认[2]): " auth_choice
-        auth_choice=${auth_choice:-1}
-        if [[ "$auth_choice" == "2" ]]; then
-            read -rp "请输入 Shadowsocks 密码 (留空则自动生成 UUID): " PASSWORD
-            if [[ -z "$PASSWORD" ]]; then
-                PASSWORD=$(cat /proc/sys/kernel/random/uuid)
-            fi
-        else
-            PASSWORD=$(cat /proc/sys/kernel/random/uuid)
-        fi
-    fi
-
-    echo -e "${green}生成的配置参数如下：${reset}"
-    echo -e "  - 端口: ${green}$PORT${reset}"
-    echo -e "  - 加密方式: ${green}$METHOD${reset}"
-    echo -e "  - 密码: ${green}$PASSWORD${reset}"
-
-    echo -e "${green}读取配置文件模板${reset}"
-    config=$(cat "$config_file")
-    echo -e "${green}修改配置文件${reset}"
-    config=$(echo "$config" | jq --arg port "$PORT" --arg password "$PASSWORD" --arg method "$METHOD" '
-        .server_port = ($port | tonumber) |
-        .password = $password |
-        .method = $method
-    ')
-    
-    echo -e "${green}写入配置文件${reset}"
-    echo "$config" > "$config_file"
-    
-    echo -e "${green}验证修改后的配置文件格式${reset}"
-    if ! jq . "$config_file" >/dev/null 2>&1; then
-        echo -e "${red}修改后的配置文件格式无效，请检查文件${reset}"
+        echo -e "${red}无效的修改模式${reset}"
         exit 1
     fi
-    
+    config="$new_config"
+    echo -e "${green}更新后的配置${reset}"
+    echo -e "端口: ${green}${port}${reset}"
+    echo -e "密码: ${green}${password}${reset}"
+    echo -e "加密方式: ${green}${method}${reset}"
+    echo -e "${green}正在更新配置文件${reset}"
+    echo "$config" > "$config_file"
+    if ! jq . "$config_file" >/dev/null 2>&1; then
+        exit 1
+    fi
+    echo -e "${green}恭喜你！修改成功${reset}"
     service_restart
     start_menu
 }
@@ -697,7 +698,7 @@ get_shadowsocks() {
 menu() {
     clear
     echo "================================="
-    echo -e "${green}欢迎使用 shadowsocks 一键脚本 Beta 版${reset}"
+    echo -e "${green}欢迎使用 shadowsocks 一键脚本${reset}"
     echo -e "${green}作者：${yellow}ChatGPT JK789${reset}"
     echo "================================="
     echo -e "${green} 0${reset}. 更新脚本"

@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-16 20:37:24
+#!date = 2025-04-22 09:44:10
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -111,7 +111,7 @@ get_url() {
 #############################
 update_system() {
     eval "$pkg_update"
-    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip"
+    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq"
 }
 
 #############################
@@ -290,7 +290,7 @@ config_shadowsocks() {
         echo -e "${green}3${reset}、chacha20-ietf-poly1305"
         echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
         echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
-        echo -e "${green}6${reset}、2022-blake3-chacha20-ietf-poly1305"
+        echo -e "${green}6${reset}、2022-blake3-chacha20-poly1305"
         read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
         confirm=${confirm:-1}
         case $confirm in
@@ -299,7 +299,7 @@ config_shadowsocks() {
             3) method="chacha20-ietf-poly1305" ;;
             4) method="2022-blake3-aes-128-gcm" ;;
             5) method="2022-blake3-aes-256-gcm" ;;
-            6) method="2022-blake3-chacha20-ietf-poly1305" ;;
+            6) method="2022-blake3-chacha20-poly1305" ;;
             *) method="aes-128-gcm" ;;
         esac
     }

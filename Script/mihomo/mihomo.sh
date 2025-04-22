@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-16 14:14:03
+#!date = 2025-04-22 09:44:11
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.1.9"
+sh_ver="0.2.0"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -1039,8 +1039,8 @@ menu() {
     echo -e "${green}欢迎使用 mihomo 一键脚本${reset}"
     echo -e "${green}作者：${yellow}ChatGPT JK789${reset}"
     echo -e "${red}使用说明: "
-    echo -e "${red}    1. 更换订阅不能保存原有机场订阅"
-    echo -e "${red}    2. 需要全部重新添加机场订阅${reset}"
+    echo -e "${red}    1. 更换订阅可以保存原有机场订阅"
+    echo -e "${red}    2. 需要通过脚本添加机场订阅${reset}"
     echo "================================="
     echo -e "${green} 0${reset}. 更新脚本"
     echo -e "${green}10${reset}. 退出脚本"
