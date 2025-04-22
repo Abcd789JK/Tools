@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-22 09:44:10
+#!date = 2025-04-22 10:09:39
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -225,19 +225,28 @@ download_shell() {
 #       TCP 函数     #
 #############################
 enable_systfo() {
-    kernel_major=$(uname -r | cut -d. -f1)
-    if [ "$kernel_major" -ge 3 ]; then
-        if [ -f /proc/sys/net/ipv4/tcp_fastopen ]; then
-            if echo 3 > /proc/sys/net/ipv4/tcp_fastopen; then
-            fi
+    local kernel_major=$(uname -r | cut -d. -f1)
+    if [ "$kernel_major" -lt 3 ]; then
+        echo "系统内核版本过低，无法支持 TCP Fast Open！"
+        return 1
+    fi
+
+    if [ -f /proc/sys/net/ipv4/tcp_fastopen ]; then
+        local current_tfo=$(cat /proc/sys/net/ipv4/tcp_fastopen)
+        if [ "$current_tfo" -ne 3 ]; then
+            echo 3 | tee /proc/sys/net/ipv4/tcp_fastopen >/dev/null
         fi
-        if [ -d /etc/sysctl.d ]; then
-            sysctl_conf="/etc/sysctl.d/99-systfo.conf"
-        else
-            sysctl_conf="/etc/sysctl.conf"
-        fi
-        if [ ! -f "$sysctl_conf" ]; then
-            cat <<'EOF' > "$sysctl_conf"
+    fi
+
+    local sysctl_conf
+    if [ -d /etc/sysctl.d ]; then
+        sysctl_conf="/etc/sysctl.d/99-systfo.conf"
+    else
+        sysctl_conf="/etc/sysctl.conf"
+    fi
+
+    if [ ! -f "$sysctl_conf" ]; then
+        cat <<'EOF' > "$sysctl_conf"
 fs.file-max = 51200
 net.core.rmem_max = 67108864
 net.core.wmem_max = 67108864
@@ -260,16 +269,10 @@ net.ipv4.tcp_ecn = 1
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 EOF
-            if [ "$distro" = "alpine" ]; then
-                if sysctl -p "$sysctl_conf" >/dev/null 2>&1; then
-                fi
-            else
-                if sysctl --system >/dev/null 2>&1; then
-                fi
-            fi
-        fi
+        sysctl --system >/dev/null 2>&1
+        echo "系统网络优化参数已写入并应用"
     else
-        echo -e "${red}系统内核版本过低，无法支持 TCP Fast Open！${reset}"
+        echo "网络优化配置已存在，跳过写入"
     fi
 }
 
