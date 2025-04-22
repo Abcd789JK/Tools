@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-22 10:56:34
+#!date = 2025-04-22 11:25:33
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.3"
+sh_ver="0.0.4"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 转换后的系统架构
@@ -578,18 +578,45 @@ config_shadowsocks() {
         case $confirm in
             1) method="aes-128-gcm" ;;
             2) method="aes-256-gcm" ;;
-             3) method="chacha20-ietf-poly1305" ;;
+            3) method="chacha20-ietf-poly1305" ;;
             4) method="2022-blake3-aes-128-gcm" ;;
             5) method="2022-blake3-aes-256-gcm" ;;
             6) method="2022-blake3-chacha20-poly1305" ;;
             *) method="aes-128-gcm" ;;
         esac
     }
+
     get_random_port() {
-        echo $(shuf -i 10000-65000 -n 1)
+        shuf -i 10000-65000 -n 1
     }
+
     get_random_uuid() {
-        cat /proc/sys/kernel/random/uuid
+        if command -v uuidgen &>/dev/null; then
+            uuidgen
+        else
+            cat /proc/sys/kernel/random/uuid
+        fi
+    }
+
+    prompt_port() {
+        while :; do
+            read -rp "请输入监听端口 (10000-65000, 回车随机): " port
+            if [[ -z "$port" ]]; then
+                port=$(get_random_port)
+                break
+            elif (( port >= 10000 && port <= 65000 )); then
+                break
+            else
+                echo "端口范围必须在 10000 到 65000 之间。"
+            fi
+        done
+    }
+
+    prompt_password() {
+        read -rp "请输入 Shadowsocks 密码 (回车随机): " password
+        if [[ -z "$password" ]]; then
+            password=$(get_random_uuid)
+        fi
     }
 
     generate_or_input() {
@@ -598,19 +625,8 @@ config_shadowsocks() {
             port=$(get_random_port)
             password=$(get_random_uuid)
         else
-            while :; do
-                read -rp "请输入监听端口 (10000-65000, 回车随机): " port
-                if [[ -z "$port" ]]; then
-                    port=$(get_random_port)
-                    break
-                elif (( port>=10000 && port<=65000 )); then
-                    break
-                else
-                    echo "端口范围必须在 10000 到 65000 之间。"
-                fi
-            done
-            read -rp "请输入 Shadowsocks 密码 (回车随机): " password
-            password=$(get_random_uuid)
+            prompt_port
+            prompt_password
         fi
     }
 
@@ -630,7 +646,7 @@ config_shadowsocks() {
                                              --arg m "$method" \
                                              --arg pwd "$password" '
             .server_port = ($p|tonumber) |
-            .method      = $m               |
+            .method      = $m           |
             .password    = $pwd
         ')
     else
@@ -647,24 +663,13 @@ config_shadowsocks() {
 
         case "$opt" in
             1)
-                while :; do
-                    read -rp "请输入新的监听端口 (10000-65000): " port
-                    if [[ -z "$port" ]]; then
-                        port=$(get_random_port)
-                        break
-                    elif (( port>=10000 && port<=65000 )); then
-                        break
-                    else
-                        echo "端口范围必须在 10000 到 65000 之间。"
-                    fi
-                done
+                prompt_port
                 new_config=$(echo "$old_config" | jq --arg p "$port" '.server_port = ($p|tonumber)')
                 method="$current_method"
                 password="$current_password"
                 ;;
             2)
-                read -rp "请输入新的 Shadowsocks 密码 (回车随机): " password
-                password=$(get_random_uuid)
+                prompt_password
                 new_config=$(echo "$old_config" | jq --arg pwd "$password" '.password = $pwd')
                 port="$current_port"
                 method="$current_method"
