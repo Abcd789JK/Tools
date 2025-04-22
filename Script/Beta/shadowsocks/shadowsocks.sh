@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-22 09:44:10
+#!date = 2025-04-22 10:56:34
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -559,10 +559,12 @@ config_shadowsocks() {
     check_installation || { start_menu; return; }
     local config_file="/root/shadowsocks/config.json"
     echo -e "${green}开始修改 Shadowsocks 配置${reset}"
-    if [ ! -f "$config_file" ]; then
+
+    if [[ ! -f "$config_file" ]]; then
         echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
         exit 1
     fi
+
     select_protocol() {
         echo -e "请选择加密方式："
         echo -e "${green}1${reset}. aes-128-gcm"
@@ -583,74 +585,93 @@ config_shadowsocks() {
             *) method="aes-128-gcm" ;;
         esac
     }
-    echo -e "请选择配置修改模式："
-    echo -e "${green}1${reset}. 生成新的配置"
-    echo -e "${green}2${reset}. 单独修改一项"
-    read -rp "输入数字选择模式 (1-2 默认[1]): " moua
-    moua=${moua:-1}
-    if [[ "$moua" == "1" ]]; then
-        read -rp "是否快速生成配置文件？(y/n 默认[y]): " moub
-        moub=${moub:-y}
-        if [[ "$moub" == [Yy] ]]; then
-        select_protocol
-        port=$(shuf -i 10000-65000 -n 1)
-        password=$(cat /proc/sys/kernel/random/uuid)
+    get_random_port() {
+        echo $(shuf -i 10000-65000 -n 1)
+    }
+    get_random_uuid() {
+        cat /proc/sys/kernel/random/uuid
+    }
+
+    generate_or_input() {
+        read -rp "是否快速生成端口和密码？(Y/n 默认[Y]): " quick
+        if [[ "${quick^^}" =~ ^(Y|)$ ]]; then
+            port=$(get_random_port)
+            password=$(get_random_uuid)
         else
-            select_protocol
-            read -p "请输入监听端口 (留空以随机生成端口): " port
-            if [[ -z "$port" ]]; then
-                port=$(shuf -i 10000-65000 -n 1)
-            elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
-                echo -e "${red}端口号必须在10000到65000之间。${reset}"
-                start_menu
-            fi
-            read -p "请输入新的 Shadowsocks 密码 (留空则自动生成 uuid): " password
-            if [[ -z "$password" ]]; then
-                password=$(cat /proc/sys/kernel/random/uuid)
-            fi
-        fi
-        config=$(cat "$config_file")
-        config=$(echo "$config" | jq --arg port "$port" --arg method "$method" --arg password "$password" '
-            .server_port = ($port | tonumber) |
-            .method = $method |
-            .password = $password
-        ')
-    elif [[ "$moua" == "2" ]]; then
-        current_config=$(cat "$config_file")
-        current_method=$(echo "$current_config" | jq -r '.method')
-        current_port=$(echo "$current_config" | jq -r '.server_port')
-        current_password=$(echo "$current_config" | jq -r '.password')
-        echo -e "请选择要修改的项："
-        echo -e "${green}1${reset}. 端口"
-        echo -e "${green}2${reset}. 密码"
-        echo -e "${green}3${reset}. 加密方式"
-        read -rp "输入数字选择 (1-3 默认[1]): " mouc
-        mouc=${mouc:-1}
-        case $mouc in
-            1)
-                read -p "请输入新的监听端口 (10000-65000): " port
+            while :; do
+                read -rp "请输入监听端口 (10000-65000, 回车随机): " port
                 if [[ -z "$port" ]]; then
-                    port=$(shuf -i 10000-65000 -n 1)
-                elif [[ "$port" -lt 10000 || "$port" -gt 65000 ]]; then
-                    echo -e "${red}端口号必须在10000到65000之间。${reset}"
-                    start_menu
+                    port=$(get_random_port)
+                    break
+                elif (( port>=10000 && port<=65000 )); then
+                    break
+                else
+                    echo "端口范围必须在 10000 到 65000 之间。"
                 fi
-                new_config=$(echo "$current_config" | jq --arg port "$port" '.server_port = ($port | tonumber)')
+            done
+            read -rp "请输入 Shadowsocks 密码 (回车随机): " password
+            password=$(get_random_uuid)
+        fi
+    }
+
+    local old_config new_config
+    old_config=$(<"$config_file")
+
+    echo -e "请选择配置修改模式："
+    echo -e "  ${green}1${reset}. 生成新的配置"
+    echo -e "  ${green}2${reset}. 单独修改一项"
+    read -rp "输入数字选择 (1-2 默认[1]): " mode
+    mode=${mode:-1}
+
+    if [[ "$mode" == "1" ]]; then
+        select_protocol
+        generate_or_input
+        new_config=$(echo "$old_config" | jq --arg p "$port" \
+                                             --arg m "$method" \
+                                             --arg pwd "$password" '
+            .server_port = ($p|tonumber) |
+            .method      = $m               |
+            .password    = $pwd
+        ')
+    else
+        current_port=$(echo "$old_config" | jq -r '.server_port')
+        current_method=$(echo "$old_config" | jq -r '.method')
+        current_password=$(echo "$old_config" | jq -r '.password')
+
+        echo -e "请选择要修改的项："
+        echo -e "  ${green}1${reset}. 端口"
+        echo -e "  ${green}2${reset}. 密码"
+        echo -e "  ${green}3${reset}. 加密方式"
+        read -rp "输入数字选择 (1-3 默认[1]): " opt
+        opt=${opt:-1}
+
+        case "$opt" in
+            1)
+                while :; do
+                    read -rp "请输入新的监听端口 (10000-65000): " port
+                    if [[ -z "$port" ]]; then
+                        port=$(get_random_port)
+                        break
+                    elif (( port>=10000 && port<=65000 )); then
+                        break
+                    else
+                        echo "端口范围必须在 10000 到 65000 之间。"
+                    fi
+                done
+                new_config=$(echo "$old_config" | jq --arg p "$port" '.server_port = ($p|tonumber)')
                 method="$current_method"
                 password="$current_password"
                 ;;
             2)
-                read -rp "请输入新的 Shadowsocks 密码 (留空则自动生成 UUID): " password
-                if [[ -z "$password" ]]; then
-                    password=$(cat /proc/sys/kernel/random/uuid)
-                fi
-                new_config=$(echo "$current_config" | jq --arg password "$password" '.password = $password')
+                read -rp "请输入新的 Shadowsocks 密码 (回车随机): " password
+                password=$(get_random_uuid)
+                new_config=$(echo "$old_config" | jq --arg pwd "$password" '.password = $pwd')
                 port="$current_port"
                 method="$current_method"
                 ;;
             3)
                 select_protocol
-                new_config=$(echo "$current_config" | jq --arg method "$method" '.method = $method')
+                new_config=$(echo "$old_config" | jq --arg m "$method" '.method = $m')
                 port="$current_port"
                 password="$current_password"
                 ;;
@@ -659,21 +680,20 @@ config_shadowsocks() {
                 exit 1
                 ;;
         esac
-    else
-        echo -e "${red}无效的修改模式${reset}"
-        exit 1
     fi
-    config="$new_config"
-    echo -e "${green}更新后的配置${reset}"
+
+    echo -e "\n${green}更新后的配置${reset}"
     echo -e "端口: ${green}${port}${reset}"
     echo -e "密码: ${green}${password}${reset}"
-    echo -e "加密方式: ${green}${method}${reset}"
-    echo -e "${green}正在更新配置文件${reset}"
-    echo "$config" > "$config_file"
-    if ! jq . "$config_file" >/dev/null 2>&1; then
+    echo -e "加密方式: ${green}${method}${reset}\n"
+
+    echo "$new_config" > "$config_file"
+    if ! jq empty "$config_file" 2>/dev/null; then
+        echo -e "${red}配置文件校验失败，请检查内容。${reset}"
         exit 1
     fi
-    echo -e "${green}恭喜你！修改成功${reset}"
+
+    echo -e "${green}修改成功，正在重启 Shadowsocks…${reset}"
     service_restart
     start_menu
 }

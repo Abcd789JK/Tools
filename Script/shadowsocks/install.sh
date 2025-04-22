@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本
 #!desc = 安装 & 配置
-#!date = 2025-04-22 10:09:39
+#!date = 2025-04-22 10:56:34
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -226,9 +226,10 @@ download_shell() {
 #############################
 enable_systfo() {
     local kernel_major=$(uname -r | cut -d. -f1)
+    local tfo_supported=true
     if [ "$kernel_major" -lt 3 ]; then
         echo "系统内核版本过低，无法支持 TCP Fast Open！"
-        return 1
+        tfo_supported=false
     fi
 
     if [ -f /proc/sys/net/ipv4/tcp_fastopen ]; then
