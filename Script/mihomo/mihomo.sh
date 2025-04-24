@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-22 09:44:11
+#!date = 2025-04-24 19:41:10
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -38,7 +38,7 @@ check_distro() {
                 pkg_update="apt update && apt upgrade -y"
                 pkg_install="apt install -y"
                 service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
+                service_restart() { systemctl restart mihomo; }
                 ;;
             alpine)
                 distro="alpine"
@@ -52,14 +52,14 @@ check_distro() {
                 pkg_update="dnf upgrade --refresh -y"
                 pkg_install="dnf install -y"
                 service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
+                service_restart() { systemctl restart mihomo; }
                 ;;
             arch)
                 distro="arch"
                 pkg_update="pacman -Syu --noconfirm"
                 pkg_install="pacman -S --noconfirm"
                 service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
+                service_restart() { systemctl restart mihomo; }
                 ;;
             *)
                 echo -e "${red}不支持的系统：${ID}${reset}"
