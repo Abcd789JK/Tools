@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-22 11:25:33
+#!date = 2025-04-25 19:15:32
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -36,7 +36,7 @@ check_distro() {
             debian|ubuntu)
                 distro="$ID"
                 service_enable() { systemctl enable v2ray; }
-                service_restart() { systemctl daemon-reload; systemctl start v2ray; }
+                service_restart() { systemctl restart v2ray; }
                 ;;
             alpine)
                 distro="alpine"
@@ -46,12 +46,12 @@ check_distro() {
             fedora)
                 distro="fedora"
                 service_enable() { systemctl enable v2ray; }
-                service_restart() { systemctl daemon-reload; systemctl start v2ray; }
+                service_restart() { systemctl restart v2ray; }
                 ;;
             arch)
                 distro="arch"
                 service_enable() { systemctl enable v2ray; }
-                service_restart() { systemctl daemon-reload; systemctl start v2ray; }
+                service_restart() { systemctl restart v2ray; }
                 ;;
             *)
                 echo -e "${red}不支持的系统：${ID}${reset}"
