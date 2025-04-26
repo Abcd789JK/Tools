@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-26 08:20:24
+#!date = 2025-04-26 08:52:49
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.07"
+sh_ver="0.0.08"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 转换后的系统架构
@@ -452,13 +452,10 @@ download_shadowsocks() {
         echo -e "${red}shadowsocks 解压失败${reset}"
         exit 1
     }
-    if [ -f "ssserver" ]; then
-        mv "ssserver" shadowsocks
-    else
-        echo -e "${red}找不到解压后的 ssserver 文件${reset}"
+    mv "ssserver" "shadowsocks" && rm -f "$filename"  || {
+        echo -e "${red}找不到解压后的文件${reset}"
         exit 1
-    fi
-    rm -f "$filename"
+    }
     chmod +x shadowsocks
     echo "$version" > "$version_file"
 }

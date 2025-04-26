@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本
 #!desc = 安装 & 配置
-#!date = 2025-04-26 08:20:24
+#!date = 2025-04-26 08:52:49
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -172,13 +172,10 @@ download_shadowsocks() {
         echo -e "${red}shadowsocks 解压失败${reset}"
         exit 1
     }
-    if [ -f "ssserver" ]; then
-        mv "ssserver" shadowsocks
-    else
-        echo -e "${red}找不到解压后的 ssserver 文件${reset}"
+    mv "ssserver" "shadowsocks" && rm -f "$filename"  || {
+        echo -e "${red}找不到解压后的文件${reset}"
         exit 1
-    fi
-    rm -f "$filename"
+    }
     chmod +x shadowsocks
     echo "$version" > "$version_file"
 }
