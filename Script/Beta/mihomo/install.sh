@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-26 16:53:20
+#!date = 2025-04-26 20:47:53
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -225,10 +225,38 @@ download_service() {
 #     管理面板文件下载      #
 #############################
 download_wbeui() {
-    local wbe_file="/root/mihomo/ui"
-    local wbe_url="https://github.com/metacubex/metacubexd.git"
-    git clone "$wbe_url" -b gh-pages "$wbe_file" || {
+    local wbe_file="/root/mihomo"
+    local filename="gh-pages.zip"
+    local url_xd="https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
+    local url_za="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
+    echo -e "${green}请选择管理面板 (推荐使用 2 面板)${reset}"
+    echo -e "${cyan}-------------------------${reset}"
+    echo -e "${green}1${reset}. metacubexd 面板"
+    echo -e "${green}2${reset}. zashboard 面板"
+    echo -e "${cyan}-------------------------${reset}"
+    read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: 2]: ${reset}")" mode_choice
+    mode_choice=${mode_choice:-2}
+    case "$mode_choice" in
+        1)
+            download_url="$url_xd"
+            ;;
+        2)
+            download_url="$url_za"
+            ;;
+        *)
+            echo -e "${red}切换至默认: zashboard 面板${reset}"
+            download_url="$url_za"
+            ;;
+    esac
+    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}管理面板下载失败，请检查网络后重试${reset}"
+        exit 1
+    }
+    unzip -oq "$filename" && rm "$filename" || {
+        exit 1
+    }
+    extracted_folder=$(ls -d "$wbe_file"/*-gh-pages | head -n 1)
+    mv "$extracted_folder" "$wbe_file/ui" || {
         exit 1
     }
 }
