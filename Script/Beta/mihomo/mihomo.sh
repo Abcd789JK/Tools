@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-26 16:02:00
+#!date = 2025-04-26 16:10:18
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -523,7 +523,7 @@ update_mihomo() {
         start_menu
         return
     fi
-    read -p "$(echo -e "${yellow}检查到新版本, 是否升级到最新版本？${reset} (y/n): ")" input
+    read -p "$(echo -e "${yellow}检测到新版本: ${green}${latest_version} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
@@ -540,7 +540,7 @@ update_mihomo() {
         download_latest_mihomo || { echo -e "${red}mihomo 下载失败, 请重试${reset}"; exit 1; }
     fi
     sleep 2s
-    echo -e "${yellow}更新完成, 当前版本已更新为: ${reset}【 ${green}${latest_version}${reset} 】"
+    echo -e "${yellow}更新完成, 当前版本: ${reset}【 ${green}${latest_version}${reset} 】"
     service_restart
     start_menu
 }
@@ -564,7 +564,7 @@ update_shell() {
         start_menu
         return 0
     fi
-    read -p "$(echo -e "${yellow}检测到新版本: ${sh_new_ver}, 是否升级？${reset} (y/n): ")" input
+    read -p "$(echo -e "${yellow}检测到新版本: ${green}${sh_new_ver} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
@@ -579,7 +579,7 @@ update_shell() {
         mv -f "$tmp_file" "$shell_file"
         chmod +x "$shell_file"
         hash -r
-        echo -e "${yellow}更新完成, 当前版本: ${green}${sh_new_ver}${reset}"
+        echo -e "${yellow}更新完成, 当前版本: ${reset}【 ${green}${sh_new_ver}${reset} 】"
         echo -e "${yellow}3 秒后执行新脚本${reset}"
         sleep 3
         exec "$shell_file"
