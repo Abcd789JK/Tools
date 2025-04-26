@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-26 09:33:41
+#!date = 2025-04-26 09:44:24
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -62,7 +62,7 @@ check_distro() {
                 service_restart() { systemctl restart mihomo; }
                 ;;
             *)
-                echo -e "${red}不支持的系统：${ID}${reset}"
+                echo -e "${red}不支持的系统: ${ID}${reset}"
                 exit 1
                 ;;
         esac
@@ -187,11 +187,11 @@ show_status() {
             software_version="${red}未安装${reset}"
         fi
     fi
-    echo -e "安装状态：${install_status}"
-    echo -e "运行状态：${run_status}"
-    echo -e "开机自启：${auto_start}"
-    echo -e "脚本版本：${green}${sh_ver}${reset}"
-    echo -e "软件版本：${green}${software_version}${reset}"
+    echo -e "安装状态: ${install_status}"
+    echo -e "运行状态: ${run_status}"
+    echo -e "开机自启: ${auto_start}"
+    echo -e "脚本版本: ${green}${sh_ver}${reset}"
+    echo -e "软件版本: ${green}${software_version}${reset}"
 }
 
 #############################
@@ -211,7 +211,7 @@ service_mihomo() {
     esac
     if [ "$distro" = "alpine" ]; then
         if [ "$action" == "logs" ]; then
-            echo -e "${yellow}日志查看: Alipne系统, 暂不支持${reset}"
+            echo -e "${red}日志查看: Alipne系统, 暂不支持${reset}"
             start_menu
             return
         fi
@@ -328,7 +328,7 @@ uninstall_mihomo() {
     local shell_file="/usr/bin/mihomo"
     local service_file="/etc/init.d/mihomo"
     local system_file="/etc/systemd/system/mihomo.service"
-    echo -e "${red}警告：卸载后将删除全部内容！！！${reset}"
+    echo -e "${red}警告: 卸载后将删除全部内容！！！${reset}"
     read -p "$(echo -e "${red}确认卸载 mihomo 吗？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
@@ -380,7 +380,7 @@ install_mihomo() {
     local install_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/Beta/mihomo/install.sh"
     if [ -d "$folders" ]; then
         echo -e "${yellow}检测到 mihomo 已经安装, 并运行在 ${folders} 目录下${reset}"
-        echo -e "${red}警告：卸载后将删除全部内容！！！${reset}"
+        echo -e "${red}警告: 卸载后将删除全部内容！！！${reset}"
         read -p "$(echo -e "${red}是否删除并重新安装？${reset} (y/n): ")" input
         case "$input" in
             [Yy]* )
@@ -429,7 +429,7 @@ get_schema() {
             arch='s390x'
             ;;
         *)
-            echo -e "${red}不支持的架构：${arch_raw}${reset}"
+            echo -e "${red}不支持的架构: ${arch_raw}${reset}"
             exit 1
             ;;
     esac
@@ -565,7 +565,7 @@ update_mihomo() {
         download_latest_mihomo || { echo -e "${red}mihomo 下载失败, 请重试${reset}"; exit 1; }
     fi
     sleep 2s
-    echo -e "${yellow}更新完成, 当前版本已更新为：${reset}【 ${green}${latest_version}${reset} 】"
+    echo -e "${yellow}更新完成, 当前版本已更新为: ${reset}【 ${green}${latest_version}${reset} 】"
     service_restart
     start_menu
 }
@@ -604,7 +604,7 @@ update_shell() {
     wget -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_ver_url")"
     chmod +x "$shell_file"
     hash -r
-    echo -e "${yellow}更新完成, 当前版本已更新为：${reset}【 ${green}${sh_new_ver}${reset} 】"
+    echo -e "${yellow}更新完成, 当前版本已更新为: ${reset}【 ${green}${sh_new_ver}${reset} 】"
     echo -e "${yellow}3 秒后执行新脚本${reset}"
     sleep 3s
     "$shell_file"
@@ -618,7 +618,7 @@ config_mihomo() {
     check_network
     echo -e "${green}开始修改 mihomo 配置${reset}"
     echo "================================="
-    echo -e "${red}操作说明："
+    echo -e "${red}操作说明: "
     echo -e "${red}    1. 订阅编号, 默认是 01 开始依次"
     echo -e "${red}    2. 订阅不能全部删除, 至少保留一个${reset}"
     echo "---------------------------------"
@@ -640,7 +640,7 @@ config_mihomo() {
 add_provider() {
     local config_file="/root/mihomo/config.yaml"
     if [ ! -f "$config_file" ]; then
-        echo -e "${red}配置文件不存在, 请检查路径：${config_file}${reset}"
+        echo -e "${red}配置文件不存在, 请检查路径: ${config_file}${reset}"
         exit 1
     fi
     local current_count
@@ -908,7 +908,7 @@ mode_mihomo() {
         current_mode="TProxy"
     fi
 
-    echo -e "${green}当前运行模式：${yellow}$current_mode${reset}"
+    echo -e "${green}当前运行模式: ${yellow}$current_mode${reset}"
     echo -e "${green}请选择要切换的运行模式（推荐使用 TUN 模式）${reset}"
     echo "================================="
     echo -e "${green}1${reset}. TUN 模式"
@@ -958,9 +958,8 @@ iptables:\n\
         return
     fi
 
-    echo -e "${green}已换运行模式为：${yellow}$current_mode${reset}"
-
     service_restart
+    echo -e "${yellow}已换运行模式为: ${green}$current_mode${reset}"
     start_menu
 }
 
@@ -1005,7 +1004,7 @@ switch_version() {
             echo -e "${yellow}等待 3 秒后重启生效${reset}"
             sleep 3s
             service_restart
-            echo -e "${yellow}当前软件版本${reset}：【 ${green}${version}${reset} 】"
+            echo -e "${yellow}当前软件版本${reset}: 【 ${green}${version}${reset} 】"
             start_menu
             ;;
         2)
@@ -1021,7 +1020,7 @@ switch_version() {
             echo -e "${yellow}等待 3 秒后重启生效${reset}"
             sleep 3s
             service_restart
-            echo -e "${yellow}当前软件版本${reset}：【 ${green}v${version}${reset} 】"
+            echo -e "${yellow}当前软件版本${reset}: 【 ${green}v${version}${reset} 】"
             start_menu
             ;;
         *)
@@ -1039,7 +1038,7 @@ menu() {
     clear
     echo "================================="
     echo -e "${green}欢迎使用 mihomo 一键脚本${reset}"
-    echo -e "${green}作者：${yellow}ChatGPT JK789${reset}"
+    echo -e "${green}作者: ${yellow}ChatGPT JK789${reset}"
     echo -e "${red}使用说明: "
     echo -e "${red}    1. 更换订阅可以保存原有机场订阅"
     echo -e "${red}    2. 需要通过脚本添加机场订阅${reset}"
@@ -1063,7 +1062,7 @@ menu() {
     echo "================================="
     show_status
     echo "================================="
-    read -p "$(echo -e "${yellow}请输入上面选项：: ${reset}")" input
+    read -p "$(echo -e "${yellow}请输入上面选项: : ${reset}")" input
     case "$input" in
         1) install_mihomo ;;
         2) update_mihomo ;;
@@ -1083,6 +1082,6 @@ menu() {
     esac
 }
 
-# 程序入口：先检测系统类型, 再进入主菜单
+# 程序入口: 先检测系统类型, 再进入主菜单
 check_distro
 menu
