@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-26 09:55:18
+#!date = 2025-04-26 09:57:58
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -25,7 +25,7 @@ use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
 arch_raw=""       # 原始架构
- 
+
 #############################
 #       系统检测函数       #
 #############################
@@ -35,29 +35,21 @@ check_distro() {
         case "$ID" in
             debian|ubuntu)
                 distro="$ID"
-                pkg_update="apt update && apt upgrade -y"
-                pkg_install="apt install -y"
                 service_enable() { systemctl enable mihomo; }
                 service_restart() { systemctl restart mihomo; }
                 ;;
             alpine)
                 distro="alpine"
-                pkg_update="apk update && apk upgrade"
-                pkg_install="apk add"
                 service_enable() { rc-update add mihomo default; }
                 service_restart() { rc-service mihomo restart; }
                 ;;
             fedora)
                 distro="fedora"
-                pkg_update="dnf upgrade --refresh -y"
-                pkg_install="dnf install -y"
                 service_enable() { systemctl enable mihomo; }
                 service_restart() { systemctl restart mihomo; }
                 ;;
             arch)
                 distro="arch"
-                pkg_update="pacman -Syu --noconfirm"
-                pkg_install="pacman -S --noconfirm"
                 service_enable() { systemctl enable mihomo; }
                 service_restart() { systemctl restart mihomo; }
                 ;;
