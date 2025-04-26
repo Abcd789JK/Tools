@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-26 08:52:48
+#!date = 2025-04-26 09:04:22
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -158,7 +158,6 @@ download_version() {
 #############################
 download_shadowsocks() {
     get_schema
-    check_network
     download_version
     local version_file="/root/shadowsocks/version.txt"
     local filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-gnu.tar.xz"
