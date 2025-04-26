@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = ss 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-25 19:15:32
+#!date = 2025-04-26 08:20:24
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.06"
+sh_ver="0.0.07"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 转换后的系统架构
@@ -404,19 +404,19 @@ get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
         x86_64)
-            arch='64'
+            arch="amd64"
             ;;
         x86|i686|i386)
-            arch='32'
+            arch="386"
             ;;
         aarch64|arm64)
-            arch='arm64-v8a'
+            arch="arm64"
             ;;
-        armv7|armv7l)
-            arch='arm32-v7a'
+        armv7l)
+            arch="armv7"
             ;;
         s390x)
-            arch='s390x'
+            arch="s390x"
             ;;
         *)
             echo -e "${red}不支持的架构：${arch_raw}${reset}"
@@ -426,7 +426,7 @@ get_schema() {
 }
 
 #############################
-#      远程版本获取函数     #
+#      软件获取更新函数     #
 #############################
 download_version() {
     local version_url="https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest"
@@ -437,6 +437,8 @@ download_version() {
 }
 
 download_shadowsocks() {
+    get_schema
+    check_network
     download_version
     local version_file="/root/shadowsocks/version.txt"
     local filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-gnu.tar.xz"

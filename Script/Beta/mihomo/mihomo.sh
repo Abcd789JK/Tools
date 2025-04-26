@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-24 19:41:10
+#!date = 2025-04-26 08:20:24
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -453,28 +453,28 @@ download_latest_version() {
     }
 }
 
-download_shadowsocks() {
-    download_version
-    local version_file="/root/shadowsocks/version.txt"
-    local filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-gnu.tar.xz"
-    [ "$distro" = "alpine" ] && filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-musl.tar.xz"
-    local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/v${version}/${filename}"
+download_alpha_mihomo() {
+    get_schema
+    check_network
+    download_alpha_version
+    local version_file="/root/mihomo/version.txt"
+    local filename="mihomo-linux-${arch}-${version}.gz"
+    [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
+    local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
     wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
-        echo -e "${red}shadowsocks 下载失败，请检查网络后重试${reset}"
+        echo -e "${red}mihomo 下载失败，请检查网络后重试${reset}"
         exit 1
     }
-    tar -xJf "$filename" || {
-        echo -e "${red}shadowsocks 解压失败${reset}"
+    gunzip "$filename" || {
+        echo -e "${red}mihomo 解压失败${reset}"
         exit 1
     }
-    if [ -f "ssserver" ]; then
-        mv "ssserver" shadowsocks
-    else
-        echo -e "${red}找不到解压后的 ssserver 文件${reset}"
+    mv -f "mihomo-linux-${arch}-compatible-${version}" mihomo 2>/dev/null || \
+    mv -f "mihomo-linux-${arch}-${version}" mihomo || {
+        echo -e "${red}找不到解压后的文件${reset}"
         exit 1
-    fi
-    rm -f "$filename"
-    chmod +x shadowsocks
+    }
+    chmod +x mihomo
     echo "$version" > "$version_file"
 }
 

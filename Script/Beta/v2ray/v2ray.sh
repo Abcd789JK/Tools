@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-25 19:15:32
+#!date = 2025-04-26 08:20:24
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -437,6 +437,8 @@ download_version() {
 }
 
 download_v2ray() {
+    get_schema
+    check_network
     download_version
     local version_file="/root/v2ray/version.txt"
     local filename="v2ray-linux-${arch}.zip"
