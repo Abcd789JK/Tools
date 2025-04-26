@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本
 #!desc = 安装 & 配置
-#!date = 2025-04-26 16:53:20
+#!date = 2025-04-26 20:16:39
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -176,7 +176,7 @@ download_mihomo() {
     local filename="mihomo-linux-${arch}-${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
-    wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -203,7 +203,7 @@ download_service() {
     if [ "$distro" = "alpine" ]; then
         local service_file="/etc/init.d/mihomo"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.openrc"
-        wget -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -q -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -212,7 +212,7 @@ download_service() {
     else
         local service_file="/etc/systemd/system/mihomo.service"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.service"
-        wget -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -q -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -225,10 +225,37 @@ download_service() {
 #     管理面板文件下载      #
 #############################
 download_wbeui() {
-    local wbe_file="/root/mihomo/ui"
-    local wbe_url="https://github.com/metacubex/metacubexd.git"
-    git clone "$wbe_url" -b gh-pages "$wbe_file" || { 
+    local wbe_file="/root/mihomo"
+    local filename="gh-pages.zip"
+    echo -e "${green}请选择管理面板 (推荐使用 2 面板)${reset}"
+    echo -e "${cyan}-------------------------${reset}"
+    echo -e "${green}1${reset}. metacubexd 面板"
+    echo -e "${green}2${reset}. zashboard 面板"
+    echo -e "${cyan}-------------------------${reset}"
+    read -p "$(echo -e "${YELLOW}请输入选择(1/2) [默认: 2]: ${reset}")" mode_choice
+    mode_choice=${mode_choice:-2}
+    case "$mode_choice" in
+        1)
+            wbe_url="https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
+            ;;
+        2)
+            wbe_url="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
+            ;;
+        *)
+            echo -e "${RED}无效选择，已切换至默认: zashboard 面板${reset}"
+            wbe_url="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
+            ;;
+    esac
+    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$wbe_url")" || {
         echo -e "${red}管理面板下载失败，请检查网络后重试${reset}"
+        exit 1
+    }
+    unzip "$filename" && rm "$filename" || {
+        exit 1
+    }
+    extracted_folder=$(ls -d "$wbe_file"/*-gh-pages | head -n 1)
+    mv "$extracted_folder" "$wbe_file/ui" || {
+        echo -e "${red}重命名文件夹失败${reset}"
         exit 1
     }
 }
@@ -240,7 +267,7 @@ download_shell() {
     local shell_file="/usr/bin/mihomo"
     local sh_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/mihomo/mihomo.sh"
     [ -f "$shell_file" ] && rm -f "$shell_file"
-    wget -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_url")" || {
+    wget -q -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_url")" || {
         echo -e "${red}管理脚本下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -343,7 +370,7 @@ config_mihomo() {
   mode_choice=${mode_choice:-1}
   local mode_config
   mode_config=$(generate_mode_config "$default_iface" "$mode_choice")
-  wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$remote_config_url")" || { 
+  wget -q -t 3 -T 30 -O "$config_file" "$(get_url "$remote_config_url")" || { 
     echo -e "${red}配置文件下载失败${reset}"
     exit 1
   }
