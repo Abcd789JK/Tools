@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-26 16:14:30
+#!date = 2025-04-26 16:17:30
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -523,7 +523,7 @@ update_mihomo() {
         start_menu
         return
     fi
-    read -p "$(echo -e "${yellow}检测到新版本: ${green}${latest_version} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
+    read -p "$(echo -e "${yellow}检测到新版本 ${green}${latest_version} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
@@ -564,7 +564,7 @@ update_shell() {
         start_menu
         return 0
     fi
-    read -p "$(echo -e "${yellow}检测到新版本: ${green}${sh_new_ver} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
+    read -p "$(echo -e "${yellow}检测到新版本 ${green}${sh_new_ver} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
