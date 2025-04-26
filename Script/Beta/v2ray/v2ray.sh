@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = v2ray 一键管理脚本 Beta
 #!desc = 管理 & 面板
-#!date = 2025-04-26 08:52:49
+#!date = 2025-04-26 14:59:17
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.0.03"
+sh_ver="0.0.04"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 转换后的系统架构
@@ -68,10 +68,8 @@ check_distro() {
 #       网络检测函数       #
 #############################
 check_network() {
-    if ! curl -s --head --fail --connect-timeout 3 -o /dev/null "https://www.google.com"; then
+    if ! curl -sI --connect-timeout 1 https://www.google.com > /dev/null; then
         use_cdn=true
-    else
-        use_cdn=false
     fi
 }
 
