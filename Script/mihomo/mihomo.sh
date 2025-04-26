@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-26 14:59:18
+#!date = 2025-04-26 16:02:01
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -324,13 +324,8 @@ uninstall_mihomo() {
         [Yy]* )
             echo -e "${green}mihomo 卸载中请等待${reset}"
             ;;
-        [Nn]* )
-            echo -e "${yellow}mihomo 卸载已取消${reset}"
-            start_menu
-            return
-            ;;
         * )
-            echo -e "${red}无效选择, 卸载已取消${reset}"
+            echo -e "${yellow}mihomo 卸载已取消${reset}"
             start_menu
             return
             ;;
@@ -382,13 +377,8 @@ install_mihomo() {
                 fi
                 rm -rf "$folders" || { echo -e "${red}删除相关文件夹失败${reset}"; exit 1; }
                 ;;
-            [Nn]* )
-                echo -e "${yellow}取消安装, 保持现有安装${reset}"
-                start_menu
-                return
-                ;;
             * )
-                echo -e "${red}无效选择, 安装已取消${reset}"
+                echo -e "${yellow}取消安装, 保持现有安装${reset}"
                 start_menu
                 return
                 ;;
@@ -538,13 +528,8 @@ update_mihomo() {
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
             ;;
-        [Nn]* )
-            echo -e "${yellow}取消升级, 保持现有版本${reset}"
-            start_menu
-            return
-            ;;
         * )
-            echo -e "${red}无效选择, 升级已取消${reset}"
+            echo -e "${yellow}取消升级, 保持现有版本${reset}"
             start_menu
             return
             ;;
@@ -566,38 +551,43 @@ update_mihomo() {
 update_shell() {
     check_network
     local shell_file="/usr/bin/mihomo"
+    local tmp_file="$(mktemp /tmp/mihomo.XXXXXX)"
     local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/mihomo/mihomo.sh"
-    local sh_new_ver=$(curl -sSL "$(get_url "$sh_ver_url")" | grep 'sh_ver="' | awk -F "=" '{print $NF}' | sed 's/\"//g' | head -1)
+    trap 'rm -f "$tmp_file"' RETURN
     echo -e "${green}开始检查脚本是否有更新${reset}"
+    local sh_new_ver=$(curl -sSL "$(get_url "$sh_ver_url")" | grep 'sh_ver="' | awk -F "=" '{print $NF}' | sed 's/\"//g' | head -1) || {
+        echo -e "${red}获取版本失败${reset}"
+        return 1
+    }
     if [ "$sh_ver" == "$sh_new_ver" ]; then
         echo -e "${green}当前已是最新, 无需更新${reset}"
         start_menu
-        return
+        return 0
     fi
-    read -p "$(echo -e "${yellow}检查到有更新, 是否升级到最新版本？${reset} (y/n): ")" input
+    read -p "$(echo -e "${yellow}检测到新版本: ${sh_new_ver}, 是否升级？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
             ;;
-        [Nn]* )
-            echo -e "${yellow}取消升级, 保持现有版本${reset}"
-            start_menu
-            return
-            ;;
         * )
-            echo -e "${red}无效选择, 升级已取消${reset}"
+            echo -e "${red}已取消升级, 保持现有版本${reset}"
             start_menu
-            return
+            return 0
             ;;
     esac
-    [ -f "$shell_file" ] && rm "$shell_file"
-    wget -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_ver_url")"
-    chmod +x "$shell_file"
-    hash -r
-    echo -e "${yellow}更新完成, 当前版本已更新为: ${reset}【 ${green}${sh_new_ver}${reset} 】"
-    echo -e "${yellow}3 秒后执行新脚本${reset}"
-    sleep 3s
-    "$shell_file"
+    if wget -q --tries=3 --timeout=30 -O "$tmp_file" "$(get_url "$sh_ver_url")"; then
+        mv -f "$tmp_file" "$shell_file"
+        chmod +x "$shell_file"
+        hash -r
+        echo -e "${yellow}更新完成, 当前版本: ${green}${sh_new_ver}${reset}"
+        echo -e "${yellow}3 秒后执行新脚本${reset}"
+        sleep 3
+        exec "$shell_file"
+    else
+        echo -e "${red}脚本下载失败，更新取消${reset}"
+        start_menu
+        return 1
+    fi
 }
 
 #############################
