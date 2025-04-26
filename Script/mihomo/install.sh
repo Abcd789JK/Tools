@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本
 #!desc = 安装 & 配置
-#!date = 2025-04-26 16:51:25
+#!date = 2025-04-26 16:53:20
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -388,7 +388,7 @@ install_mihomo() {
     download_service
     echo -e "${green}开始下载管理 UI 请等待${reset}"
     download_wbeui
-    echo -e "${green}开始下载菜单脚本 请等待${reset}"
+    echo -e "${green}开始下载菜单脚本请等待${reset}"
     download_shell
     echo -e "${green}恭喜你! mihomo 已经安装完成${reset}"
     echo -e "${red}输入 y/Y 下载默认配置文件${reset}"
