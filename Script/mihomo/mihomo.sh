@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键管理脚本
 #!desc = 管理 & 面板
-#!date = 2025-04-26 16:17:30
+#!date = 2025-04-26 16:35:52
 #!author = ChatGPT
 
 # 当遇到错误或管道错误时立即退出
@@ -443,7 +443,7 @@ download_alpha_mihomo() {
     local filename="mihomo-linux-${arch}-${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
-    wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败, 请检查网络后重试${reset}"
         exit 1
     }
@@ -468,7 +468,7 @@ download_latest_mihomo() {
     local filename="mihomo-linux-${arch}-v${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-v${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/v${version}/${filename}"
-    wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败, 可能是网络问题, 建议重新运行本脚本重试下载${reset}"
         exit 1
     }
@@ -575,7 +575,7 @@ update_shell() {
             return 0
             ;;
     esac
-    if wget -q --tries=3 --timeout=30 -O "$tmp_file" "$(get_url "$sh_ver_url")"; then
+    if wget -q -t 3 -T 30 -O "$tmp_file" "$(get_url "$sh_ver_url")"; then
         mv -f "$tmp_file" "$shell_file"
         chmod +x "$shell_file"
         hash -r

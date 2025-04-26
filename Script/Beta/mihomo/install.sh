@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = mihomo 一键安装脚本 Beta
 #!desc = 安装 & 配置
-#!date = 2025-04-26 14:59:17
+#!date = 2025-04-26 16:35:52
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -176,7 +176,7 @@ download_mihomo() {
     local filename="mihomo-linux-${arch}-${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
-    wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -203,7 +203,7 @@ download_service() {
     if [ "$distro" = "alpine" ]; then
         local service_file="/etc/init.d/mihomo"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.openrc"
-        wget -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -q -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -212,7 +212,7 @@ download_service() {
     else
         local service_file="/etc/systemd/system/mihomo.service"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.service"
-        wget -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -q -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -240,7 +240,7 @@ download_shell() {
     local shell_file="/usr/bin/mihomo"
     local sh_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/Beta/mihomo/mihomo.sh"
     [ -f "$shell_file" ] && rm -f "$shell_file"
-    wget -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_url")" || {
+    wget -q -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_url")" || {
         echo -e "${red}管理脚本下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -347,7 +347,7 @@ config_mihomo() {
   local mode_config
   mode_config=$(generate_mode_config "$default_iface" "$mode_choice")
 
-  wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$remote_config_url")" || { 
+  wget -q -t 3 -T 30 -O "$config_file" "$(get_url "$remote_config_url")" || { 
     echo -e "${red}配置文件下载失败${reset}"
     exit 1
   }
@@ -390,9 +390,13 @@ install_mihomo() {
     echo -e "${yellow}当前系统架构：${reset}[ ${green}${arch_raw}${reset} ]"
     download_version
     echo -e "${yellow}当前软件版本：${reset}[ ${green}${version}${reset} ]"
+    echo -e "${green}开始下载 mihomo${reset}"
     download_mihomo
+    echo -e "${green}开始下载服务配置${reset}"
     download_service
+    echo -e "${green}开始下载管理 UI${reset}"
     download_wbeui
+    echo -e "${green}开始下载管理脚本${reset}"
     download_shell
     echo -e "${green}恭喜你! mihomo 已经安装完成${reset}"
     echo -e "${red}输入 y/Y 下载默认配置${reset}"
