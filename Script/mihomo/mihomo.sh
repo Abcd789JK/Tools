@@ -1,8 +1,11 @@
 #!/bin/bash
-#!name = mihomo 一键管理脚本
-#!desc = 管理 & 面板
-#!date = 2025-04-26 16:35:52
-#!author = ChatGPT
+
+# ---------------------------------
+# script : mihomo 一键管理脚本
+# desc   : 管理 & 面板
+# date   : 2025-04-27 10:38:42
+# author : ChatGPT
+# ---------------------------------
 
 # 当遇到错误或管道错误时立即退出
 set -e -o pipefail

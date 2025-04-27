@@ -1,8 +1,10 @@
 #!/bin/bash
-#!name = mihomo 一键安装脚本
-#!desc = 安装 & 配置
-#!date = 2025-04-26 20:47:53
-#!author = ChatGPT
+# ---------------------------------
+# script : mihomo 一键安装脚本
+# desc   : 安装 & 配置
+# date   : 2025-04-27 10:38:42
+# author : ChatGPT
+# ---------------------------------
 
 # 当遇到错误或管道错误时立即退出
 set -e -o pipefail

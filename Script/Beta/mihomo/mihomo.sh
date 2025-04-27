@@ -1,15 +1,16 @@
 #!/bin/bash
-#!name = mihomo 一键管理脚本 Beta
-#!desc = 管理 & 面板
-#!date = 2025-04-26 16:35:52
-#!author = ChatGPT
 
-# 当遇到错误或管道错误时立即退出
+# ---------------------------------
+# script : mihomo 一键管理脚本 Beta
+# desc   : 管理 & 面板
+# date   : 2025-04-27 10:38:42
+# author : ChatGPT
+# ---------------------------------
+
+# 终止脚本执行遇到错误时退出, 并启用管道错误检测
 set -e -o pipefail
- 
-#############################
-#         颜色变量         #
-#############################
+
+# 颜色变量
 red="\033[31m"    # 红色
 green="\033[32m"  # 绿色
 yellow="\033[33m" # 黄色
@@ -17,18 +18,14 @@ blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置颜色
 
-#############################
-#       全局变量定义       #
-#############################
-sh_ver="1.0.10"
+# 全局变量定义
+sh_ver="1.0.11"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
 arch_raw=""       # 原始架构
 
-#############################
-#       系统检测函数       #
-#############################
+# 系统检测
 check_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -64,39 +61,33 @@ check_distro() {
     fi
 }
 
-#############################
-#       网络检测函数       #
-#############################
+# 网络检测
 check_network() {
-    if ! curl -sI --connect-timeout 1 https://www.google.com > /dev/null; then
+    if ! curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null; then
         use_cdn=true
     fi
 }
 
-#############################
-#       URL 获取函数       #
-#############################
+# URL 处理
 get_url() {
     local url=$1
     local final_url
     if [ "$use_cdn" = true ]; then
         final_url="https://gh-proxy.com/$url"
-        if ! curl --silent --head --fail --connect-timeout 3 -L "$final_url" -o /dev/null; then
+        if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
             final_url="https://github.boki.moe/$url"
         fi
     else
         final_url="$url"
     fi
-    if ! curl --silent --head --fail --connect-timeout 3 -L "$final_url" -o /dev/null; then
-        echo -e "${red}连接失败, 可能是网络或代理站点不可用, 请检查后重试！${reset}" >&2
+    if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
+        echo -e "${red}连接失败, 检查网络或代理站点, 稍后重试${reset}" >&2
         return 1
     fi
     echo "$final_url"
 }
 
-#############################
-#    检查 mihomo 是否已安装  #
-#############################
+# 检查 mihomo 是否已安装
 check_installation() {
     local file="/root/mihomo/mihomo"
     if [ ! -f "$file" ]; then
@@ -107,12 +98,10 @@ check_installation() {
     return 0
 }
 
-#############################
-#    Alpine 系统运行状态检测  #
-#############################
+# Alpine 系统运行状态检测
 is_running_alpine() {
     if [ -f "/run/mihomo.pid" ]; then
-        pid=$(cat /run/mihomo.pid)
+        local pid=$(cat /run/mihomo.pid)
         if [ -d "/proc/$pid" ]; then
             return 0
         fi
@@ -120,17 +109,13 @@ is_running_alpine() {
     return 1
 }
 
-#############################
-#         返回主菜单         #
-#############################
+# 返回主菜单
 start_menu() {
     echo && echo -n -e "${yellow}* 按回车返回主菜单 *${reset}" && read temp
     menu
 }
 
-#############################
-#         状态显示函数       #
-#############################
+# 状态显示
 show_status() {
     local file="/root/mihomo/mihomo"
     local version_file="/root/mihomo/version.txt"
@@ -144,15 +129,10 @@ show_status() {
     else
         install_status="${green}已安装${reset}"
         if [ "$distro" = "alpine" ]; then
-            if [ -f "/run/mihomo.pid" ]; then
-                pid=$(cat /run/mihomo.pid)
-                if [ -d "/proc/$pid" ]; then
-                    run_status="${green}已运行${reset}"
-                else
-                    run_status="${red}未运行${reset}"
-                fi
+            if is_running_alpine; then
+              run_status="${green}已运行${reset}"
             else
-                run_status="${red}未运行${reset}"
+              run_status="${red}未运行${reset}"
             fi
             if rc-status default 2>/dev/null | awk '{print $1}' | grep -qx "mihomo"; then
                 auto_start="${green}已设置${reset}"
@@ -184,9 +164,7 @@ show_status() {
     echo -e "软件版本: ${green}${software_version}${reset}"
 }
 
-#############################
-#      服务管理函数         #
-#############################
+# 服务管理
 service_mihomo() {
     check_installation || { start_menu; return; }
     local action="$1"
@@ -309,9 +287,7 @@ enable_mihomo()  { service_mihomo enable; }
 disable_mihomo() { service_mihomo disable; }
 logs_mihomo()    { service_mihomo logs; }
 
-#############################
-#        卸载函数          #
-#############################
+# 卸载
 uninstall_mihomo() {
     check_installation || { start_menu; return; }
     local folders="/root/mihomo"
@@ -354,9 +330,7 @@ uninstall_mihomo() {
     start_menu
 }
 
-#############################
-#         安装函数         #
-#############################
+# 安装
 install_mihomo() {
     check_network
     local folders="/root/mihomo"
@@ -387,9 +361,7 @@ install_mihomo() {
     bash <(curl -Ls "$(get_url "$install_url")")
 }
 
-#############################
-#      系统架构检测函数      #
-#############################
+# 系统架构检测
 get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
@@ -415,9 +387,7 @@ get_schema() {
     esac
 }
 
-#############################
-#      版本及更新函数       #
-#############################
+# 版本获取及更新
 download_alpha_version() {
     check_network
     local version_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt"
@@ -443,7 +413,7 @@ download_alpha_mihomo() {
     local filename="mihomo-linux-${arch}-${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
-    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败, 请检查网络后重试${reset}"
         exit 1
     }
@@ -468,7 +438,7 @@ download_latest_mihomo() {
     local filename="mihomo-linux-${arch}-v${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-v${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/v${version}/${filename}"
-    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败, 可能是网络问题, 建议重新运行本脚本重试下载${reset}"
         exit 1
     }
@@ -545,9 +515,7 @@ update_mihomo() {
     start_menu
 }
 
-#############################
-#       脚本更新函数        #
-#############################
+#  脚本更新
 update_shell() {
     check_network
     local shell_file="/usr/bin/mihomo"
@@ -575,7 +543,7 @@ update_shell() {
             return 0
             ;;
     esac
-    if wget -q -t 3 -T 30 -O "$tmp_file" "$(get_url "$sh_ver_url")"; then
+    if wget -q -O "$tmp_file" "$(get_url "$sh_ver_url")"; then
         mv -f "$tmp_file" "$shell_file"
         chmod +x "$shell_file"
         hash -r
@@ -590,9 +558,7 @@ update_shell() {
     fi
 }
 
-#############################
-#       配置管理函数       #
-#############################
+# 配置文件管理
 config_mihomo() {
     check_installation || { start_menu; return; }
     check_network
@@ -943,9 +909,7 @@ iptables:\n\
     start_menu
 }
 
-#############################
-#       版本切换函数       #
-#############################
+# 版本切换
 switch_version() {
     check_installation || { start_menu; return; }
     local folders="/root/mihomo"
@@ -1011,9 +975,7 @@ switch_version() {
     esac
 }
 
-#############################
-#           主菜单         #
-#############################
+# 主菜单
 menu() {
     clear
     echo "================================="
