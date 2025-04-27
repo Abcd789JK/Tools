@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本 Beta
 # desc   : 管理 & 面板
-# date   : 2025-04-27 10:38:42
+# date   : 2025-04-27 11:04:38
 # author : ChatGPT
 # ---------------------------------
 
@@ -520,7 +520,7 @@ update_shell() {
     check_network
     local shell_file="/usr/bin/mihomo"
     local tmp_file="$(mktemp /tmp/mihomo.XXXXXX)"
-    local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/mihomo/mihomo.sh"
+    local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/Beta/mihomo/mihomo.sh"
     trap 'rm -f "$tmp_file"' RETURN
     echo -e "${green}开始检查脚本是否有更新${reset}"
     local sh_new_ver=$(curl -sSL "$(get_url "$sh_ver_url")" | grep 'sh_ver="' | awk -F "=" '{print $NF}' | sed 's/\"//g' | head -1) || {
