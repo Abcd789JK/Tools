@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本 Beta
 # desc   : 管理 & 面板
-# date   : 2025-04-27 11:04:38
+# date   : 2025-04-29 10:03:30
 # author : ChatGPT
 # ---------------------------------
 
@@ -18,8 +18,8 @@ blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置颜色
 
-# 全局变量定义
-sh_ver="1.0.11"
+# 全局变量
+sh_ver="1.0.21"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -361,7 +361,7 @@ install_mihomo() {
     bash <(curl -Ls "$(get_url "$install_url")")
 }
 
-# 系统架构检测
+# 系统架构
 get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in

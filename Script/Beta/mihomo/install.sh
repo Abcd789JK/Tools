@@ -3,13 +3,14 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本 Beta
 # desc   : 安装 & 配置
-# date   : 2025-04-27 10:38:42
+# date   : 2025-04-29 10:03:30
 # author : ChatGPT
 # ---------------------------------
 
 # 终止脚本执行遇到错误时退出, 并启用管道错误检测
 set -e -o pipefail
 
+# ---------------------------------
 # 颜色变量
 red="\033[31m"    # 红色
 green="\033[32m"  # 绿色
@@ -18,13 +19,15 @@ blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置
 
-# 全局变量定义
-sh_ver="1.0.0"
+# ---------------------------------
+# 全局变量
+sh_ver="1.0.5"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
 arch_raw=""       # 原始架构
 
+# ---------------------------------
 # 系统检测
 check_distro() {
     if [ -f /etc/os-release ]; then
@@ -69,6 +72,7 @@ check_distro() {
     fi
 }
 
+# ---------------------------------
 # 网络检测
 check_network() {
     if ! curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null; then
@@ -76,7 +80,8 @@ check_network() {
     fi
 }
 
-# URL 处理
+# ---------------------------------
+# 链接处理
 get_url() {
     local url=$1
     local final_url
@@ -95,30 +100,32 @@ get_url() {
     echo "$final_url"
 }
 
+# ---------------------------------
 # 系统更新及插件安装
 update_system() {
     eval "$pkg_update"
     eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq"
 }
 
-# 系统架构检测
+# ---------------------------------
+# 系统架构
 get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
         x86_64)
-            arch="amd64"
+            arch='amd64'
             ;;
         x86|i686|i386)
-            arch="386"
+            arch='386'
             ;;
         aarch64|arm64)
-            arch="arm64"
+            arch='arm64'
             ;;
         armv7l)
-            arch="armv7"
+            arch='armv7'
             ;;
         s390x)
-            arch="s390x"
+            arch='s390x'
             ;;
         *)
             echo -e "${red}不支持的架构：${arch_raw}${reset}"
@@ -127,6 +134,7 @@ get_schema() {
     esac
 }
 
+# ---------------------------------
 # IPv4/IPv6 转发检查
 check_ip_forward() {
     local sysctl_file="/etc/sysctl.conf"
@@ -143,7 +151,8 @@ check_ip_forward() {
     sysctl -p > /dev/null
 }
 
-# 远程版本获取
+# ---------------------------------
+# 版本获取
 download_version() {
     local version_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt"
     version=$(curl -sSL "$(get_url "$version_url")") || {
@@ -152,7 +161,8 @@ download_version() {
     }
 }
 
-# mihomo 下载
+# ---------------------------------
+# 软件下载
 download_mihomo() {
     download_version
     local version_file="/root/mihomo/version.txt"
@@ -160,7 +170,7 @@ download_mihomo() {
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
     wget -O "$filename" "$(get_url "$download_url")" || {
-        echo -e "${red}mihomo 下载失败, 请检查网络后重试${reset}"
+        echo -e "${red}mihomo 下载失败，请检查网络后重试${reset}"
         exit 1
     }
     gunzip "$filename" || {
@@ -179,13 +189,14 @@ download_mihomo() {
     echo "$version" > "$version_file"
 }
 
-# 系统服务配置下载
+# ---------------------------------
+# 服务配置
 download_service() {
     if [ "$distro" = "alpine" ]; then
         local service_file="/etc/init.d/mihomo"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.openrc"
         wget -O "$service_file" "$(get_url "$service_url")" || {
-            echo -e "${red}系统服务下载失败, 请检查网络后重试${reset}"
+            echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
         chmod +x "$service_file"
@@ -194,7 +205,7 @@ download_service() {
         local service_file="/etc/systemd/system/mihomo.service"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.service"
         wget -O "$service_file" "$(get_url "$service_url")" || {
-            echo -e "${red}系统服务下载失败, 请检查网络后重试${reset}"
+            echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
         chmod +x "$service_file"
@@ -202,7 +213,8 @@ download_service() {
     fi
 }
 
-# 管理面板文件下载
+# ---------------------------------
+# 管理面板
 download_wbeui() {
     local wbe_file="/root/mihomo"
     local filename="gh-pages.zip"
@@ -211,7 +223,7 @@ download_wbeui() {
     echo -e "${green}请选择管理面板 (推荐使用 2 面板)${reset}"
     echo -e "${cyan}-------------------------${reset}"
     echo -e "${green}1${reset}. metacubexd 面板"
-    echo -e "${green}2${reset}. zashboard 面板"
+    echo -e "${green}2${reset}. zashboard  面板"
     echo -e "${cyan}-------------------------${reset}"
     read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: 2]: ${reset}")" mode_choice
     mode_choice=${mode_choice:-2}
@@ -228,7 +240,7 @@ download_wbeui() {
             ;;
     esac
     wget -O "$filename" "$(get_url "$download_url")" || {
-        echo -e "${red}管理面板下载失败, 请检查网络后重试${reset}"
+        echo -e "${red}管理面板下载失败，请检查网络后重试${reset}"
         exit 1
     }
     unzip -oq "$filename" && rm "$filename" || {
@@ -240,7 +252,8 @@ download_wbeui() {
     }
 }
 
-# 管理脚本下载
+# ---------------------------------
+# 管理脚本
 download_shell() {
     local shell_file="/usr/bin/mihomo"
     local sh_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/Beta/mihomo/mihomo.sh"
@@ -253,7 +266,8 @@ download_shell() {
     hash -r
 }
 
-# 配置文件生成
+# ---------------------------------
+# IP 地址获取
 get_network_info() {
   local default_iface ipv4 ipv6
   default_iface=$(ip route | awk '/default/ {print $5}' | head -n 1)
@@ -262,6 +276,7 @@ get_network_info() {
   echo "$default_iface $ipv4 $ipv6"
 }
 
+# 运行模式
 generate_mode_config() {
   local iface=$1
   local choice=$2
@@ -290,7 +305,7 @@ EOF
 )
       ;;
     *)
-      echo -e "${red}无效选择, 使用默认 TUN 配置。${reset}"
+      echo -e "${red}无效选择，使用默认 TUN 配置。${reset}"
       mode_config=$(cat <<EOF
 tun:
   enable: true
@@ -308,6 +323,7 @@ EOF
   echo "$mode_config"
 }
 
+# 新增订阅
 collect_proxy_providers() {
   local providers="proxy-providers:"
   local counter=1
@@ -323,7 +339,7 @@ collect_proxy_providers() {
     override:
       additional-prefix: \"[${subscription_name}]\""
     counter=$((counter + 1))
-    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续, 输入 n/N 结束: ${reset}")" cont
+    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
     if [[ "$cont" =~ ^[nN]$ ]]; then
       break
     fi
@@ -331,6 +347,7 @@ collect_proxy_providers() {
   echo "$providers"
 }
 
+# 配置文件
 config_mihomo() {
   local root_folder="/root/mihomo"
   local config_file="/root/mihomo/config.yaml"
@@ -361,8 +378,8 @@ config_mihomo() {
     { print }
   ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
   service_restart
-  echo -e "${green}配置完成, 配置文件已保存到：${yellow}${config_file}${reset}"
-  echo -e "${green}mihomo 配置完成, 正在启动中${reset}"
+  echo -e "${green}配置完成，配置文件已保存到：${yellow}${config_file}${reset}"
+  echo -e "${green}mihomo 配置完成，正在启动中${reset}"
   echo -e "${red}管理面板地址和管理命令${reset}"
   echo -e "${cyan}=========================${reset}"
   echo -e "${green}http://$ipv4:9090/ui${reset}"
@@ -372,12 +389,13 @@ config_mihomo() {
   echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
 }
 
-# 安装主流程
+# ---------------------------------
+# 安装程序
 install_mihomo() {
     local folders="/root/mihomo"
     rm -rf "$folders"
     mkdir -p "$folders" && cd "$folders"
-    check_distro
+    check_ip_forward
     echo -e "${yellow}当前系统版本：${reset}[ ${green}${distro}${reset} ]"
     get_schema
     echo -e "${yellow}当前系统架构：${reset}[ ${green}${arch_raw}${reset} ]"
@@ -408,7 +426,7 @@ install_mihomo() {
     rm -f /root/install.sh
 }
 
-# 主程序
+# 主菜单
 check_distro
 check_network
 update_system

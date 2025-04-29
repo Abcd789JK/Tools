@@ -1,17 +1,17 @@
 #!/bin/bash
+
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-04-27 10:38:42
+# date   : 2025-04-29 10:03:30
 # author : ChatGPT
 # ---------------------------------
 
-# 当遇到错误或管道错误时立即退出
+# 终止脚本执行遇到错误时退出, 并启用管道错误检测
 set -e -o pipefail
- 
-#############################
-#         颜色变量           #
-#############################
+
+# ---------------------------------
+# 颜色变量
 red="\033[31m"    # 红色
 green="\033[32m"  # 绿色
 yellow="\033[33m" # 黄色
@@ -19,18 +19,16 @@ blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置
 
-#############################
-#       全局变量定义         #
-#############################
-sh_ver="1.0.0"
+# ---------------------------------
+# 全局变量
+sh_ver="1.0.1"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
 arch_raw=""       # 原始架构
 
-#############################
-#       系统检测函数       #
-#############################
+# ---------------------------------
+# 系统检测
 check_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -74,47 +72,43 @@ check_distro() {
     fi
 }
 
-#############################
-#       网络检测函数         #
-#############################
+# ---------------------------------
+# 网络检测
 check_network() {
-    if ! curl -sI --connect-timeout 1 https://www.google.com > /dev/null; then
+    if ! curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null; then
         use_cdn=true
     fi
 }
 
-#############################
-#        URL 处理函数        #
-#############################
+# ---------------------------------
+# 链接处理
 get_url() {
     local url=$1
     local final_url
     if [ "$use_cdn" = true ]; then
         final_url="https://gh-proxy.com/$url"
-        if ! curl --silent --head --fail --connect-timeout 3 -L "$final_url" -o /dev/null; then
+        if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
             final_url="https://github.boki.moe/$url"
         fi
     else
         final_url="$url"
     fi
-    if ! curl --silent --head --fail --connect-timeout 3 -L "$final_url" -o /dev/null; then
-        echo -e "${red}连接失败，可能是网络或代理站点不可用，请检查后重试！${reset}" >&2
+    if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
+        echo -e "${red}连接失败, 检查网络或代理站点, 稍后重试${reset}" >&2
         return 1
     fi
     echo "$final_url"
 }
 
-#############################
-#     系统更新及安装函数     #
-#############################
+# ---------------------------------
+# 系统更新及插件安装
 update_system() {
     eval "$pkg_update"
     eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq"
 }
 
-#############################
-#      系统架构检测函数       #
-#############################
+# ---------------------------------
+# 系统架构
 get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
@@ -140,9 +134,8 @@ get_schema() {
     esac
 }
 
-#############################
-#    IPv4/IPv6 转发检查    #
-#############################
+# ---------------------------------
+# IPv4/IPv6 转发检查
 check_ip_forward() {
     local sysctl_file="/etc/sysctl.conf"
     sed -i 's/^#[[:space:]]*\(net\.ipv4\.ip_forward\s*=\s*1\)/\1/' "$sysctl_file"
@@ -158,9 +151,8 @@ check_ip_forward() {
     sysctl -p > /dev/null
 }
 
-#############################
-#      远程版本获取函数      #
-#############################
+# ---------------------------------
+# 版本获取
 download_version() {
     local version_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt"
     version=$(curl -sSL "$(get_url "$version_url")") || {
@@ -169,16 +161,15 @@ download_version() {
     }
 }
 
-#############################
-#     mihomo 下载函数       #
-#############################
+# ---------------------------------
+# 软件下载
 download_mihomo() {
     download_version
     local version_file="/root/mihomo/version.txt"
     local filename="mihomo-linux-${arch}-${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
-    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -198,14 +189,13 @@ download_mihomo() {
     echo "$version" > "$version_file"
 }
 
-#############################
-#   系统服务配置下载函数    #
-#############################
+# ---------------------------------
+# 服务配置
 download_service() {
     if [ "$distro" = "alpine" ]; then
         local service_file="/etc/init.d/mihomo"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.openrc"
-        wget -q -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -214,7 +204,7 @@ download_service() {
     else
         local service_file="/etc/systemd/system/mihomo.service"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.service"
-        wget -q -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -223,9 +213,8 @@ download_service() {
     fi
 }
 
-#############################
-#     管理面板文件下载      #
-#############################
+# ---------------------------------
+# 管理面板
 download_wbeui() {
     local wbe_file="/root/mihomo"
     local filename="gh-pages.zip"
@@ -250,7 +239,7 @@ download_wbeui() {
             download_url="$url_za"
             ;;
     esac
-    wget -q -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}管理面板下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -263,14 +252,13 @@ download_wbeui() {
     }
 }
 
-#############################
-#    管理脚本下载函数      #
-#############################
+# ---------------------------------
+# 管理脚本
 download_shell() {
     local shell_file="/usr/bin/mihomo"
     local sh_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/mihomo/mihomo.sh"
     [ -f "$shell_file" ] && rm -f "$shell_file"
-    wget -q -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_url")" || {
+    wget -O "$shell_file" "$(get_url "$sh_url")" || {
         echo -e "${red}管理脚本下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -278,9 +266,8 @@ download_shell() {
     hash -r
 }
 
-#############################
-#       配置文件生成函数     #
-#############################
+# ---------------------------------
+# IP 地址获取
 get_network_info() {
   local default_iface ipv4 ipv6
   default_iface=$(ip route | awk '/default/ {print $5}' | head -n 1)
@@ -289,6 +276,7 @@ get_network_info() {
   echo "$default_iface $ipv4 $ipv6"
 }
 
+# 运行模式
 generate_mode_config() {
   local iface=$1
   local choice=$2
@@ -335,6 +323,7 @@ EOF
   echo "$mode_config"
 }
 
+# 新增订阅
 collect_proxy_providers() {
   local providers="proxy-providers:"
   local counter=1
@@ -358,6 +347,7 @@ collect_proxy_providers() {
   echo "$providers"
 }
 
+# 配置文件
 config_mihomo() {
   local root_folder="/root/mihomo"
   local config_file="/root/mihomo/config.yaml"
@@ -373,7 +363,7 @@ config_mihomo() {
   mode_choice=${mode_choice:-1}
   local mode_config
   mode_config=$(generate_mode_config "$default_iface" "$mode_choice")
-  wget -q -t 3 -T 30 -O "$config_file" "$(get_url "$remote_config_url")" || { 
+  wget -O "$config_file" "$(get_url "$remote_config_url")" || { 
     echo -e "${red}配置文件下载失败${reset}"
     exit 1
   }
@@ -399,9 +389,8 @@ config_mihomo() {
   echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
 }
 
-#############################
-#       安装主流程函数      #
-#############################
+# ---------------------------------
+# 安装程序
 install_mihomo() {
     local folders="/root/mihomo"
     rm -rf "$folders"
@@ -437,9 +426,7 @@ install_mihomo() {
     rm -f /root/install.sh
 }
 
-#############################
-#           主流程          #
-#############################
+# 主菜单
 check_distro
 check_network
 update_system
