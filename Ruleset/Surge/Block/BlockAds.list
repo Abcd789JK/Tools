@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-04-25 19:44:06
+#!date = 2025-05-11 20:09:22
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -97,7 +97,13 @@ IP-CIDR,180.76.76.200/32
 DOMAIN,afd.baidu.com
 DOMAIN,afdconf.baidu.com
 # 哔哩哔哩
+DOMAIN,api.biliapi.com
+DOMAIN,api.biliapi.net
+DOMAIN,app.biliapi.com
+DOMAIN,app.biliapi.net
 DOMAIN,httpdns.bilivideo.com
+URL-REGEX,"^http:\/\/[\d\.]+:8000\/v1\/resource\/\w{32}-1-SPLASH"
+URL-REGEX,"^http:\/\/upos-sz-static\.bilivideo\.com\/ssaxcode\/\w{2}\/\w{2}\/\w{32}-1-SPLASH"
 
 # ======= C ======= #
 # 昌原云充
