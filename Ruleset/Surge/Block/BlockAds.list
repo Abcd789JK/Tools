@@ -306,6 +306,7 @@ DOMAIN-KEYWORD,mapi.m.jd.com
 IP-CIDR,101.124.19.122/32
 IP-CIDR,103.224.222.208/32
 IP-CIDR6,2402:db40:5100:1011::5/128
+AND,((PROTOCOL,TCP),(DOMAIN,api.m.jd.com,extended-matching))
 URL-REGEX,^http:\/\/\w{32}\.jddebug\.com\/diagnose\?
 # 今日头条
 DOMAIN-KEYWORD,ad.toutiao.com
