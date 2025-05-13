@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : ss 一键管理脚本 Beta
 # desc   : 管理 & 面板
-# date   : 2025-05-13 09:43:36
+# date   : 2025-05-13 09:47:32
 # author : ChatGPT
 # ---------------------------------
 
@@ -470,7 +470,7 @@ update_shadowsocks() {
         start_menu
         return
     fi
-    read -p "$(echo -e "${yellow}检查到有更新，是否升级到最新版本？${reset} (y/n): ")" input
+    read -p "$(echo -e "${yellow}检测到新版本 ${green}${latest_version} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级，升级中请等待${reset}"
@@ -509,7 +509,7 @@ update_shell() {
         start_menu
         return
     fi
-    read -p "$(echo -e "${yellow}检查到有更新，是否升级到最新版本？${reset} (y/n): ")" input
+    read -p "$(echo -e "${yellow}检测到新版本 ${green}${sh_new_ver} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级，升级中请等待${reset}"
