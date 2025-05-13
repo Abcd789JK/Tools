@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : ss 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2025-05-13 09:48:19
+# date   : 2025-05-13 10:33:34
 # author : ChatGPT
 # ---------------------------------
 
@@ -607,10 +607,18 @@ config_shadowsocks() {
             port=$(get_random_port)
             case "$method" in
                 "2022-blake3-aes-128-gcm")
-                    password=$(openssl rand -base64 16)
+                    if command -v openssl >/dev/null 2>&1; then
+                        password=$(openssl rand -base64 16)
+                    else
+                        password=$(head -c 16 /dev/urandom | base64)
+                    fi
                     ;;
                 "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
-                    password=$(openssl rand -base64 32)
+                    if command -v openssl >/dev/null 2>&1; then
+                        password=$(openssl rand -base64 32)
+                    else
+                        password=$(head -c 32 /dev/urandom | base64)
+                    fi
                     ;;
                 *)
                     password=$(get_random_uuid)
@@ -620,10 +628,18 @@ config_shadowsocks() {
             prompt_port
             case "$method" in
                 "2022-blake3-aes-128-gcm")
-                    password=$(openssl rand -base64 16)
+                    if command -v openssl >/dev/null 2>&1; then
+                        password=$(openssl rand -base64 16)
+                    else
+                        password=$(head -c 16 /dev/urandom | base64)
+                    fi
                     ;;
                 "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
-                    password=$(openssl rand -base64 32)
+                    if command -v openssl >/dev/null 2>&1; then
+                        password=$(openssl rand -base64 32)
+                    else
+                        password=$(head -c 32 /dev/urandom | base64)
+                    fi
                     ;;
                 *)
                     prompt_password
@@ -677,10 +693,18 @@ config_shadowsocks() {
                 select_protocol
                 case "$method" in
                     "2022-blake3-aes-128-gcm")
-                        password=$(openssl rand -base64 16)
+                        if command -v openssl >/dev/null 2>&1; then
+                            password=$(openssl rand -base64 16)
+                        else
+                            password=$(head -c 16 /dev/urandom | base64)
+                        fi
                         ;;
                     "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
-                        password=$(openssl rand -base64 32)
+                        if command -v openssl >/dev/null 2>&1; then
+                            password=$(openssl rand -base64 32)
+                        else
+                            password=$(head -c 32 /dev/urandom | base64)
+                        fi
                         ;;
                     *)
                         password="$current_password"

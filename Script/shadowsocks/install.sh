@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : ss 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-05-13 09:33:38
+# date   : 2025-05-13 10:33:34
 # author : ChatGPT
 # ---------------------------------
 
@@ -102,7 +102,7 @@ get_url() {
 # 系统更新及插件安装
 update_system() {
     eval "$pkg_update"
-    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq"
+    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq openssl"
 }
 
 # ---------------------------------
@@ -266,7 +266,7 @@ EOF
 config_shadowsocks() {
     local config_file="/root/shadowsocks/config.json"
     local config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/shadowsocks.json"
-    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$config_url")" || { 
+    wget -O "$config_file" "$(get_url "$config_url")" || { 
         echo -e "${red}配置文件下载失败${reset}"
         exit 1
     }
@@ -279,7 +279,7 @@ config_shadowsocks() {
         echo -e "${green}4${reset}、2022-blake3-aes-128-gcm"
         echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
         echo -e "${green}6${reset}、2022-blake3-chacha20-poly1305"
-        read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+        read -rp "输入数字选择加密方式 (1-6 默认[3]): " confirm
         confirm=${confirm:-1}
         case $confirm in
             1) method="aes-128-gcm" ;;
@@ -288,7 +288,33 @@ config_shadowsocks() {
             4) method="2022-blake3-aes-128-gcm" ;;
             5) method="2022-blake3-aes-256-gcm" ;;
             6) method="2022-blake3-chacha20-poly1305" ;;
-            *) method="aes-128-gcm" ;;
+            *) method="chacha20-ietf-poly1305" ;;
+        esac
+    }
+
+    select_port(){
+        port=$(shuf -i 10000-65000 -n 1)
+    }
+
+    select_password() {
+        case "$method" in
+            "2022-blake3-aes-128-gcm")
+                if command -v openssl >/dev/null 2>&1; then
+                    password=$(openssl rand -base64 16)
+                else
+                    password=$(head -c 16 /dev/urandom | base64)
+                fi
+                ;;
+            "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305")
+                if command -v openssl >/dev/null 2>&1; then
+                    password=$(openssl rand -base64 32)
+                else
+                    password=$(head -c 32 /dev/urandom | base64)
+                fi
+                ;;
+            *)
+                password=$(cat /proc/sys/kernel/random/uuid)
+                ;;
         esac
     }
 
@@ -297,24 +323,8 @@ config_shadowsocks() {
     mode=${mode:-y}
 
     select_protocol
-    port=$(shuf -i 10000-65000 -n 1)
-
-    case "$method" in
-        4|"2022-blake3-aes-128-gcm")
-            password=$(openssl rand -base64 16)
-            ;;
-        5|6|"2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
-            password=$(openssl rand -base64 32)
-            ;;
-        *)
-            if [[ "$mode" == [Yy] ]]; then
-                password=$(cat /proc/sys/kernel/random/uuid)
-            else
-                read -rp "请输入新的 Shadowsocks 密码 (留空则自动生成 uuid): " password
-                password=${password:-$(cat /proc/sys/kernel/random/uuid)}
-            fi
-            ;;
-    esac
+    select_port
+    select_password
 
     echo -e "${green}生成的配置${reset}"
     echo -e "端口: ${green}${port}${reset}"
@@ -360,7 +370,7 @@ install_shadowsocks() {
     echo -e "${green}恭喜你! shadowsocks 已经安装完成${reset}"
     echo -e "${red}输入 y/Y 下载默认配置${reset}"
     echo -e "${red}输入 n/N 取消下载默认配置${reset}"
-    echo -e "${red}把你自己的配置上传到 ${folders} 目录下(文件名必须为 config.yaml)${reset}"
+    echo -e "${red}把你自己的配置上传到 ${folders} 目录下(文件名必须为 config.json)${reset}"
     read -p "$(echo -e "${yellow}请输入选择(y/n) [默认: y]: ${reset}")" confirm
     confirm=${confirm:-y}
     case "$confirm" in
