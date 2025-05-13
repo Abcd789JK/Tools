@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本 Beta
 # desc   : 安装 & 配置
-# date   : 2025-04-29 10:03:30
+# date   : 2025-05-13 09:33:38
 # author : ChatGPT
 # ---------------------------------
 
@@ -73,15 +73,13 @@ check_distro() {
 }
 
 # ---------------------------------
-# 网络检测
+# 网络检测 链接处理
 check_network() {
     if ! curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null; then
         use_cdn=true
     fi
 }
 
-# ---------------------------------
-# 链接处理
 get_url() {
     local url=$1
     local final_url

@@ -1,15 +1,17 @@
 #!/bin/bash
-#!name = ss 一键管理脚本 Beta
-#!desc = 管理 & 面板
-#!date = 2025-04-26 14:59:17
-#!author = ChatGPT
+
+# ---------------------------------
+# script : ss 一键管理脚本 Beta
+# desc   : 管理 & 面板
+# date   : 2025-05-13 09:33:38
+# author : ChatGPT
+# ---------------------------------
 
 # 当遇到错误或管道错误时立即退出
 set -e -o pipefail
 
-#############################
-#         颜色变量         #
-#############################
+# ---------------------------------
+# 颜色变量
 red="\033[31m"    # 红色
 green="\033[32m"  # 绿色
 yellow="\033[33m" # 黄色
@@ -17,18 +19,16 @@ blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置颜色
 
-#############################
-#       全局变量定义       #
-#############################
-sh_ver="0.0.09"
+# ---------------------------------
+# 全局变量
+sh_ver="0.0.15"
 use_cdn=false
 distro="unknown"  # 系统类型
-arch=""           # 转换后的系统架构
-arch_raw=""       # 原始系统架构信息
+arch=""           # 系统架构
+arch_raw=""       # 原始架构信息
 
-#############################
-#       系统检测函数       #
-#############################
+# ---------------------------------
+# 系统检测
 check_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -64,18 +64,14 @@ check_distro() {
     fi
 }
 
-#############################
-#       网络检测函数       #
-#############################
+# ---------------------------------
+# 网络检测 链接处理
 check_network() {
     if ! curl -sI --connect-timeout 1 https://www.google.com > /dev/null; then
         use_cdn=true
     fi
 }
 
-#############################
-#       URL 获取函数       #
-#############################
 get_url() {
     local url=$1
     local final_url
@@ -94,9 +90,8 @@ get_url() {
     echo "$final_url"
 }
 
-#############################
-#    检查 shadowsocks 是否已安装  #
-#############################
+# ---------------------------------
+# 安装检测
 check_installation() {
     local file="/root/shadowsocks/shadowsocks"
     if [ ! -f "$file" ]; then
@@ -107,9 +102,8 @@ check_installation() {
     return 0
 }
 
-#############################
-#    Alpine 系统运行状态检测  #
-#############################
+# ---------------------------------
+# 状态检测
 is_running_alpine() {
     if [ -f "/run/shadowsocks.pid" ]; then
         pid=$(cat /run/shadowsocks.pid)
@@ -120,17 +114,15 @@ is_running_alpine() {
     return 1
 }
 
-#############################
-#         返回主菜单         #
-#############################
+# ---------------------------------
+# 返回主菜单
 start_menu() {
     echo && echo -n -e "${yellow}* 按回车返回主菜单 *${reset}" && read temp
     menu
 }
 
-#############################
-#         状态显示函数       #
-#############################
+# ---------------------------------
+# 状态显示
 show_status() {
     local file="/root/shadowsocks/shadowsocks"
     local version_file="/root/shadowsocks/version.txt"
@@ -184,9 +176,8 @@ show_status() {
     echo -e "软件版本：${green}${software_version}${reset}"
 }
 
-#############################
-#      服务管理函数         #
-#############################
+# ---------------------------------
+# 服务管理
 service_shadowsocks() {
     check_installation || { start_menu; return; }
     local action="$1"
@@ -309,9 +300,8 @@ enable_shadowsocks()  { service_shadowsocks enable; }
 disable_shadowsocks() { service_shadowsocks disable; }
 logs_shadowsocks()    { service_shadowsocks logs; }
 
-#############################
-#        卸载函数          #
-#############################
+# ---------------------------------
+# 卸载函数
 uninstall_shadowsocks() {
     check_installation || { start_menu; return; }
     local folders="/root/shadowsocks"
@@ -358,9 +348,8 @@ uninstall_shadowsocks() {
     start_menu
 }
 
-#############################
-#         安装函数         #
-#############################
+# ---------------------------------
+# 安装函数
 install_shadowsocks() {
     check_network
     local folders="/root/shadowsocks"
@@ -395,9 +384,8 @@ install_shadowsocks() {
     bash <(curl -Ls "$(get_url "$install_url")")
 }
 
-#############################
-#      系统架构检测函数      #
-#############################
+# ---------------------------------
+# 系统架构
 get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
@@ -423,9 +411,8 @@ get_schema() {
     esac
 }
 
-#############################
-#      软件获取更新函数     #
-#############################
+# ---------------------------------
+# 软件更新
 download_version() {
     local version_url="https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest"
     version=$(curl -sSL "$version_url" | jq -r '.tag_name' | sed 's/v//') || {
@@ -509,9 +496,8 @@ update_shadowsocks() {
     start_menu
 }
 
-#############################
-#       脚本更新函数        #
-#############################
+# ---------------------------------
+# 脚本更新
 update_shell() {
     check_network
     local shell_file="/usr/bin/ssr"
@@ -549,9 +535,8 @@ update_shell() {
     "$shell_file"
 }
 
-#############################
-#       配置管理函数       #
-#############################
+# ---------------------------------
+# 配置管理
 config_shadowsocks() {
     check_installation || { start_menu; return; }
     local config_file="/root/shadowsocks/config.json"
@@ -620,10 +605,30 @@ config_shadowsocks() {
         read -rp "是否快速生成端口和密码？(Y/n 默认[Y]): " quick
         if [[ "${quick^^}" =~ ^(Y|)$ ]]; then
             port=$(get_random_port)
-            password=$(get_random_uuid)
+            case "$method" in
+                "2022-blake3-aes-128-gcm")
+                    password=$(openssl rand -base64 16)
+                    ;;
+                "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
+                    password=$(openssl rand -base64 32)
+                    ;;
+                *)
+                    password=$(get_random_uuid)
+                    ;;
+            esac
         else
             prompt_port
-            prompt_password
+            case "$method" in
+                "2022-blake3-aes-128-gcm")
+                    password=$(openssl rand -base64 16)
+                    ;;
+                "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
+                    password=$(openssl rand -base64 32)
+                    ;;
+                *)
+                    prompt_password
+                    ;;
+            esac
         fi
     }
 
@@ -641,11 +646,8 @@ config_shadowsocks() {
         generate_or_input
         new_config=$(echo "$old_config" | jq --arg p "$port" \
                                              --arg m "$method" \
-                                             --arg pwd "$password" '
-            .server_port = ($p|tonumber) |
-            .method      = $m           |
-            .password    = $pwd
-        ')
+                                             --arg pwd "$password" \
+            '.server_port = ($p|tonumber) | .method = $m | .password = $pwd')
     else
         current_port=$(echo "$old_config" | jq -r '.server_port')
         current_method=$(echo "$old_config" | jq -r '.method')
@@ -673,9 +675,19 @@ config_shadowsocks() {
                 ;;
             3)
                 select_protocol
-                new_config=$(echo "$old_config" | jq --arg m "$method" '.method = $m')
+                case "$method" in
+                    "2022-blake3-aes-128-gcm")
+                        password=$(openssl rand -base64 16)
+                        ;;
+                    "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
+                        password=$(openssl rand -base64 32)
+                        ;;
+                    *)
+                        password="$current_password"
+                        ;;
+                esac
+                new_config=$(echo "$old_config" | jq --arg m "$method" --arg pwd "$password" '.method = $m | .password = $pwd')
                 port="$current_port"
-                password="$current_password"
                 ;;
             *)
                 echo -e "${red}无效选项${reset}"
@@ -700,23 +712,8 @@ config_shadowsocks() {
     start_menu
 }
 
-#############################
-#       获取配置函数       #
-#############################
-view_shadowsocks() {
-    local config_file="/root/shadowsocks/config.json"
-    port=$(jq -r '.server_port' "$config_file")
-    method=$(jq -r '.method' "$config_file")
-    password=$(jq -r '.password' "$config_file")
-    echo -e "端口: ${green}${port}${reset}"
-    echo -e "密码: ${green}${password}${reset}"
-    echo -e "加密方式: ${green}${method}${reset}"
-    start_menu
-}
-
-#############################
-#           主菜单         #
-#############################
+# ---------------------------------
+# 主菜单
 menu() {
     clear
     echo "================================="
