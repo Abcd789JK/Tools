@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : ss 一键管理脚本 Beta
 # desc   : 管理 & 面板
-# date   : 2025-05-13 09:33:38
+# date   : 2025-05-13 09:43:36
 # author : ChatGPT
 # ---------------------------------
 
@@ -21,7 +21,7 @@ reset="\033[0m"   # 重置颜色
 
 # ---------------------------------
 # 全局变量
-sh_ver="0.0.15"
+sh_ver="0.0.18"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -713,6 +713,19 @@ config_shadowsocks() {
 }
 
 # ---------------------------------
+# 查看配置
+get_shadowsocks() {
+    local config_file="/root/shadowsocks/config.json"
+    server_port=$(jq -r '.server_port' "$config_file")
+    method=$(jq -r '.method' "$config_file")
+    password=$(jq -r '.password' "$config_file")
+    echo -e "${green}端口: ${reset}$server_port"
+    echo -e "${green}密码: ${reset}$password"
+    echo -e "${green}加密方式: ${reset}$method"
+    start_menu
+}
+
+# ---------------------------------
 # 主菜单
 menu() {
     clear
@@ -751,7 +764,7 @@ menu() {
         8) disable_shadowsocks ;;
         20) logs_shadowsocks ;;
         30) config_shadowsocks ;;
-        40) view_shadowsocks ;;
+        40) get_shadowsocks ;;
         10) exit 0 ;;
         0) update_shell ;;
         *) echo -e "${red}无效选项，请重新选择${reset}" 
