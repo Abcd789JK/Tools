@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-05-11 20:14:11
+#!date = 2025-05-17 17:05:14
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -140,8 +140,8 @@ DOMAIN,ykad-data.youku.com
 # 滴滴出行
 DOMAIN,hd.xiaojukeji.com
 DOMAIN,gwp.xiaojukeji.com
-AND,((IP-ASN,45090,no-resolve),(DEST-PORT,25641),(PROTOCOL,TCP))
-AND,((IP-ASN,63646,no-resolve),(DEST-PORT,25641),(PROTOCOL,TCP))
+AND,((IP-ASN,45090),(DEST-PORT,25641),(PROTOCOL,TCP))
+AND,((IP-ASN,63646),(DEST-PORT,25641),(PROTOCOL,TCP))
 
 # ======= F ======= #
 # Flurry
@@ -155,9 +155,12 @@ DOMAIN,pagead2.googlesyndication.com
 DOMAIN,www.googleadservices.com
 DOMAIN-KEYWORD,adservice.google.com.
 # 番茄小说
+DOMAIN,dig.bdurl.net
+DOMAIN,dig.zjurl.cn
 DOMAIN,mon.zijieapi.com
 DOMAIN,lf-ad-ies.bytecdn.cn
 DOMAIN,i.snssdk.com
+DOMAIN,is.snssdk.com
 DOMAIN,bds.snssdk.com
 DOMAIN,dm.bytedance.com
 DOMAIN,dm.pstatp.com
@@ -174,54 +177,34 @@ DOMAIN,mssdk.volces.com
 DOMAIN,pangolin.snssdk.com
 DOMAIN,gromore.pangolin-sdk-toutiao.com
 DOMAIN,ether-pack.pangolin-sdk-toutiao.com
-DOMAIN,frontier-aweme-hl.snssdk.com
-DOMAIN,frontier-quic-test.bytedance.com
-DOMAIN-KEYWORD,dig.zjurl.cn
-DOMAIN-KEYWORD,dig.bdurl.net
-DOMAIN-KEYWORD,is.snssdk.com
 DOMAIN-KEYWORD,-ad-sign.byteimg.com
 DOMAIN-KEYWORD,api-access.pangolin-sdk-toutiao
 DOMAIN-KEYWORD,log-api.pangolin-sdk-toutiao
 DOMAIN-KEYWORD,-ad.byteoversea.com
 DOMAIN-KEYWORD,video-cn.snssdk.com
 DOMAIN-KEYWORD,asiad.byteactivity
-AND,((DOMAIN-KEYWORD,zijieapi),(DOMAIN-KEYWORD,ad))
-AND,((DOMAIN-KEYWORD,api100-core-quic-,extended-matching),(DOMAIN-SUFFIX,amemv.com,extended-matching))
-AND,((DOMAIN-KEYWORD,api100-normal-quic-,extended-matching),(DOMAIN-SUFFIX,amemv.com,extended-matching))
-AND,((DOMAIN-KEYWORD,api100-normal-quic-aweme-,extended-matching),(DOMAIN-SUFFIX,amemv.com,extended-matching))
-AND,((DOMAIN-KEYWORD,api100-quic-core-,extended-matching),(DOMAIN-SUFFIX,amemv.com,extended-matching))
-AND,((DOMAIN-KEYWORD,api100-quic-normal-,extended-matching),(DOMAIN-SUFFIX,amemv.com,extended-matching))
-AND,((DOMAIN-KEYWORD,frontier100-aweme,extended-matching),(DOMAIN-SUFFIX,amemv.com,extended-matching))
-AND,((DOMAIN-KEYWORD,ma5-normal-,extended-matching),(DOMAIN-SUFFIX,zijieapi.com,extended-matching))
-AND,((DOMAIN-KEYWORD,polaris5-normal-,extended-matching),(DOMAIN-SUFFIX,zijieapi.com,extended-matching))
-AND,((DOMAIN-KEYWORD,webcast100-ws-c-,extended-matching),(DOMAIN-SUFFIX,amemv.com,extended-matching))
-AND,((DOMAIN-KEYWORD,-ad-,extended-matching),(DOMAIN-SUFFIX,byteimg.com,extended-matching))
-AND,((DOMAIN-KEYWORD,-ttam-,extended-matching),(DOMAIN-SUFFIX,ibyteimg.com,extended-matching))
-AND,((DOMAIN-KEYWORD,ssdk-,extended-matching),(DOMAIN-SUFFIX,pangle.io,extended-matching))
-AND,((DOMAIN-KEYWORD,pangolin,extended-matching),(DOMAIN-SUFFIX,sgsnssdk.com,extended-matching))
-AND,((DOMAIN-KEYWORD,lf,extended-matching),(DOMAIN-KEYWORD,-short.bytetos.com,extended-matching))
-AND,((DOMAIN-KEYWORD,v,extended-matching),(DOMAIN-KEYWORD,-be-pack.pglstatp-toutiao.com,extended-matching))
-AND,((DOMAIN-KEYWORD,sf,extended-matching),(DOMAIN-KEYWORD,-be-pack.pglstatp-toutiao.com,extended-matching))
-AND,((DOMAIN-KEYWORD,s,extended-matching),(DOMAIN-KEYWORD,-fe-scm.pglstatp-toutiao.com,extended-matching))
-AND,((DOMAIN-KEYWORD,sf,extended-matching),(DOMAIN-KEYWORD,-ttcdn-tos.pstatp.com,extended-matching))
-AND,((DOMAIN-KEYWORD,sf,extended-matching),(DOMAIN-KEYWORD,-fe-tos.pglstatp-toutiao.com,extended-matching))
-AND,((DOMAIN-KEYWORD,sf,extended-matching),(DOMAIN-KEYWORD,-static.i18n-pglstatp.com,extended-matching))
-AND,((DOMAIN-KEYWORD,if,extended-matching),(DOMAIN-KEYWORD,-cdn-tos.bytescm.com,extended-matching))
-AND,((DOMAIN-KEYWORD,if,extended-matching),(DOMAIN-KEYWORD,-analytics.bytescm.com,extended-matching))
-AND,((DOMAIN-KEYWORD,lf,extended-matching),(DOMAIN-KEYWORD,-analytics.bytescm.com,extended-matching))
-AND,((DOMAIN-KEYWORD,ads,extended-matching),(DOMAIN-KEYWORD,normal,extended-matching),(DOMAIN-SUFFIX,zijieapi.com,extended-matching))
-AND,((DOMAIN-KEYWORD,api,extended-matching),(DOMAIN-KEYWORD,-access-,extended-matching),(DOMAIN-SUFFIX,pangle.io,extended-matching))
-AND,((DOMAIN-KEYWORD,api,extended-matching),(DOMAIN-KEYWORD,-log-,extended-matching),(DOMAIN-SUFFIX,pangle.io,extended-matching))
-AND,((DOMAIN-KEYWORD,api,extended-matching),(DOMAIN-KEYWORD,-dual-event-,extended-matching),(DOMAIN-SUFFIX,pangle.io,extended-matching))
-AND,((DOMAIN-KEYWORD,api,extended-matching),(DOMAIN-KEYWORD,pangolin,extended-matching),(DOMAIN-SUFFIX,sgsnssdk.com,extended-matching))
-AND,((DOMAIN-KEYWORD,ads,extended-matching),(DOMAIN-KEYWORD,-normal-lq,extended-matching),(DOMAIN-SUFFIX,zijieapi.com,extended-matching))
-AND,((OR,((DOMAIN-SUFFIX,bytegecko.com,extended-matching),(DOMAIN-SUFFIX,byteeffecttos.com,extended-matching))),(DOMAIN-KEYWORD,ncdn,extended-matching))
-AND,((DOMAIN-KEYWORD,tnc,extended-matching),(AND,((OR,((DOMAIN-KEYWORD,-bjlgy,extended-matching),(DOMAIN-KEYWORD,-alisc,extended-matching),(DOMAIN-KEYWORD,-aliec,extended-matching),(DOMAIN-KEYWORD,-alisg,extended-matching))),(OR,((DOMAIN-SUFFIX,snssdk.com,extended-matching),(DOMAIN-SUFFIX,isnssdk.com,extended-matching),(DOMAIN-SUFFIX,toutiaoapi.com,extended-matching),(DOMAIN-SUFFIX,bytedance.com,extended-matching),(DOMAIN-SUFFIX,zijieapi.com,extended-matching))))))
-AND,((IP-CIDR,110.249.199.75/32,no-resolve),(DEST-PORT,6443))
-AND,((IP-CIDR,111.225.147.191/32,no-resolve),(DEST-PORT,6443))
-AND,((IP-CIDR,111.63.61.101/32,no-resolve),(DEST-PORT,6443))
-AND,((IP-CIDR,220.243.141.0/32,no-resolve),(DEST-PORT,6443))
-URL-REGEX,^http:\/\/p\d+-be-pack-sign\.pglstatp-toutiao\.com\/(ad-app-package|web\.business\.image)\/
+AND,((DOMAIN-KEYWORD,-ad-),(DOMAIN-SUFFIX,byteimg.com))
+AND,((DOMAIN-KEYWORD,-ttam-),(DOMAIN-SUFFIX,ibyteimg.com))
+AND,((DOMAIN-KEYWORD,ssdk-),(DOMAIN-SUFFIX,pangle.io))
+AND,((DOMAIN-KEYWORD,pangolin),(DOMAIN-SUFFIX,sgsnssdk.com))
+AND,((DOMAIN-KEYWORD,lf),(DOMAIN-KEYWORD,-short.bytetos.com))
+AND,((DOMAIN-KEYWORD,v),(DOMAIN-KEYWORD,-be-pack.pglstatp-toutiao.com))
+AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-be-pack.pglstatp-toutiao.com))
+AND,((DOMAIN-KEYWORD,s),(DOMAIN-KEYWORD,-fe-scm.pglstatp-toutiao.com))
+AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-ttcdn-tos.pstatp.com))
+AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-fe-tos.pglstatp-toutiao.com))
+AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-static.i18n-pglstatp.com))
+AND,((DOMAIN-KEYWORD,if),(DOMAIN-KEYWORD,-cdn-tos.bytescm.com))
+AND,((DOMAIN-KEYWORD,if),(DOMAIN-KEYWORD,-analytics.bytescm.com))
+AND,((DOMAIN-KEYWORD,lf),(DOMAIN-KEYWORD,-analytics.bytescm.com))
+AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,normal),(DOMAIN-SUFFIX,zijieapi.com))
+AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-access-),(DOMAIN-SUFFIX,pangle.io))
+AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-log-),(DOMAIN-SUFFIX,pangle.io))
+AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-dual-event-),(DOMAIN-SUFFIX,pangle.io))
+AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,pangolin),(DOMAIN-SUFFIX,sgsnssdk.com))
+AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,-normal-lq),(DOMAIN-SUFFIX,zijieapi.com))
+AND,((DOMAIN-KEYWORD,tnc),(AND,((OR,((DOMAIN-KEYWORD,-bjlgy),(DOMAIN-KEYWORD,-alisc),(DOMAIN-KEYWORD,-aliec),(DOMAIN-KEYWORD,-alisg))),(OR,((DOMAIN-SUFFIX,snssdk.com),(DOMAIN-SUFFIX,isnssdk.com),(DOMAIN-SUFFIX,toutiaoapi.com),(DOMAIN-SUFFIX,bytedance.com),(DOMAIN-SUFFIX,zijieapi.com))))))
+URL-REGEX,"^http:\/\/p\d+-be-pack-sign\.pglstatp-toutiao\.com\/(ad-app-package|web\.business\.image)\/"
 
 # ======= G ======= #
 # 工商银行
@@ -438,7 +421,7 @@ DOMAIN-SUFFIX,dreport.meituan.net
 DOMAIN-SUFFIX,d.meituan.net
 DOMAIN,maplocatesdksnapshot.d.meituan.net
 DOMAIN,metrics-picture.d.meituan.net
-IP-CIDR,103.37.155.60/32,no-resolve
+IP-CIDR,103.37.155.60/32
 # 咪咕视频
 DOMAIN-SUFFIX,ad.cmvideo.cn
 DOMAIN,ggc.cmvideo.cn
@@ -502,7 +485,6 @@ DOMAIN,oth.str.mdt.qq.com
 DOMAIN,h.trace.qq.com
 DOMAIN,p.l.qq.com
 DOMAIN,tmeadbak.y.qq.com
-DOMAIN,httpdns.kg.qq.com
 DOMAIN-SUFFIX,imtmp.net
 # 青龙
 DOMAIN-SUFFIX,o1098464.ingest.sentry.io
@@ -682,63 +664,63 @@ DOMAIN,e.jparking.cn
 DOMAIN,dns.weixin.qq.com
 DOMAIN,dns.weixin.qq.com.cn
 DOMAIN,aedns.weixin.qq.com
-IP-CIDR,39.156.140.30/32,no-resolve
-IP-CIDR,39.156.140.47/32,no-resolve
-IP-CIDR,39.156.140.245/32,no-resolve
-IP-CIDR,42.81.232.18/32,no-resolve
-IP-CIDR,42.187.182.106/32,no-resolve
-IP-CIDR,42.187.182.123/32,no-resolve
-IP-CIDR,42.187.184.154/32,no-resolve
-IP-CIDR,43.130.30.237/32,no-resolve
-IP-CIDR,43.130.30.240/32,no-resolve
-IP-CIDR,43.137.153.151/32,no-resolve
-IP-CIDR,43.137.159.31/32,no-resolve
-IP-CIDR,43.152.112.101/32,no-resolve
-IP-CIDR,43.153.248.120/32,no-resolve
-IP-CIDR,60.28.172.100/32,no-resolve
-IP-CIDR,61.151.231.157/32,no-resolve
-IP-CIDR,101.32.104.104/32,no-resolve
-IP-CIDR,106.39.206.21/32,no-resolve
-IP-CIDR,106.39.206.25/32,no-resolve
-IP-CIDR,106.39.206.70/32,no-resolve
-IP-CIDR,111.31.201.194/32,no-resolve
-IP-CIDR,111.31.241.76/32,no-resolve
-IP-CIDR,111.31.241.140/32,no-resolve
-IP-CIDR,111.206.147.156/32,no-resolve
-IP-CIDR,111.206.147.210/32,no-resolve
-IP-CIDR,111.206.148.27/32,no-resolve
-IP-CIDR,116.128.177.249/32,no-resolve
-IP-CIDR,116.130.224.150/32,no-resolve
-IP-CIDR,116.130.224.205/32,no-resolve
-IP-CIDR,117.185.247.73/32,no-resolve
-IP-CIDR,123.151.48.171/32,no-resolve
-IP-CIDR,123.151.48.193/32,no-resolve
-IP-CIDR,123.151.48.208/32,no-resolve
-IP-CIDR,123.151.54.50/32,no-resolve
-IP-CIDR,180.153.202.85/32,no-resolve
-IP-CIDR,183.192.196.31/32,no-resolve
-IP-CIDR,203.205.129.102/32,no-resolve
-IP-CIDR,203.205.234.132/32,no-resolve
-IP-CIDR,220.196.159.73/32,no-resolve
-IP-CIDR6,240e:928:1400:10::25/128,no-resolve
-IP-CIDR6,2402:4e00:8030:1::17/128,no-resolve
-IP-CIDR6,2402:4e00:1900:1700:0:9554:1ad9:c3a/128,no-resolve
-IP-CIDR6,2408:8711:10:10::20/128,no-resolve
-IP-CIDR6,2409:8702:4860:10::4d/128,no-resolve
+IP-CIDR,39.156.140.30/32
+IP-CIDR,39.156.140.47/32
+IP-CIDR,39.156.140.245/32
+IP-CIDR,42.81.232.18/32
+IP-CIDR,42.187.182.106/32
+IP-CIDR,42.187.182.123/32
+IP-CIDR,42.187.184.154/32
+IP-CIDR,43.130.30.237/32
+IP-CIDR,43.130.30.240/32
+IP-CIDR,43.137.153.151/32
+IP-CIDR,43.137.159.31/32
+IP-CIDR,43.152.112.101/32
+IP-CIDR,43.153.248.120/32
+IP-CIDR,60.28.172.100/32
+IP-CIDR,61.151.231.157/32
+IP-CIDR,101.32.104.104/32
+IP-CIDR,106.39.206.21/32
+IP-CIDR,106.39.206.25/32
+IP-CIDR,106.39.206.70/32
+IP-CIDR,111.31.201.194/32
+IP-CIDR,111.31.241.76/32
+IP-CIDR,111.31.241.140/32
+IP-CIDR,111.206.147.156/32
+IP-CIDR,111.206.147.210/32
+IP-CIDR,111.206.148.27/32
+IP-CIDR,116.128.177.249/32
+IP-CIDR,116.130.224.150/32
+IP-CIDR,116.130.224.205/32
+IP-CIDR,117.185.247.73/32
+IP-CIDR,123.151.48.171/32
+IP-CIDR,123.151.48.193/32
+IP-CIDR,123.151.48.208/32
+IP-CIDR,123.151.54.50/32
+IP-CIDR,180.153.202.85/32
+IP-CIDR,183.192.196.31/32
+IP-CIDR,203.205.129.102/32
+IP-CIDR,203.205.234.132/32
+IP-CIDR,220.196.159.73/32
+IP-CIDR6,240e:928:1400:10::25/128
+IP-CIDR6,2402:4e00:8030:1::17/128
+IP-CIDR6,2402:4e00:1900:1700:0:9554:1ad9:c3a/128
+IP-CIDR6,2408:8711:10:10::20/128
+IP-CIDR6,2409:8702:4860:10::4d/128
 
 # ======= X ======= #
 # 小象买菜 - 兜底TCP请求下发广告
-IP-CIDR,101.50.8.64/32,no-resolve
-IP-CIDR,101.50.8.75/32,no-resolve
-IP-CIDR,103.37.152.161/32,no-resolve
-IP-CIDR,103.37.152.162/32,no-resolve
-IP-CIDR,103.63.160.64/32,no-resolve
-IP-CIDR,119.29.48.215/32,no-resolve
-IP-CIDR,202.90.110.8/32,no-resolve
-IP-CIDR,203.76.217.241/32,no-resolve
-IP-CIDR,203.76.217.243/32,no-resolve
-IP-CIDR,203.76.217.37/32,no-resolve
-IP-CIDR6,2405:1480:3000:303f::303f/128,no-resolve
+IP-CIDR,101.50.8.64/32
+IP-CIDR,101.50.8.75/32
+IP-CIDR,103.37.152.161/32
+IP-CIDR,103.37.152.162/32
+IP-CIDR,103.63.160.64/32
+IP-CIDR,119.29.48.215/32
+IP-CIDR,202.90.110.8/32
+IP-CIDR,203.76.217.241/32
+IP-CIDR,203.76.217.243/32
+IP-CIDR,203.76.217.37/32
+IP-CIDR6,2405:1480:3000:303f::303f/128
 # 小米
 DOMAIN,sdkconfig.ad.xiaomi.com
 DOMAIN,data.mistat.xiaomi.com
@@ -950,8 +932,6 @@ DOMAIN,httpdns-v6.gslb.yy.com
 DOMAIN,httpdns.zybang.com
 DOMAIN,httpdns.calorietech.com
 DOMAIN,ads.reader.yueyouxs.com
-DOMAIN,dig.bdurl.net
-DOMAIN,dig.zjurl.cn
 DOMAIN,paydns.wechatpay.cn
 DOMAIN,dns2.q2cdn.com
 DOMAIN,httpdns.cctv.com
@@ -964,23 +944,17 @@ DOMAIN,httpdns.ocloud.heytapmobi.com
 DOMAIN,httpdns.push.heytapmobi.com
 DOMAIN,dotserver.douyucdn.cn
 DOMAIN,hdns.ksyun.com
-IP-CIDR,203.107.1.0/24,no-resolve
-IP-CIDR,5.5.5.5/32,no-resolve
-IP-CIDR,8.134.241.67/32,no-resolve
-IP-CIDR,101.124.19.122/32,no-resolve
-IP-CIDR,186.76.76.200/32,no-resolve
-IP-CIDR,103.224.222.208/32,no-resolve
-IP-CIDR,119.29.29.98/32,no-resolve
-IP-CIDR,119.29.29.99/32,no-resolve
-IP-CIDR,59.111.239.61/32,no-resolve
-IP-CIDR,59.111.239.62/32,no-resolve
-IP-CIDR,115.236.121.51/32,no-resolve
-IP-CIDR,115.236.121.195/32,no-resolve
-IP-CIDR,39.97.130.51/32,no-resolve
-IP-CIDR,39.97.128.148/32,no-resolve
-IP-CIDR,118.89.204.198/23,no-resolve
-IP-CIDR6,2402:db40:5100:1011::5/128,no-resolve
-IP-CIDR6,2402:4e00:1200:ed00:0:9089:6dac:96b6/128,no-resolve
+DOMAIN,httpdns.kg.qq.com
+DOMAIN,serveraddr.service.kugou.com
+DOMAIN,twns.p2ptun.qq.com
+DOMAIN,tp2p.kg.qq.com
+DOMAIN,httpdnsmultiapi.meituan.com
+DOMAIN-SUFFIX,lnk0.com
+DOMAIN,rpe.xdplt.com
+DOMAIN,lf-cdn-tos.bytescm.com
+AND,((DOMAIN-KEYWORD,adash),(DOMAIN-SUFFIX,ut.taobao.com))
+IP-CIDR,5.5.5.5/32
+IP-CIDR,8.134.241.67/32
 URL-REGEX,^http:\/\/119\.29\.29\.98\/d\?
 URL-REGEX,"^http:\/\/103\.44\.58\.64\/md\?"
 URL-REGEX,"^http:\/\/182\.256\.116\.116\/d"
@@ -1036,3 +1010,11 @@ URL-REGEX,"^http:\/\/api\.weibo\.cn\/2\/httpdns\/config"
 URL-REGEX,"^http:\/\/api\.weibo\.cn\/httpdns\/config"
 URL-REGEX,"^http:\/\/cdn\.wup\.huya\.com\/launch\/queryHttpDns"
 URL-REGEX,"^http:\/\/xmc\.ximalaya\.com\/xmlymain-login-web\/login\/"
+URL-REGEX,"^http:\/\/119\.29\.29\.98\/d\?"
+URL-REGEX,"^http:\/\/103\.41\.167\.237\/v2\/resolv"
+URL-REGEX,"^http:\/\/203\.107\.1\.33\/191607\/resolve\?"
+URL-REGEX,"^http:\/\/119\.29\.29\.29\/d"
+URL-REGEX,"^http:\/\/54\.222\.159\.138:8053\/httpdns\/"
+URL-REGEX,"^http:\/\/101\.42\.130\.147:8053\/httpdns\/"
+URL-REGEX,"^http:\/\/106\.55\.220\.18:8053\/httpdns\/"
+URL-REGEX,"^http:\/\/139\.196\.12\.179:8053\/httpdns\/"
