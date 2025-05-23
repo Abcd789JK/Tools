@@ -1,8 +1,28 @@
-# 安装命令
+# docker-compose 安装命令
 
 docker-compose up -d
 
 
-# 升级命令
+# docker-compose 升级命令
 
 docker-compose pull ddns-go && docker-compose down && docker-compose up -d
+
+
+
+#####################################
+# docker run 安装命令
+
+docker run -d --name ddns-go --restart=always --net=host -v /root/ddns-go:/root jeessy/ddns-go
+
+
+# docker run 升级命令
+
+# 1. 删除旧容器（数据已挂载，不会丢失）
+docker stop ddns-go
+docker rm ddns-go
+
+# 2. 拉取最新镜像
+docker pull jeessy/ddns-go
+
+# 3. 使用相同参数重新创建容器（数据卷路径不变）
+docker run -d --name ddns-go --restart=always --net=host -v /root/ddns-go:/root jeessy/ddns-go

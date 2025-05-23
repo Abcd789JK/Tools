@@ -2,9 +2,9 @@ services:
   gogs:
     image: gogs/gogs
     container_name: gogs
+    restart: always
     ports:
       - "3000:3000"
       - "3022:22"
     volumes:
       - ./data:/data
-    restart: always
