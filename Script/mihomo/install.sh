@@ -104,7 +104,7 @@ get_url() {
 # 系统更新及插件安装
 update_system() {
     eval "$pkg_update"
-    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq"
+    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq openssl"
 }
 
 # ---------------------------------
@@ -328,6 +328,7 @@ collect_proxy_providers() {
   local providers="proxy-providers:"
   local counter=1
   while true; do
+    echo -e "${cyan}正在添加第 $counter 个配置${reset}"
     read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
     read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
     providers="${providers}

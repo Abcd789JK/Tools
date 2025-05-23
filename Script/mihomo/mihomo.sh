@@ -19,7 +19,7 @@ cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置
 
 # 全局变量
-sh_ver="0.2.5"
+sh_ver="0.2.5.01"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -1004,7 +1004,7 @@ menu() {
     echo "================================="
     show_status
     echo "================================="
-    read -p "$(echo -e "${yellow}请输入上面选项: : ${reset}")" input
+    read -p "$(echo -e "${yellow}请输入上面选项: ${reset}")" input
     case "$input" in
         1) install_mihomo ;;
         2) update_mihomo ;;

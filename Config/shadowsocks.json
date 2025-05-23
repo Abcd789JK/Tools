@@ -1,11 +1,15 @@
 {
-  "server": "0.0.0.0",                     
-  "server_port": 8388,                     
-  "password": "your_password_here",        
-  "method": "aes-128-gcm",                 
-  "mode": "tcp_and_udp",                   
-  "timeout": 300,                          
-  "fast_open": true,                      
-  "nameserver": "223.5.5.5",                 
-  "no_delay": true                         
+  "servers": [
+    {
+      "server": "0.0.0.0",
+      "server_port": 8388,
+      "password": "your_password_here",
+      "method": "aes-128-gcm"
+    }
+  ],
+  "mode": "tcp_and_udp",
+  "timeout": 300,
+  "fast_open": true,
+  "nameserver": "223.5.5.5",
+  "no_delay": true
 }

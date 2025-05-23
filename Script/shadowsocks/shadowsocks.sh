@@ -429,7 +429,7 @@ download_shadowsocks() {
     local filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-gnu.tar.xz"
     [ "$distro" = "alpine" ] && filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-musl.tar.xz"
     local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/v${version}/${filename}"
-    wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}shadowsocks 下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -501,251 +501,266 @@ update_shadowsocks() {
 update_shell() {
     check_network
     local shell_file="/usr/bin/ssr"
+    local tmp_file="$(mktemp /tmp/ssr.XXXXXX)"
     local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/shadowsocks/shadowsocks.sh"
-    local sh_new_ver=$(curl -sSL "$(get_url "$sh_ver_url")" | grep 'sh_ver="' | awk -F "=" '{print $NF}' | sed 's/\"//g' | head -1)
+    trap 'rm -f "$tmp_file"' RETURN
     echo -e "${green}开始检查脚本是否有更新${reset}"
+    local sh_new_ver=$(curl -sSL "$(get_url "$sh_ver_url")" | grep 'sh_ver="' | awk -F "=" '{print $NF}' | sed 's/\"//g' | head -1) || {
+        echo -e "${red}获取版本失败${reset}"
+        return 1
+    }
     if [ "$sh_ver" == "$sh_new_ver" ]; then
-        echo -e "${green}当前已是最新，无需更新${reset}"
+        echo -e "${green}当前已是最新, 无需更新${reset}"
         start_menu
-        return
+        return 0
     fi
     read -p "$(echo -e "${yellow}检测到新版本 ${green}${sh_new_ver} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
-            echo -e "${green}开始升级，升级中请等待${reset}"
-            ;;
-        [Nn]* )
-            echo -e "${yellow}取消升级，保持现有版本${reset}"
-            start_menu
-            return
+            echo -e "${green}开始升级, 升级中请等待${reset}"
             ;;
         * )
-            echo -e "${red}无效选择，升级已取消${reset}"
+            echo -e "${red}已取消升级, 保持现有版本${reset}"
             start_menu
-            return
+            return 0
             ;;
     esac
-    [ -f "$shell_file" ] && rm "$shell_file"
-    wget -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_ver_url")"
-    chmod +x "$shell_file"
-    hash -r
-    echo -e "${yellow}更新完成，当前版本已更新为：${reset}【 ${green}${sh_new_ver}${reset} 】"
-    echo -e "${yellow}3 秒后执行新脚本${reset}"
-    sleep 3s
-    "$shell_file"
+    if wget -q -O "$tmp_file" "$(get_url "$sh_ver_url")"; then
+        mv -f "$tmp_file" "$shell_file"
+        chmod +x "$shell_file"
+        hash -r
+        echo -e "${yellow}更新完成, 当前版本: ${reset}【 ${green}${sh_new_ver}${reset} 】"
+        echo -e "${yellow}3 秒后执行新脚本${reset}"
+        sleep 3
+        exec "$shell_file"
+    else
+        echo -e "${red}脚本下载失败，更新取消${reset}"
+        start_menu
+        return 1
+    fi
 }
 
 # ---------------------------------
 # 配置管理
-config_shadowsocks() {
-    check_installation || { start_menu; return; }
-    local config_file="/root/shadowsocks/config.json"
-    echo -e "${green}开始修改 Shadowsocks 配置${reset}"
+# config_shadowsocks() {
+#     check_installation || { start_menu; return; }
+#     local config_file="/root/shadowsocks/config.json"
+#     echo -e "${green}开始修改 Shadowsocks 配置${reset}"
 
-    if [[ ! -f "$config_file" ]]; then
-        echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
-        exit 1
-    fi
+#     if [[ ! -f "$config_file" ]]; then
+#         echo -e "${red}配置文件不存在，请检查路径：${config_file}${reset}"
+#         exit 1
+#     fi
 
-    select_protocol() {
-        echo -e "请选择加密方式："
-        echo -e "${green}1${reset}. aes-128-gcm"
-        echo -e "${green}2${reset}. aes-256-gcm"
-        echo -e "${green}3${reset}. chacha20-ietf-poly1305"
-        echo -e "${green}4${reset}. 2022-blake3-aes-128-gcm"
-        echo -e "${green}5${reset}. 2022-blake3-aes-256-gcm"
-        echo -e "${green}6${reset}. 2022-blake3-chacha20-poly1305"
-        read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
-        confirm=${confirm:-1}
-        case $confirm in
-            1) method="aes-128-gcm" ;;
-            2) method="aes-256-gcm" ;;
-            3) method="chacha20-ietf-poly1305" ;;
-            4) method="2022-blake3-aes-128-gcm" ;;
-            5) method="2022-blake3-aes-256-gcm" ;;
-            6) method="2022-blake3-chacha20-poly1305" ;;
-            *) method="aes-128-gcm" ;;
-        esac
-    }
+#     select_protocol() {
+#         echo -e "请选择加密方式："
+#         echo -e "${green}1${reset}. aes-128-gcm"
+#         echo -e "${green}2${reset}. aes-256-gcm"
+#         echo -e "${green}3${reset}. chacha20-ietf-poly1305"
+#         echo -e "${green}4${reset}. 2022-blake3-aes-128-gcm"
+#         echo -e "${green}5${reset}. 2022-blake3-aes-256-gcm"
+#         echo -e "${green}6${reset}. 2022-blake3-chacha20-poly1305"
+#         read -rp "输入数字选择加密方式 (1-6 默认[1]): " confirm
+#         confirm=${confirm:-1}
+#         case $confirm in
+#             1) method="aes-128-gcm" ;;
+#             2) method="aes-256-gcm" ;;
+#             3) method="chacha20-ietf-poly1305" ;;
+#             4) method="2022-blake3-aes-128-gcm" ;;
+#             5) method="2022-blake3-aes-256-gcm" ;;
+#             6) method="2022-blake3-chacha20-poly1305" ;;
+#             *) method="aes-128-gcm" ;;
+#         esac
+#     }
 
-    get_random_port() {
-        shuf -i 10000-65000 -n 1
-    }
+#     get_random_port() {
+#         shuf -i 10000-65000 -n 1
+#     }
 
-    get_random_uuid() {
-        if command -v uuidgen &>/dev/null; then
-            uuidgen
-        else
-            cat /proc/sys/kernel/random/uuid
-        fi
-    }
+#     get_random_uuid() {
+#         if command -v uuidgen &>/dev/null; then
+#             uuidgen
+#         else
+#             cat /proc/sys/kernel/random/uuid
+#         fi
+#     }
 
-    prompt_port() {
-        while :; do
-            read -rp "请输入监听端口 (10000-65000, 回车随机): " port
-            if [[ -z "$port" ]]; then
-                port=$(get_random_port)
-                break
-            elif (( port >= 10000 && port <= 65000 )); then
-                break
-            else
-                echo "端口范围必须在 10000 到 65000 之间。"
-            fi
-        done
-    }
+#     prompt_port() {
+#         while :; do
+#             read -rp "请输入监听端口 (10000-65000, 回车随机): " port
+#             if [[ -z "$port" ]]; then
+#                 port=$(get_random_port)
+#                 break
+#             elif (( port >= 10000 && port <= 65000 )); then
+#                 break
+#             else
+#                 echo "端口范围必须在 10000 到 65000 之间。"
+#             fi
+#         done
+#     }
 
-    prompt_password() {
-        read -rp "请输入 Shadowsocks 密码 (回车随机): " password
-        if [[ -z "$password" ]]; then
-            password=$(get_random_uuid)
-        fi
-    }
+#     prompt_password() {
+#         read -rp "请输入 Shadowsocks 密码 (回车随机): " password
+#         if [[ -z "$password" ]]; then
+#             password=$(get_random_uuid)
+#         fi
+#     }
 
-    generate_or_input() {
-        read -rp "是否快速生成端口和密码？(Y/n 默认[Y]): " quick
-        if [[ "${quick^^}" =~ ^(Y|)$ ]]; then
-            port=$(get_random_port)
-            case "$method" in
-                "2022-blake3-aes-128-gcm")
-                    if command -v openssl >/dev/null 2>&1; then
-                        password=$(openssl rand -base64 16)
-                    else
-                        password=$(head -c 16 /dev/urandom | base64)
-                    fi
-                    ;;
-                "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
-                    if command -v openssl >/dev/null 2>&1; then
-                        password=$(openssl rand -base64 32)
-                    else
-                        password=$(head -c 32 /dev/urandom | base64)
-                    fi
-                    ;;
-                *)
-                    password=$(get_random_uuid)
-                    ;;
-            esac
-        else
-            prompt_port
-            case "$method" in
-                "2022-blake3-aes-128-gcm")
-                    if command -v openssl >/dev/null 2>&1; then
-                        password=$(openssl rand -base64 16)
-                    else
-                        password=$(head -c 16 /dev/urandom | base64)
-                    fi
-                    ;;
-                "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
-                    if command -v openssl >/dev/null 2>&1; then
-                        password=$(openssl rand -base64 32)
-                    else
-                        password=$(head -c 32 /dev/urandom | base64)
-                    fi
-                    ;;
-                *)
-                    prompt_password
-                    ;;
-            esac
-        fi
-    }
+#     generate_or_input() {
+#         read -rp "是否快速生成端口和密码？(Y/n 默认[Y]): " quick
+#         if [[ "${quick^^}" =~ ^(Y|)$ ]]; then
+#             port=$(get_random_port)
+#             case "$method" in
+#                 "2022-blake3-aes-128-gcm")
+#                     if command -v openssl >/dev/null 2>&1; then
+#                         password=$(openssl rand -base64 16)
+#                     else
+#                         password=$(head -c 16 /dev/urandom | base64)
+#                     fi
+#                     ;;
+#                 "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
+#                     if command -v openssl >/dev/null 2>&1; then
+#                         password=$(openssl rand -base64 32)
+#                     else
+#                         password=$(head -c 32 /dev/urandom | base64)
+#                     fi
+#                     ;;
+#                 *)
+#                     password=$(get_random_uuid)
+#                     ;;
+#             esac
+#         else
+#             prompt_port
+#             case "$method" in
+#                 "2022-blake3-aes-128-gcm")
+#                     if command -v openssl >/dev/null 2>&1; then
+#                         password=$(openssl rand -base64 16)
+#                     else
+#                         password=$(head -c 16 /dev/urandom | base64)
+#                     fi
+#                     ;;
+#                 "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
+#                     if command -v openssl >/dev/null 2>&1; then
+#                         password=$(openssl rand -base64 32)
+#                     else
+#                         password=$(head -c 32 /dev/urandom | base64)
+#                     fi
+#                     ;;
+#                 *)
+#                     prompt_password
+#                     ;;
+#             esac
+#         fi
+#     }
 
-    local old_config new_config
-    old_config=$(<"$config_file")
+#     local old_config new_config
+#     old_config=$(<"$config_file")
 
-    echo -e "请选择配置修改模式："
-    echo -e "  ${green}1${reset}. 生成新的配置"
-    echo -e "  ${green}2${reset}. 单独修改一项"
-    read -rp "输入数字选择 (1-2 默认[1]): " mode
-    mode=${mode:-1}
+#     echo -e "请选择配置修改模式："
+#     echo -e "  ${green}1${reset}. 生成新的配置"
+#     echo -e "  ${green}2${reset}. 单独修改一项"
+#     read -rp "输入数字选择 (1-2 默认[1]): " mode
+#     mode=${mode:-1}
 
-    if [[ "$mode" == "1" ]]; then
-        select_protocol
-        generate_or_input
-        new_config=$(echo "$old_config" | jq --arg p "$port" \
-                                             --arg m "$method" \
-                                             --arg pwd "$password" \
-            '.server_port = ($p|tonumber) | .method = $m | .password = $pwd')
-    else
-        current_port=$(echo "$old_config" | jq -r '.server_port')
-        current_method=$(echo "$old_config" | jq -r '.method')
-        current_password=$(echo "$old_config" | jq -r '.password')
+#     if [[ "$mode" == "1" ]]; then
+#         select_protocol
+#         generate_or_input
+#         new_config=$(echo "$old_config" | jq --arg p "$port" \
+#                                              --arg m "$method" \
+#                                              --arg pwd "$password" \
+#             '.server_port = ($p|tonumber) | .method = $m | .password = $pwd')
+#     else
+#         current_port=$(echo "$old_config" | jq -r '.server_port')
+#         current_method=$(echo "$old_config" | jq -r '.method')
+#         current_password=$(echo "$old_config" | jq -r '.password')
 
-        echo -e "请选择要修改的项："
-        echo -e "  ${green}1${reset}. 端口"
-        echo -e "  ${green}2${reset}. 密码"
-        echo -e "  ${green}3${reset}. 加密方式"
-        read -rp "输入数字选择 (1-3 默认[1]): " opt
-        opt=${opt:-1}
+#         echo -e "请选择要修改的项："
+#         echo -e "  ${green}1${reset}. 端口"
+#         echo -e "  ${green}2${reset}. 密码"
+#         echo -e "  ${green}3${reset}. 加密方式"
+#         read -rp "输入数字选择 (1-3 默认[1]): " opt
+#         opt=${opt:-1}
 
-        case "$opt" in
-            1)
-                prompt_port
-                new_config=$(echo "$old_config" | jq --arg p "$port" '.server_port = ($p|tonumber)')
-                method="$current_method"
-                password="$current_password"
-                ;;
-            2)
-                prompt_password
-                new_config=$(echo "$old_config" | jq --arg pwd "$password" '.password = $pwd')
-                port="$current_port"
-                method="$current_method"
-                ;;
-            3)
-                select_protocol
-                case "$method" in
-                    "2022-blake3-aes-128-gcm")
-                        if command -v openssl >/dev/null 2>&1; then
-                            password=$(openssl rand -base64 16)
-                        else
-                            password=$(head -c 16 /dev/urandom | base64)
-                        fi
-                        ;;
-                    "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
-                        if command -v openssl >/dev/null 2>&1; then
-                            password=$(openssl rand -base64 32)
-                        else
-                            password=$(head -c 32 /dev/urandom | base64)
-                        fi
-                        ;;
-                    *)
-                        password="$current_password"
-                        ;;
-                esac
-                new_config=$(echo "$old_config" | jq --arg m "$method" --arg pwd "$password" '.method = $m | .password = $pwd')
-                port="$current_port"
-                ;;
-            *)
-                echo -e "${red}无效选项${reset}"
-                exit 1
-                ;;
-        esac
-    fi
+#         case "$opt" in
+#             1)
+#                 prompt_port
+#                 new_config=$(echo "$old_config" | jq --arg p "$port" '.server_port = ($p|tonumber)')
+#                 method="$current_method"
+#                 password="$current_password"
+#                 ;;
+#             2)
+#                 prompt_password
+#                 new_config=$(echo "$old_config" | jq --arg pwd "$password" '.password = $pwd')
+#                 port="$current_port"
+#                 method="$current_method"
+#                 ;;
+#             3)
+#                 select_protocol
+#                 case "$method" in
+#                     "2022-blake3-aes-128-gcm")
+#                         if command -v openssl >/dev/null 2>&1; then
+#                             password=$(openssl rand -base64 16)
+#                         else
+#                             password=$(head -c 16 /dev/urandom | base64)
+#                         fi
+#                         ;;
+#                     "2022-blake3-aes-256-gcm"|"2022-blake3-chacha20-poly1305")
+#                         if command -v openssl >/dev/null 2>&1; then
+#                             password=$(openssl rand -base64 32)
+#                         else
+#                             password=$(head -c 32 /dev/urandom | base64)
+#                         fi
+#                         ;;
+#                     *)
+#                         password="$current_password"
+#                         ;;
+#                 esac
+#                 new_config=$(echo "$old_config" | jq --arg m "$method" --arg pwd "$password" '.method = $m | .password = $pwd')
+#                 port="$current_port"
+#                 ;;
+#             *)
+#                 echo -e "${red}无效选项${reset}"
+#                 exit 1
+#                 ;;
+#         esac
+#     fi
 
-    echo -e "\n${green}更新后的配置${reset}"
-    echo -e "端口: ${green}${port}${reset}"
-    echo -e "密码: ${green}${password}${reset}"
-    echo -e "加密方式: ${green}${method}${reset}\n"
+#     echo -e "\n${green}更新后的配置${reset}"
+#     echo -e "端口: ${green}${port}${reset}"
+#     echo -e "密码: ${green}${password}${reset}"
+#     echo -e "加密方式: ${green}${method}${reset}\n"
 
-    echo "$new_config" > "$config_file"
-    if ! jq empty "$config_file" 2>/dev/null; then
-        echo -e "${red}配置文件校验失败，请检查内容。${reset}"
-        exit 1
-    fi
+#     echo "$new_config" > "$config_file"
+#     if ! jq empty "$config_file" 2>/dev/null; then
+#         echo -e "${red}配置文件校验失败，请检查内容。${reset}"
+#         exit 1
+#     fi
 
-    echo -e "${green}修改成功，正在重启 Shadowsocks…${reset}"
-    service_restart
-    start_menu
-}
+#     echo -e "${green}修改成功，正在重启 Shadowsocks…${reset}"
+#     service_restart
+#     start_menu
+# }
 
 # ---------------------------------
 # 查看配置
 get_shadowsocks() {
     local config_file="/root/shadowsocks/config.json"
-    server_port=$(jq -r '.server_port' "$config_file")
-    method=$(jq -r '.method' "$config_file")
-    password=$(jq -r '.password' "$config_file")
-    echo -e "${green}端口: ${reset}$server_port"
-    echo -e "${green}密码: ${reset}$password"
-    echo -e "${green}加密方式: ${reset}$method"
+    local server_count
+    server_count=$(jq '.servers | length' "$config_file")
+
+    echo -e "${green}共找到 $server_count 个配置: ${reset}"
+
+    for ((i = 0; i < server_count; i++)); do
+        server_port=$(jq -r ".servers[$i].server_port" "$config_file")
+        method=$(jq -r ".servers[$i].method" "$config_file")
+        password=$(jq -r ".servers[$i].password" "$config_file")
+
+        echo -e "${green}配置$((i+1)): ${reset}"
+        echo -e "  ${green}端口: ${reset}$server_port"
+        echo -e "  ${green}密码: ${reset}$password"
+        echo -e "  ${green}加密方式: ${reset}$method"
+    done
+
     start_menu
 }
 
@@ -776,7 +791,7 @@ menu() {
     echo "================================="
     show_status
     echo "================================="
-    read -p "请输入上面选项：" input
+    read -p "$(echo -e "${yellow}请输入上面选项: ${reset}")" input
     case "$input" in
         1) install_shadowsocks ;;
         2) update_shadowsocks ;;

@@ -152,7 +152,7 @@ download_shadowsocks() {
     local filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-gnu.tar.xz"
     [ "$distro" = "alpine" ] && filename="shadowsocks-v${version}.${arch_raw}-unknown-linux-musl.tar.xz"
     local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/v${version}/${filename}"
-    wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
+    wget -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}shadowsocks 下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -174,7 +174,7 @@ download_service() {
     if [ "$distro" = "alpine" ]; then
         local service_file="/etc/init.d/shadowsocks"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/shadowsocks.openrc"
-        wget -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -183,7 +183,7 @@ download_service() {
     else
         local service_file="/etc/systemd/system/shadowsocks.service"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/shadowsocks.service"
-        wget -t 3 -T 30 -O "$service_file" "$(get_url "$service_url")" || {
+        wget -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -198,7 +198,7 @@ download_shell() {
     local shell_file="/usr/bin/ssr"
     local sh_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/shadowsocks/shadowsocks.sh"
     [ -f "$shell_file" ] && rm -f "$shell_file"
-    wget -t 3 -T 30 -O "$shell_file" "$(get_url "$sh_url")" || {
+    wget -O "$shell_file" "$(get_url "$sh_url")" || {
         echo -e "${red}管理脚本下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -266,7 +266,8 @@ EOF
 config_shadowsocks() {
     local config_file="/root/shadowsocks/config.json"
     local config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/shadowsocks.json"
-    wget -O "$config_file" "$(get_url "$config_url")" || { 
+
+    wget -O "$config_file" "$(get_url "$config_url")" || {
         echo -e "${red}配置文件下载失败${reset}"
         exit 1
     }
@@ -280,7 +281,7 @@ config_shadowsocks() {
         echo -e "${green}5${reset}、2022-blake3-aes-256-gcm"
         echo -e "${green}6${reset}、2022-blake3-chacha20-poly1305"
         read -rp "输入数字选择加密方式 (1-6 默认[3]): " confirm
-        confirm=${confirm:-1}
+        confirm=${confirm:-3}
         case $confirm in
             1) method="aes-128-gcm" ;;
             2) method="aes-256-gcm" ;;
@@ -292,24 +293,18 @@ config_shadowsocks() {
         esac
     }
 
-    select_port(){
+    select_port() {
         port=$(shuf -i 10000-65000 -n 1)
     }
 
     select_password() {
         case "$method" in
-            "2022-blake3-aes-128-gcm")
+            2022-blake3-*)
+                length=$([[ "$method" == *"aes-128"* ]] && echo 16 || echo 32)
                 if command -v openssl >/dev/null 2>&1; then
-                    password=$(openssl rand -base64 16)
+                    password=$(openssl rand -base64 "$length")
                 else
-                    password=$(head -c 16 /dev/urandom | base64)
-                fi
-                ;;
-            "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305")
-                if command -v openssl >/dev/null 2>&1; then
-                    password=$(openssl rand -base64 32)
-                else
-                    password=$(head -c 32 /dev/urandom | base64)
+                    password=$(head -c "$length" /dev/urandom | base64)
                 fi
                 ;;
             *)
@@ -318,37 +313,67 @@ config_shadowsocks() {
         esac
     }
 
-    echo -e "${green}开始配置 Shadowsocks ${reset}"
-    read -rp "是否快速生成配置文件？(y/n 默认[y]): " mode
-    mode=${mode:-y}
+    echo -e "${green}开始配置 Shadowsocks 服务器${reset}"
 
-    select_protocol
-    select_port
-    select_password
+    servers=()
+    i=1
+    while true; do
+        echo -e "\n${cyan}正在添加第 $i 个配置${reset}"
 
-    echo -e "${green}生成的配置${reset}"
-    echo -e "端口: ${green}${port}${reset}"
-    echo -e "密码: ${green}${password}${reset}"
-    echo -e "加密方式: ${green}${method}${reset}"
+        select_protocol
+        select_port
+        select_password
 
-    config=$(jq --arg port "$port" --arg password "$password" --arg method "$method" \
-        '.server_port = ($port | tonumber) | .password = $password | .method = $method' \
-        "$config_file")
+        echo -e "端口: ${green}${port}${reset}"
+        echo -e "密码: ${green}${password}${reset}"
+        echo -e "加密方式: ${green}${method}${reset}"
+
+        server_json=$(jq -n \
+            --arg server "0.0.0.0" \
+            --argjson port "$port" \
+            --arg password "$password" \
+            --arg method "$method" \
+            '{server: $server, server_port: $port, password: $password, method: $method}')
+        servers+=("$server_json")
+
+        read -rp "$(echo -e "${yellow}是否继续添加下一个配置？按回车继续，输入 n/N 结束: ${reset}")" confirm
+        confirm=${confirm,,}  # 转小写
+        if [[ "$confirm" == "n" ]]; then
+            break
+        fi
+        ((i++))
+    done
+
+    config=$(jq -n \
+        --argjson servers "$(printf '%s\n' "${servers[@]}" | jq -s '.')" \
+        --arg mode "tcp_and_udp" \
+        --argjson timeout 300 \
+        --argjson fast_open true \
+        --arg nameserver "223.5.5.5" \
+        --argjson no_delay true \
+        '{
+            servers: $servers,
+            mode: $mode,
+            timeout: $timeout,
+            fast_open: $fast_open,
+            nameserver: $nameserver,
+            no_delay: $no_delay
+        }')
+
     echo "$config" > "$config_file"
 
     if ! jq . "$config_file" >/dev/null 2>&1; then
-        echo -e "${red}配置文件格式错误${reset}"
+        echo -e "${red}配置文件格式错误，请检查${reset}"
         exit 1
     fi
 
     service_restart
-    echo -e "${green}Shadowsocks 配置已完成并保存到 ${config_file} 文件${reset}"
-    echo -e "${green}Shadowsocks 配置完成，正在启动中${reset}"
-    echo -e "${red}管理命令${reset}"
+
+    echo -e "\n${green}Shadowsocks 配置已完成，保存至：${config_file}${reset}"
+    echo -e "${green}Shadowsocks 已重启并设置为开机自启${reset}"
     echo -e "${cyan}=========================${reset}"
     echo -e "${green}命令: ssr 进入管理菜单${reset}"
     echo -e "${cyan}=========================${reset}"
-    echo -e "${green}Shadowsocks 已成功启动并设置为开机自启${reset}"
 }
 
 # ---------------------------------

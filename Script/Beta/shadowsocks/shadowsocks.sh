@@ -752,7 +752,7 @@ menu() {
     echo "================================="
     show_status
     echo "================================="
-    read -p "请输入上面选项：" input
+    read -p "$(echo -e "${yellow}请输入上面选项: ${reset}")" input
     case "$input" in
         1) install_shadowsocks ;;
         2) update_shadowsocks ;;
