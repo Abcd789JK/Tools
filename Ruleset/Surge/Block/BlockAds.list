@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-05-17 17:05:14
+#!date = 2025-05-28 10:46:59
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -567,6 +567,29 @@ DOMAIN,render-web.11222.cn
 
 # ======= T ======= #
 # 腾讯
+DOMAIN,ugchsy.gtimg.com
+DOMAIN,adsmind.gdtimg.com
+DOMAIN,btrace.video.qq.com
+DOMAIN-SUFFIX,api.poll.video.qq.com
+DOMAIN,activity.video.qq.com
+DOMAIN,p.l.qq.com
+DOMAIN,rpt.gdt.qq.com
+DOMAIN-SUFFIX,trace.qq.com
+DOMAIN-SUFFIX,tetrack.qq.com
+DOMAIN-SUFFIX,tpns.tencent.com
+DOMAIN-SUFFIX,stat.tpns.tencent.com
+DOMAIN-SUFFIX,static-res.qq.com
+DOMAIN-SUFFIX,omgmta.qq.com
+DOMAIN-SUFFIX,omgmta1.qq.com
+DOMAIN,tux.qq.com
+DOMAIN,iacc.qq.com
+DOMAIN,p2.l.qq.com
+DOMAIN,v3.gdt.qq.com
+DOMAIN,xs.gdt.qq.com
+DOMAIN,aegis.qq.com
+DOMAIN,rdelivery.qq.com
+DOMAIN,wallpaper-1258344696.file.myqcloud.com
+DOMAIN,wallpaper-test-1258344696.file.myqcloud.com
 DOMAIN,c2.gdt.qq.com
 DOMAIN,huatuocode.huatuo.qq.com
 DOMAIN,info4.video.qq.com
@@ -590,6 +613,7 @@ DOMAIN-KEYWORD,trace.qq.com
 DOMAIN-KEYWORD,trace.video.qq.com
 DOMAIN-SUFFIX,l.qq.com
 DOMAIN-SUFFIX,wxs.qq.com
+IP-CIDR,183.201.213.194/24
 IP-CIDR,119.29.29.98/32
 IP-CIDR,119.29.29.99/32
 URL-REGEX,^http:\/\/[\d\.:]*\/?(defaultts\.tc|vmind\.qqvideo\.tc|finderpdd\.video)\.qq\.com\/\w+
