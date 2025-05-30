@@ -115,12 +115,28 @@ start_menu() {
     menu
 }
 
+# IP 地址获取
+get_network_info() {
+  local default_iface ipv4 ipv6
+  default_iface=$(ip route | awk '/default/ {print $5}' | head -n 1)
+  ipv4=$(ip addr show "$default_iface" | awk '/inet / {print $2}' | cut -d/ -f1)
+  ipv6=$(ip -6 addr show "$default_iface" | awk '/inet6/ && /scope link/ {print $2}' | cut -d/ -f1)
+  echo "$default_iface $ipv4 $ipv6"
+}
+
 # 状态显示
 show_status() {
     local file="/root/mihomo/mihomo"
     local version_file="/root/mihomo/version.txt"
-    local install_status run_status auto_start software_version
+    local script_file="/usr/bin/mihomo"
+    local install_status run_status auto_start software_version update_time
+    local default_iface ipv4 ipv6
+    local distro
+
+    read default_iface ipv4 ipv6 <<< "$(get_network_info)"
     distro=$(grep -E '^ID=' /etc/os-release | cut -d= -f2)
+    update_time=$(grep '^# date' "$script_file" | cut -d: -f2- | xargs)
+
     if [ ! -f "$file" ]; then
         install_status="${red}未安装${reset}"
         run_status="${red}未运行${reset}"
@@ -128,11 +144,12 @@ show_status() {
         software_version="${red}未安装${reset}"
     else
         install_status="${green}已安装${reset}"
+
         if [ "$distro" = "alpine" ]; then
             if is_running_alpine; then
-              run_status="${green}已运行${reset}"
+                run_status="${green}已运行${reset}"
             else
-              run_status="${red}未运行${reset}"
+                run_status="${red}未运行${reset}"
             fi
             if rc-status default 2>/dev/null | awk '{print $1}' | grep -qx "mihomo"; then
                 auto_start="${green}已设置${reset}"
@@ -151,17 +168,23 @@ show_status() {
                 auto_start="${red}未设置${reset}"
             fi
         fi
+
         if [ -f "$version_file" ]; then
             software_version=$(cat "$version_file")
         else
             software_version="${red}未安装${reset}"
         fi
     fi
+
     echo -e "安装状态: ${install_status}"
     echo -e "运行状态: ${run_status}"
     echo -e "开机自启: ${auto_start}"
-    echo -e "脚本版本: ${green}${sh_ver}${reset}"
+    echo -e "当前系统: ${green}${distro}${reset}"
     echo -e "软件版本: ${green}${software_version}${reset}"
+    echo -e "本机IPv4: ${green}${ipv4}${reset}"
+    echo -e "本机IPv6: ${green}${ipv6}${reset}"
+    echo -e "脚本版本: ${green}${sh_ver}${reset}"
+    echo -e "更新时间: ${green}${update_time}${reset}"
 }
 
 # 服务管理
@@ -572,6 +595,7 @@ config_mihomo() {
     echo -e "${green}2${reset}. 修改机场订阅"
     echo -e "${green}3${reset}. 删除机场订阅"
     echo -e "${green}4${reset}. 切换运行模式"
+    echo -e "${green}5${reset}. 重置配置文件"
     echo "---------------------------------"
     read -p "$(echo -e "${yellow}输入选项数字: ${reset}")" choice
     case "$choice" in
@@ -579,6 +603,7 @@ config_mihomo() {
         2) modify_provider ;;
         3) delete_provider ;;
         4) mode_mihomo ;;
+        5) reset_config ;;
         *) echo "无效选项"; start_menu ;;
     esac
 }
@@ -841,72 +866,138 @@ delete_provider() {
     start_menu
 }
 
+# 运行模式
+generate_mode_config() {
+  local iface=$1
+  local choice=$2
+  case "$choice" in
+    1)
+      cat <<EOF
+# 运行模式配置 (TUN)
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+EOF
+      ;;
+    2)
+      cat <<EOF
+# 运行模式配置 (TProxy)
+iptables:
+  enable: true
+  inbound-interface: $iface
+EOF
+      ;;
+    *)
+      echo -e "${red}无效选择，使用默认 TUN 配置。${reset}"
+      generate_mode_config "$iface" 1
+      ;;
+  esac
+}
+
+# 新增订阅
+collect_proxy_providers() {
+  local providers="proxy-providers:"
+  local counter=1
+  while true; do
+    echo -e "${cyan}正在添加第 $counter 个配置${reset}"
+    read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
+    read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
+    providers="${providers}
+  provider_$(printf "%02d" $counter):
+    url: \"${subscription_url}\"
+    type: http
+    interval: 86400
+    health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
+    override:
+      additional-prefix: \"[${subscription_name}]\""
+    counter=$((counter + 1))
+    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
+    if [[ "$cont" =~ ^[nN]$ ]]; then
+      break
+    fi
+  done
+  echo "$providers"
+}
+
+# 切换运行模式
 mode_mihomo() {
-    local config_file="/root/mihomo/config.yaml"
+  local config_file="/root/mihomo/config.yaml"
+  [[ ! -f "$config_file" ]] && { echo -e "${red}配置文件不存在${reset}"; return 1; }
 
-    local tun_enabled=$(grep -E '^\s*tun:\s*$' -A 10 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
-    local ipt_enabled=$(grep -E '^\s*iptables:\s*$' -A 5 "$config_file" | grep -m1 'enable:' | grep -q 'true' && echo "true" || echo "false")
-    local current_mode="未知"
+  local iface=$(ip route get 1 | awk '{print $5; exit}')
+  local current_mode="未知"
 
-    if [[ "$tun_enabled" == "true" ]]; then
-        current_mode="TUN"
-    elif [[ "$ipt_enabled" == "true" ]]; then
-        current_mode="TProxy"
-    fi
+  if grep -A5 '^tun:' "$config_file" | grep -q 'enable: true'; then
+    current_mode="TUN"
+  elif grep -A5 '^iptables:' "$config_file" | grep -q 'enable: true'; then
+    current_mode="TProxy"
+  fi
 
-    echo -e "${green}当前运行模式: ${yellow}$current_mode${reset}"
-    echo -e "${green}请选择要切换的运行模式（推荐使用 TUN 模式）${reset}"
-    echo "================================="
-    echo -e "${green}1${reset}. TUN 模式"
-    echo -e "${green}2${reset}. TProxy 模式"
-    echo "---------------------------------"
-    read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" confirm
-    confirm=${confirm:-1}
+  echo -e "${green}当前运行模式: ${yellow}${current_mode}${reset}"
+  echo -e "${green}请选择要切换的运行模式（推荐使用 TUN 模式）${reset}"
+  echo -e "${green}1${reset}. TUN 模式"
+  echo -e "${green}2${reset}. TProxy 模式"
+  read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: 1]: ${reset}")" confirm
+  confirm=${confirm:-1}
 
-    local mode_line=$(grep -n "^# 模式配置" "$config_file" | cut -d: -f1)
-    if [[ -n "$mode_line" ]]; then
-        local next_line=$((mode_line + 1))
-        local block_start=$(sed -n "${next_line},\$p" "$config_file" | grep -En '^\s*(tun:|iptables:)\s*$' | head -n1 | cut -d: -f1)
+  local new_config
+  new_config=$(generate_mode_config "$iface" "$confirm")
 
-        if [[ -n "$block_start" ]]; then
-            block_start=$((mode_line + block_start))
-            local block_end=$(sed -n "${block_start},\$p" "$config_file" | grep -n '^[^[:space:]]' | grep -v "^1:" | head -n1 | cut -d: -f1)
-            if [[ -n "$block_end" ]]; then
-                block_end=$((block_start + block_end - 2))
-            else
-                block_end=$(wc -l < "$config_file")
-            fi
-            sed -i "${block_start},${block_end}d" "$config_file"
-        fi
-    fi
+  awk -v cfg="$new_config" '
+    BEGIN { printed=0 }
+    /^# 模式配置/ { print; print cfg; skip=1; next }
+    skip && /^[^[:space:]]/ { skip=0 }
+    !skip { print }
+  ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
 
-    if [[ "$confirm" == "1" ]]; then
-        sed -i "/# 模式配置/a\
-tun:\n\
-  enable: true\n\
-  stack: mixed\n\
-  dns-hijack:\n\
-    - \"any:53\"\n\
-    - \"tcp://any:53\"\n\
-  auto-route: true\n\
-  auto-redirect: true\n\
-  auto-detect-interface: true\n" "$config_file"
-        current_mode="TUN"
-    elif [[ "$confirm" == "2" ]]; then
-        iface=$(ip route | grep default | awk '{print $5}' | head -n1)
-        sed -i "/# 模式配置/a\
-iptables:\n\
-  enable: true\n\
-  inbound-interface: ${iface}\n" "$config_file"
-        current_mode="TProxy"
-    else
-        echo -e "${red}无效选择, 已取消操作。${reset}"
-        return
-    fi
+  service_restart
+  echo -e "${yellow}已切换运行模式为: ${green}$([[ $confirm == 1 ]] && echo TUN || echo TProxy)${reset}"
+  start_menu
+}
 
-    service_restart
-    echo -e "${yellow}已换运行模式为: ${green}$current_mode${reset}"
-    start_menu
+# 重置配置文件
+reset_config() {
+  local root_folder="/root/mihomo"
+  local config_file="$root_folder/config.yaml"
+  local remote_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
+  mkdir -p "$root_folder"
+
+  local iface=$(ip route get 1 | awk '{print $5; exit}')
+  echo -e "${green}请选择运行模式 (推荐使用 TUN 模式)${reset}"
+  echo -e "${green}1${reset}. TUN 模式"
+  echo -e "${green}2${reset}. TProxy 模式"
+  read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: 1]: ${reset}")" mode_choice
+  mode_choice=${mode_choice:-1}
+
+  local mode_config=$(generate_mode_config "$iface" "$mode_choice")
+
+  wget -q -O "$config_file" "$remote_config_url" || {
+    echo -e "${red}配置文件下载失败${reset}"
+    exit 1
+  }
+
+  awk -v cfg="$mode_config" '
+    BEGIN { printed=0 }
+    /^# 模式配置/ { print; print cfg; skip=1; next }
+    skip && /^[^[:space:]]/ { skip=0 }
+    !skip { print }
+  ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+  local proxy_providers=$(collect_proxy_providers)
+  awk -v providers="$proxy_providers" '
+    /^# 机场配置/ { print; print providers; skip=1; next }
+    skip && /^[^[:space:]]/ { skip=0 }
+    !skip { print }
+  ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+
+  service_restart
+  echo -e "${green}配置文件已经重置完成: ${yellow}${config_file}${reset}"
 }
 
 # 版本切换
