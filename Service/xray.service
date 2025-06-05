@@ -1,5 +1,5 @@
 [Unit]
-Description= Shadowsocks Rust Service
+Description= xray Rust Service
 After=network-online.target
 Wants=network-online.target systemd-networkd-wait-online.service
 
@@ -10,7 +10,7 @@ User=root
 Restart=on-failure
 RestartSec=5s
 DynamicUser=true
-ExecStart=/root/shadowsocks/shadowsocks -c /root/shadowsocks/config.json
+ExecStart=/root/xray/xray -c /root/xray/config.json
 
 [Install]
 WantedBy=multi-user.target

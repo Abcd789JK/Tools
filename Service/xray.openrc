@@ -1,0 +1,21 @@
+#!/sbin/openrc-run
+
+# openrc service-script for xray
+#
+# place in /etc/init.d/
+# start on boot: "rc-update add xray"
+
+supervisor=supervise-daemon
+name="xray"
+description="xray Proxy"
+
+command="/root/xray/xray"
+command_args="--config /root/xray/config.json"
+pidfile="/run/xray.pid"
+
+command_background=true
+
+depend() {
+    need net
+    after net
+}

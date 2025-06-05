@@ -1,5 +1,5 @@
 #!/bin/bash
-#!name = v2ray 一键管理脚本
+#!name = xray 一键管理脚本
 #!desc = 管理 & 面板
 #!date = 2025-04-26 14:59:18
 #!author = ChatGPT
@@ -20,7 +20,7 @@ reset="\033[0m"   # 重置颜色
 #############################
 #       全局变量定义       #
 #############################
-sh_ver="0.1.5"
+sh_ver="0.0.1"
 use_cdn=false
 distro="unknown"  # 系统类型：debian, ubuntu, alpine, fedora
 arch=""           # 转换后的系统架构
@@ -35,23 +35,23 @@ check_distro() {
         case "$ID" in
             debian|ubuntu)
                 distro="$ID"
-                service_enable() { systemctl enable v2ray; }
-                service_restart() { systemctl restart v2ray; }
+                service_enable() { systemctl enable xray; }
+                service_restart() { systemctl restart xray; }
                 ;;
             alpine)
                 distro="alpine"
-                service_enable() { rc-update add v2ray default; }
-                service_restart() { rc-service v2ray restart; }
+                service_enable() { rc-update add xray default; }
+                service_restart() { rc-service xray restart; }
                 ;;
             fedora)
                 distro="fedora"
-                service_enable() { systemctl enable v2ray; }
-                service_restart() { systemctl restart v2ray; }
+                service_enable() { systemctl enable xray; }
+                service_restart() { systemctl restart xray; }
                 ;;
             arch)
                 distro="arch"
-                service_enable() { systemctl enable v2ray; }
-                service_restart() { systemctl restart v2ray; }
+                service_enable() { systemctl enable xray; }
+                service_restart() { systemctl restart xray; }
                 ;;
             *)
                 echo -e "${red}不支持的系统：${ID}${reset}"
@@ -95,12 +95,12 @@ get_url() {
 }
 
 #############################
-#    检查 v2ray 是否已安装  #
+#    检查 xray 是否已安装  #
 #############################
 check_installation() {
-    local file="/root/v2ray/v2ray"
+    local file="/root/xray/xray"
     if [ ! -f "$file" ]; then
-        echo -e "${red}请先安装 v2ray${reset}"
+        echo -e "${red}请先安装 xray${reset}"
         start_menu
         return 1
     fi
@@ -111,8 +111,8 @@ check_installation() {
 #    Alpine 系统运行状态检测  #
 #############################
 is_running_alpine() {
-    if [ -f "/run/v2ray.pid" ]; then
-        pid=$(cat /run/v2ray.pid)
+    if [ -f "/run/xray.pid" ]; then
+        pid=$(cat /run/xray.pid)
         if [ -d "/proc/$pid" ]; then
             return 0
         fi
@@ -132,8 +132,8 @@ start_menu() {
 #         状态显示函数       #
 #############################
 show_status() {
-    local file="/root/v2ray/v2ray"
-    local version_file="/root/v2ray/version.txt"
+    local file="/root/xray/xray"
+    local version_file="/root/xray/version.txt"
     local install_status run_status auto_start software_version
     distro=$(grep -E '^ID=' /etc/os-release | cut -d= -f2)
     if [ ! -f "$file" ]; then
@@ -144,8 +144,8 @@ show_status() {
     else
         install_status="${green}已安装${reset}"
         if [ "$distro" = "alpine" ]; then
-            if [ -f "/run/v2ray.pid" ]; then
-                pid=$(cat /run/v2ray.pid)
+            if [ -f "/run/xray.pid" ]; then
+                pid=$(cat /run/xray.pid)
                 if [ -d "/proc/$pid" ]; then
                     run_status="${green}已运行${reset}"
                 else
@@ -154,18 +154,18 @@ show_status() {
             else
                 run_status="${red}未运行${reset}"
             fi
-            if rc-status default 2>/dev/null | awk '{print $1}' | grep -qx "v2ray"; then
+            if rc-status default 2>/dev/null | awk '{print $1}' | grep -qx "xray"; then
                 auto_start="${green}已设置${reset}"
             else
                 auto_start="${red}未设置${reset}"
             fi
         else
-            if systemctl is-active --quiet v2ray; then
+            if systemctl is-active --quiet xray; then
                 run_status="${green}已运行${reset}"
             else
                 run_status="${red}未运行${reset}"
             fi
-            if systemctl is-enabled --quiet v2ray; then
+            if systemctl is-enabled --quiet xray; then
                 auto_start="${green}已设置${reset}"
             else
                 auto_start="${red}未设置${reset}"
@@ -187,7 +187,7 @@ show_status() {
 #############################
 #      服务管理函数         #
 #############################
-service_v2ray() {
+service_xray() {
     check_installation || { start_menu; return; }
     local action="$1"
     local action_text=""
@@ -206,12 +206,12 @@ service_v2ray() {
             return
         fi
         if [ "$action" == "enable" ]; then
-            if rc-update show default | grep -q "v2ray"; then
+            if rc-update show default | grep -q "xray"; then
                 echo -e "${yellow}已${action_text}，无需重复操作${reset}"
             else
                 echo -e "${green}正在${action_text}请等待${reset}"
                 sleep 1s
-                if rc-update add v2ray default; then
+                if rc-update add xray default; then
                     echo -e "${green}${action_text}成功${reset}"
                 else
                     echo -e "${red}${action_text}失败${reset}"
@@ -220,12 +220,12 @@ service_v2ray() {
             start_menu
             return
         elif [ "$action" == "disable" ]; then
-            if ! rc-update show default | grep -q "v2ray"; then
+            if ! rc-update show default | grep -q "xray"; then
                 echo -e "${yellow}已${action_text}，无需重复操作${reset}"
             else
                 echo -e "${green}正在${action_text}请等待${reset}"
                 sleep 1s
-                if rc-update del v2ray; then
+                if rc-update del xray; then
                     echo -e "${green}${action_text}成功${reset}"
                 else
                     echo -e "${red}${action_text}失败${reset}"
@@ -250,9 +250,9 @@ service_v2ray() {
         echo -e "${green}正在${action_text}请等待${reset}"
         sleep 1s
         case "$action" in
-            start)   rc-service v2ray start ;;
-            stop)    rc-service v2ray stop ;;
-            restart) rc-service v2ray restart ;;
+            start)   rc-service xray start ;;
+            stop)    rc-service xray stop ;;
+            restart) rc-service xray restart ;;
         esac
         if [ $? -eq 0 ]; then
             echo -e "${green}${action_text}成功${reset}"
@@ -263,14 +263,14 @@ service_v2ray() {
         return
     fi
     if [ "$action" == "enable" ] || [ "$action" == "disable" ]; then
-        local is_enabled=$(systemctl is-enabled --quiet v2ray && echo "enabled" || echo "disabled")
+        local is_enabled=$(systemctl is-enabled --quiet xray && echo "enabled" || echo "disabled")
         if { [ "$action" == "enable" ] && [ "$is_enabled" == "enabled" ]; } || \
            { [ "$action" == "disable" ] && [ "$is_enabled" == "disabled" ]; }; then
             echo -e "${yellow}已${action_text}，无需重复操作${reset}"
         else
             echo -e "${green}正在${action_text}请等待${reset}"
             sleep 1s
-            if systemctl "$action" v2ray; then
+            if systemctl "$action" xray; then
                 echo -e "${green}${action_text}成功${reset}"
             else
                 echo -e "${red}${action_text}失败${reset}"
@@ -280,11 +280,11 @@ service_v2ray() {
         return
     fi
     if [ "$action" == "logs" ]; then
-        echo -e "${green}正在实时查看 v2ray 日志，按 Ctrl+C 退出${reset}"
-        journalctl -u v2ray -o cat -f
+        echo -e "${green}正在实时查看 xray 日志，按 Ctrl+C 退出${reset}"
+        journalctl -u xray -o cat -f
         return
     fi
-    local service_status=$(systemctl is-active --quiet v2ray && echo "active" || echo "inactive")
+    local service_status=$(systemctl is-active --quiet xray && echo "active" || echo "inactive")
     if { [ "$action" == "start" ] && [ "$service_status" == "active" ]; } || \
        { [ "$action" == "stop" ] && [ "$service_status" == "inactive" ]; }; then
         echo -e "${yellow}已${action_text}，无需重复操作${reset}"
@@ -293,7 +293,7 @@ service_v2ray() {
     fi
     echo -e "${green}正在${action_text}请等待${reset}"
     sleep 1s
-    if systemctl "$action" v2ray; then
+    if systemctl "$action" xray; then
         echo -e "${green}${action_text}成功${reset}"
     else
         echo -e "${red}${action_text}失败${reset}"
@@ -302,29 +302,29 @@ service_v2ray() {
 }
 
 # 简化操作命令
-start_v2ray()   { service_v2ray start; }
-stop_v2ray()    { service_v2ray stop; }
-restart_v2ray() { service_v2ray restart; }
-enable_v2ray()  { service_v2ray enable; }
-disable_v2ray() { service_v2ray disable; }
-logs_v2ray()    { service_v2ray logs; }
+start_xray()   { service_xray start; }
+stop_xray()    { service_xray stop; }
+restart_xray() { service_xray restart; }
+enable_xray()  { service_xray enable; }
+disable_xray() { service_xray disable; }
+logs_xray()    { service_xray logs; }
 
 #############################
 #        卸载函数          #
 #############################
-uninstall_v2ray() {
+uninstall_xray() {
     check_installation || { start_menu; return; }
-    local folders="/root/v2ray"
-    local shell_file="/usr/bin/v2ray"
-    local service_file="/etc/init.d/v2ray"
-    local system_file="/etc/systemd/system/v2ray.service"
-    read -p "$(echo -e "${red}警告：卸载后将删除当前配置和文件！\n${yellow}确认卸载 v2ray 吗？${reset} (y/n): ")" input
+    local folders="/root/xray"
+    local shell_file="/usr/bin/xray"
+    local service_file="/etc/init.d/xray"
+    local system_file="/etc/systemd/system/xray.service"
+    read -p "$(echo -e "${red}警告：卸载后将删除当前配置和文件！\n${yellow}确认卸载 xray 吗？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
-            echo -e "${green}v2ray 卸载中请等待${reset}"
+            echo -e "${green}xray 卸载中请等待${reset}"
             ;;
         [Nn]* )
-            echo -e "${yellow}v2ray 卸载已取消${reset}"
+            echo -e "${yellow}xray 卸载已取消${reset}"
             start_menu
             return
             ;;
@@ -335,20 +335,20 @@ uninstall_v2ray() {
             ;;
     esac
     sleep 2s
-    echo -e "${green}v2ray 卸载命令已发出${reset}"
+    echo -e "${green}xray 卸载命令已发出${reset}"
     if [ "$distro" = "alpine" ]; then
-        rc-service v2ray stop 2>/dev/null || { echo -e "${red}停止 v2ray 服务失败${reset}"; exit 1; }
-        rc-update del v2ray 2>/dev/null || { echo -e "${red}取消开机自启失败${reset}"; exit 1; }
+        rc-service xray stop 2>/dev/null || { echo -e "${red}停止 xray 服务失败${reset}"; exit 1; }
+        rc-update del xray 2>/dev/null || { echo -e "${red}取消开机自启失败${reset}"; exit 1; }
         rm -f "$service_file" || { echo -e "${red}删除服务文件失败${reset}"; exit 1; }
     else
-        systemctl stop v2ray.service 2>/dev/null || { echo -e "${red}停止 v2ray 服务失败${reset}"; exit 1; }
-        systemctl disable v2ray.service 2>/dev/null || { echo -e "${red}禁用 v2ray 服务失败${reset}"; exit 1; }
+        systemctl stop xray.service 2>/dev/null || { echo -e "${red}停止 xray 服务失败${reset}"; exit 1; }
+        systemctl disable xray.service 2>/dev/null || { echo -e "${red}禁用 xray 服务失败${reset}"; exit 1; }
         rm -f "$system_file" || { echo -e "${red}删除服务文件失败${reset}"; exit 1; }
     fi
     rm -rf "$folders" || { echo -e "${red}删除相关文件夹失败${reset}"; exit 1; }
     sleep 3s
     if { [ "$distro" = "alpine" ] && [ ! -d "$folders" ]; } || { [ ! -f "$system_file" ] && [ ! -d "$folders" ]; }; then
-        echo -e "${green}v2ray 卸载完成${reset}"
+        echo -e "${green}xray 卸载完成${reset}"
         echo ""
         echo -e "卸载成功，如果你想删除此脚本，则退出脚本后，输入 ${green}rm $shell_file -f${reset} 进行删除"
         echo ""
@@ -361,14 +361,14 @@ uninstall_v2ray() {
 #############################
 #         安装函数         #
 #############################
-install_v2ray() {
+install_xray() {
     check_network
-    local folders="/root/v2ray"
-    local service_file="/etc/init.d/v2ray"
-    local system_file="/etc/systemd/system/v2ray.service"
-    local install_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/v2ray/install.sh"
+    local folders="/root/xray"
+    local service_file="/etc/init.d/xray"
+    local system_file="/etc/systemd/system/xray.service"
+    local install_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/xray/install.sh"
     if [ -d "$folders" ]; then
-        echo -e "${yellow}检测到 v2ray 已经安装在 ${folders} 目录下${reset}"
+        echo -e "${yellow}检测到 xray 已经安装在 ${folders} 目录下${reset}"
         read -p "$(echo -e "${red}警告：重新安装将删除当前配置和文件！\n是否删除并重新安装？${reset} (y/n): ")" input
         case "$input" in
             [Yy]* )
@@ -427,43 +427,43 @@ get_schema() {
 #      远程版本获取函数     #
 #############################
 download_version() {
-    local version_url="https://api.github.com/repos/v2fly/v2ray-core/releases/latest"
+    local version_url="https://api.github.com/repos/XTLS/Xray-core/releases/latest"
     version=$(curl -sSL "$version_url" | jq -r '.tag_name' | sed 's/v//') || {
-        echo -e "${red}获取 v2ray 远程版本失败${reset}";
+        echo -e "${red}获取 Xray 远程版本失败${reset}";
         exit 1;
     }
 }
 
-download_v2ray() {
+download_xray() {
     get_schema
     check_network
     download_version
-    local version_file="/root/v2ray/version.txt"
-    local filename="v2ray-linux-${arch}.zip"
-    local download_url="https://github.com/v2fly/v2ray-core/releases/download/v${version}/${filename}"
-    wget -t 3 -T 30 -O "$filename" "$(get_url "$download_url")" || {
-        echo -e "${red}v2ray 下载失败，请检查网络后重试${reset}"
+    local version_file="/root/xray/version.txt"
+    local filename="xray-linux-${arch}.zip"
+    local download_url="https://github.com/XTLS/Xray-core/releases/download/v${version}/${filename}"
+    wget -q -O "$filename" "$(get_url "$download_url")" || {
+        echo -e "${red}xray 下载失败，请检查网络后重试${reset}"
         exit 1
     }
     unzip "$filename" && rm "$filename" || { 
-        echo -e "${red}v2ray 解压失败${reset}"
+        echo -e "${red}xray 解压失败${reset}"
         exit 1
     }
-    chmod +x v2ray
+    chmod +x xray
     echo "$version" > "$version_file"
 }
 
-update_v2ray() {
+update_xray() {
     check_installation || { start_menu; return; }
-    local folders="/root/v2ray"
-    local version_file="/root/v2ray/version.txt"
+    local folders="/root/xray"
+    local version_file="/root/xray/version.txt"
     echo -e "${green}开始检查软件是否有更新${reset}"
     cd "$folders" || exit
     local current_version
     if [ -f "$version_file" ]; then
         current_version=$(cat "$version_file")
     else
-        echo -e "${red}请先安装 v2ray${reset}"
+        echo -e "${red}请先安装 xray${reset}"
         start_menu
         return
     fi
@@ -494,8 +494,8 @@ update_v2ray() {
             return
             ;;
     esac
-    download_v2ray|| { 
-        echo -e "${red}v2ray 下载失败，请重试${reset}"
+    download_xray|| { 
+        echo -e "${red}xray 下载失败，请重试${reset}"
         exit 1
     }
     sleep 2s
@@ -509,8 +509,8 @@ update_v2ray() {
 #############################
 update_shell() {
     check_network
-    local shell_file="/usr/bin/v2ray"
-    local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/v2ray/v2ray.sh"
+    local shell_file="/usr/bin/xray"
+    local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/xray/xray.sh"
     local sh_new_ver=$(curl -sSL "$(get_url "$sh_ver_url")" | grep 'sh_ver="' | awk -F "=" '{print $NF}' | sed 's/\"//g' | head -1)
     echo -e "${green}开始检查脚本是否有更新${reset}"
     if [ "$sh_ver" == "$sh_new_ver" ]; then
@@ -547,157 +547,8 @@ update_shell() {
 #############################
 #       配置管理函数       #
 #############################
-config_v2ray() {
-    check_installation || { start_menu; return; }
-    check_network
-    local config_file="/root/v2ray/config.json"
-    local config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/v2ray.json"
-    wget -t 3 -T 30 -q -O "$config_file" "$(get_url "$config_url")" || { 
-        echo -e "${red}配置文件下载失败${reset}"
-        exit 1
-    }
-    echo -e "${green}开始配置 v2ray ${reset}"
-    read -rp "是否快速生成配置文件？(y/n 默认[y]): " confirm
-    confirm=${confirm:-y}
-    if [[ "$confirm" == [Yy] ]]; then
-        echo -e "请选择协议："
-        echo -e "${green}1${reset}、vmess+tcp"
-        echo -e "${green}2${reset}、vmess+ws"
-        echo -e "${green}3${reset}、vmess+tcp+tls"
-        echo -e "${green}4${reset}、vmess+ws+tls"
-        read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
-        confirm=${confirm:-1}
-        PORT=$(shuf -i 10000-65000 -n 1)
-        UUID=$(cat /proc/sys/kernel/random/uuid)
-        if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            WS_PATH=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 12)
-        fi
-        echo -e "配置文件已生成："
-        case $confirm in
-            1) echo -e "  - 协议: ${green}vmess+tcp${reset}" ;;
-            2) echo -e "  - 协议: ${green}vmess+ws${reset}" ;;
-            3) echo -e "  - 协议: ${green}vmess+tcp+tls${reset}" ;;
-            4) echo -e "  - 协议: ${green}vmess+ws+tls${reset}" ;;
-            *) echo -e "${red}无效选项${reset}" && exit 1 ;;
-        esac
-        echo -e "  - 端口: ${green}$PORT${reset}"
-        echo -e "  - UUID: ${green}$UUID${reset}"
-        if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            echo -e "  - WS路径: ${green}/$WS_PATH${reset}"
-        fi
-    else
-        echo -e "请选择协议："
-        echo -e "${green}1${reset}、vmess+tcp"
-        echo -e "${green}2${reset}、vmess+ws"
-        echo -e "${green}3${reset}、vmess+tcp+tls"
-        echo -e "${green}4${reset}、vmess+ws+tls"
-        read -rp "输入数字选择协议 (1-4 默认[1]): " confirm
-        confirm=${confirm:-1}
-        read -p "请输入监听端口 (留空以随机生成端口): " PORT
-        if [[ -z "$PORT" ]]; then
-            PORT=$(shuf -i 10000-65000 -n 1)
-        elif [[ "$PORT" -lt 10000 || "$PORT" -gt 65000 ]]; then
-            echo -e "${red}端口号必须在10000到65000之间。${reset}"
-            exit 1
-        fi
-        read -p "请输入 v2ray UUID (留空以生成随机UUID): " UUID
-        if [[ -z "$UUID" ]]; then
-            UUID=$(cat /proc/sys/kernel/random/uuid)
-        fi
-        if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            read -p "请输入 WebSocket 路径 (留空以生成随机路径): " WS_PATH
-            if [[ -z "$WS_PATH" ]]; then
-                WS_PATH=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)
-            else
-                WS_PATH="${WS_PATH#/}"
-            fi
-        fi
-        echo -e "配置文件已生成："
-        case $confirm in
-            1) echo -e "  - 协议: ${green}vmess+tcp${reset}" ;;
-            2) echo -e "  - 协议: ${green}vmess+ws${reset}" ;;
-            3) echo -e "  - 协议: ${green}vmess+tcp+tls${reset}" ;;
-            4) echo -e "  - 协议: ${green}vmess+ws+tls${reset}" ;;
-            *) echo -e "${red}无效选项${reset}" && exit 1 ;;
-        esac
-        echo -e "  - 端口: ${green}$PORT${reset}"
-        echo -e "  - UUID: ${green}$UUID${reset}"
-        if [[ "$confirm" == "2" || "$confirm" == "4" ]]; then
-            echo -e "  - WS路径: ${green}/$WS_PATH${reset}"
-        fi
-    fi
-    echo -e "${green}读取配置文件${reset}"
-    config=$(cat "$config_file")
-    echo -e "${green}修改配置文件${reset}"
-    case $confirm in
-        1)  # vmess + tcp
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" '
-                .inbounds[0].port = ($port | tonumber) |
-                .inbounds[0].settings.clients[0].id = $uuid |
-                .inbounds[0].streamSettings.network = "tcp" |
-                del(.inbounds[0].streamSettings.wsSettings) |
-                del(.inbounds[0].streamSettings.tlsSettings)
-            ')
-            ;;
-        2)  # vmess + ws
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" --arg ws_path "/$WS_PATH" '
-                .inbounds[0].port = ($port | tonumber) |
-                .inbounds[0].settings.clients[0].id = $uuid |
-                .inbounds[0].streamSettings.network = "ws" |
-                .inbounds[0].streamSettings.wsSettings.path = $ws_path |
-                del(.inbounds[0].streamSettings.tlsSettings) |
-                del(.inbounds[0].streamSettings.wsSettings.headers)
-            ')
-            ;;
-        3)  # vmess + tcp + tls
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" '
-                .inbounds[0].port = ($port | tonumber) |
-                .inbounds[0].settings.clients[0].id = $uuid |
-                .inbounds[0].streamSettings.network = "tcp" |
-                .inbounds[0].streamSettings.security = "tls" |
-                .inbounds[0].streamSettings.tlsSettings = {
-                    "certificates": [
-                        {
-                            "certificateFile": "/root/ssl/server.crt",
-                            "keyFile": "/root/ssl/server.key"
-                        }
-                    ]
-                }
-            ')
-            ;;
-        4)  # vmess + ws + tls
-            config=$(echo "$config" | jq --arg port "$PORT" --arg uuid "$UUID" --arg ws_path "/$WS_PATH" '
-                .inbounds[0].port = ($port | tonumber) |
-                .inbounds[0].settings.clients[0].id = $uuid |
-                .inbounds[0].streamSettings.network = "ws" |
-                .inbounds[0].streamSettings.wsSettings.path = $ws_path |
-                .inbounds[0].streamSettings.security = "tls" |
-                .inbounds[0].streamSettings.tlsSettings = {
-                    "certificates": [
-                        {
-                            "certificateFile": "/root/ssl/server.crt",
-                            "keyFile": "/root/ssl/server.key"
-                        }
-                    ]
-                } |
-                del(.inbounds[0].streamSettings.wsSettings.headers)
-            ')
-            ;;
-        *)
-            echo -e "${red}无效选项${reset}"
-            exit 1
-            ;;
-    esac
-    echo -e "${green}写入配置文件${reset}"
-    echo "$config" > "$config_file"
-    echo -e "${green}验证修改后的配置文件格式${reset}"
-    if ! jq . "$config_file" >/dev/null 2>&1; then
-        echo -e "${red}修改后的配置文件格式无效，请检查文件${reset}"
-        exit 1
-    fi
-    service_restart
-    echo -e "${green}配置完成${reset}"
-    start_menu
+config_xray() {
+
 }
 
 #############################
@@ -706,7 +557,7 @@ config_v2ray() {
 menu() {
     clear
     echo "================================="
-    echo -e "${green}欢迎使用 v2ray 一键脚本 Beta 版${reset}"
+    echo -e "${green}欢迎使用 xray 一键脚本${reset}"
     echo -e "${green}作者：${yellow}ChatGPT JK789${reset}"
     echo "================================="
     echo -e "${green} 0${reset}. 更新脚本"
@@ -714,13 +565,13 @@ menu() {
     echo -e "${green}20${reset}. 更换配置"
     echo -e "${green}30${reset}. 查看日志"
     echo "---------------------------------"
-    echo -e "${green} 1${reset}. 安装 v2ray"
-    echo -e "${green} 2${reset}. 更新 v2ray"
-    echo -e "${green} 3${reset}. 卸载 v2ray"
+    echo -e "${green} 1${reset}. 安装 xray"
+    echo -e "${green} 2${reset}. 更新 xray"
+    echo -e "${green} 3${reset}. 卸载 xray"
     echo "---------------------------------"
-    echo -e "${green} 4${reset}. 启动 v2ray"
-    echo -e "${green} 5${reset}. 停止 v2ray"
-    echo -e "${green} 6${reset}. 重启 v2ray"
+    echo -e "${green} 4${reset}. 启动 xray"
+    echo -e "${green} 5${reset}. 停止 xray"
+    echo -e "${green} 6${reset}. 重启 xray"
     echo "---------------------------------"
     echo -e "${green} 7${reset}. 添加开机自启"
     echo -e "${green} 8${reset}. 关闭开机自启"
@@ -729,16 +580,16 @@ menu() {
     echo "================================="
     read -p "请输入上面选项：" input
     case "$input" in
-        1) install_v2ray ;;
-        2) update_v2ray ;;
-        3) uninstall_v2ray ;;
-        4) start_v2ray ;;
-        5) stop_v2ray ;;
-        6) restart_v2ray ;;
-        7) enable_v2ray ;;
-        8) disable_v2ray ;;
-        20) config_v2ray ;;
-        30) logs_v2ray ;;
+        1) install_xray ;;
+        2) update_xray ;;
+        3) uninstall_xray ;;
+        4) start_xray ;;
+        5) stop_xray ;;
+        6) restart_xray ;;
+        7) enable_xray ;;
+        8) disable_xray ;;
+        20) config_xray ;;
+        30) logs_xray ;;
         10) exit 0 ;;
         0) update_shell ;;
         *) echo -e "${red}无效选项，请重新选择${reset}" 
