@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2025-06-05 08:38:33
+# date   : 2025-06-05 08:43:42
 # author : ChatGPT
 # ---------------------------------
 
@@ -129,9 +129,7 @@ show_status() {
     local file="/root/mihomo/mihomo"
     local version_file="/root/mihomo/version.txt"
     local script_file="/usr/bin/mihomo"
-    local install_status run_status auto_start software_version update_time
-    local default_iface ipv4 ipv6
-    local distro
+    local install_status run_status auto_start software_version update_time default_iface ipv4 ipv6 distro
 
     read default_iface ipv4 ipv6 <<< "$(get_network_info)"
     distro=$(grep -E '^ID=' /etc/os-release | cut -d= -f2)
