@@ -1,0 +1,16 @@
+[Unit]
+Description= Shadowsocks Rust Service
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+
+[Service]
+LimitNOFILE=32767 
+Type=simple
+User=root
+Restart=on-failure
+RestartSec=5s
+DynamicUser=true
+ExecStart=/root/shadowsocks/shadowsocks -c /root/shadowsocks/config.json
+
+[Install]
+WantedBy=multi-user.target
