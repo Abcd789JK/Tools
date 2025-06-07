@@ -7,15 +7,16 @@
     {
       "type": "shadowsocks",
       "tag": "ss-in",
-      "listen": "0.0.0.0",
+      "listen": "::",
       "listen_port": 8080,
       "method": "2022-blake3-aes-128-gcm",
-      "password": "your-strong-password"
+      "password": "your-strong-password",
+      "tcp_fast_open": true
     },
     {
       "type": "vmess",
       "tag": "vmess-in",
-      "listen": "0.0.0.0",
+      "listen": "::",
       "listen_port": 8081,
       "users": [
         {
@@ -27,7 +28,8 @@
       "transport": {
         "type": "ws",
         "path": "/path"
-      }
+      },
+      "tcp_fast_open": true
     }
   ],
 "outbounds": [
