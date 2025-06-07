@@ -1,0 +1,22 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "ss-in",
+      "listen": "0.0.0.0",
+      "listen_port": 8080,
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "your-strong-password"
+    }
+  ],
+"outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct-out"
+    }
+  ]
+}
