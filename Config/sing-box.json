@@ -11,6 +11,23 @@
       "listen_port": 8080,
       "method": "2022-blake3-aes-128-gcm",
       "password": "your-strong-password"
+    },
+    {
+      "type": "vmess",
+      "tag": "vmess-in",
+      "listen": "0.0.0.0",
+      "listen_port": 8081,
+      "users": [
+        {
+          "name": "sekai",
+          "uuid": "your-strong-password",
+          "alterId": 0
+        }
+      ],
+      "transport": {
+        "type": "ws",
+        "path": "/path"
+      }
     }
   ],
 "outbounds": [
