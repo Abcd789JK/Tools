@@ -1,7 +1,7 @@
 #!/bin/bash
 #!name = sing-box 一键安装脚本
 #!desc = 安装 & 配置
-#!date = 2025-06-07 17:19:51
+#!date = 2025-06-07 17:27:58
 #!author = ChatGPT
 
 # 终止脚本执行遇到错误时退出，并启用管道错误检测
@@ -161,10 +161,21 @@ download_sing-box() {
         echo -e "${red}sing-box 下载失败，请检查网络后重试${reset}"
         exit 1
     }
-    tar -xvzf "$filename" && rm "$filename" || { 
-        echo -e "${red}sing-box 解压失败${reset}"
+
+    mkdir tmp_extract
+    tar -xvzf "$filename" -C tmp_extract && rm "$filename" || {
+        echo -e "${red}❌ sing-box 解压失败${reset}"
+        rm -rf tmp_extract
         exit 1
     }
+
+    mv tmp_extract/*/* . || {
+        echo -e "${red}❌ 文件移动失败${reset}"
+        rm -rf tmp_extract
+        exit 1
+    }
+    
+    rm -rf tmp_extract 
     chmod +x sing-box
     echo "$version" > "$version_file"
 }
