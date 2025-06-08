@@ -1,41 +1,119 @@
 {
   "log": {
-    "level": "info",
-    "timestamp": true
+    "level": "info", // 日志级别，建议保持 info 以记录必要信息
+    "timestamp": true // 启用日志时间戳，便于调试
   },
   "inbounds": [
     {
-      "type": "shadowsocks",
-      "tag": "ss-in",
-      "listen": "::",
-      "listen_port": 8080,
-      "method": "2022-blake3-aes-128-gcm",
-      "password": "your-strong-password",
-      "tcp_fast_open": true
+      "type": "shadowsocks", // Shadowsocks 协议服务端
+      "tag": "ss-in", // 标识 Shadowsocks 入站
+      "listen": "::", // 监听所有 IPv4 和 IPv6 地址
+      "listen_port": 8080, // Shadowsocks 监听端口，可根据需要更改
+      "method": "2022-blake3-aes-128-gcm", // 加密方法，推荐使用此高安全性方法
+      "password": "your-strong-password", // 请替换为强密码（如随机生成的32位字符串）
+      "tcp_fast_open": true // 启用 TCP Fast Open，加速连接
     },
     {
-      "type": "vmess",
-      "tag": "vmess-in",
-      "listen": "::",
-      "listen_port": 8081,
+      "type": "vmess", // VMess 协议服务端
+      "tag": "vmess-in", // 标识 VMess 入站
+      "listen": "::", // 监听所有 IPv4 和 IPv6 地址
+      "listen_port": 8081, // VMess 监听端口，可根据需要更改
       "users": [
         {
-          "name": "sekai",
-          "uuid": "your-strong-password",
-          "alterId": 0
+          "name": "sekai", // 用户名，可自定义
+          "uuid": "your-strong-password", // 请替换为有效的 UUID（如使用 uuidgen 生成）
+          "alterId": 0 // VMess AEAD，推荐设为 0
         }
       ],
       "transport": {
-        "type": "ws",
-        "path": "/path"
+        "type": "ws", // 使用 WebSocket 传输
+        "path": "/path" // WebSocket 路径，客户端需匹配，可自定义
       },
-      "tcp_fast_open": true
+      "tcp_fast_open": true, // 启用 TCP Fast Open
+      "tls": {
+        "enabled": true, // 启用 TLS 加密
+        "server_name": "your.domain.com", // 请替换为你的域名（如 example.com）
+        "key_path": "/path/to/your/private.key", // 请替换为 TLS 私钥文件的实际路径
+        "certificate_path": "/path/to/your/certificate.crt", // 请替换为 TLS 证书文件的实际路径
+        "min_version": "1.3", // 最低 TLS 版本，仅使用 1.3
+        "max_version": "1.3" // 最高 TLS 版本，仅使用 1.3
+      }
+    },
+    {
+      "type": "trojan", // Trojan 协议服务端
+      "tag": "trojan-in", // 标识 Trojan 入站
+      "listen": "::", // 监听所有 IPv4 和 IPv6 地址
+      "listen_port": 8082, // Trojan 监听端口，可根据需要更改
+      "users": [
+        {
+          "name": "trojan-user", // 用户名，可自定义
+          "password": "your-trojan-password" // 请替换为强密码（如随机生成的32位字符串）
+        }
+      ],
+      "transport": {
+        "type": "ws", // 使用 WebSocket 传输
+        "path": "/trojan-path" // WebSocket 路径，客户端需匹配，可自定义
+      },
+      "tcp_fast_open": true, // 启用 TCP Fast Open
+      "tls": {
+        "enabled": true, // 启用 TLS 加密
+        "server_name": "your.domain.com", // 请替换为你的域名（如 example.com）
+        "key_path": "/path/to/your/private.key", // 请替换为 TLS 私钥文件的实际路径
+        "certificate_path": "/path/to/your/certificate.crt", // 请替换为 TLS 证书文件的实际路径
+        "min_version": "1.3", // 最低 TLS 版本，仅使用 1.3
+        "max_version": "1.3" // 最高 TLS 版本，仅使用 1.3
+      }
+    },
+    {
+      "type": "hysteria2", // Hysteria2 协议服务端
+      "tag": "hysteria2-in", // 标识 Hysteria2 入站
+      "listen": "::", // 监听所有 IPv4 和 IPv6 地址
+      "listen_port": 8083, // Hysteria2 监听端口，可根据需要更改
+      "users": [
+        {
+          "name": "hysteria2-user", // 用户名，可自定义
+          "password": "your-hysteria2-password" // 请替换为强密码（如随机生成的32位字符串）
+        }
+      ],
+      "tcp_fast_open": true, // 启用 TCP Fast Open
+      "tls": {
+        "enabled": true, // 启用 TLS 加密
+        "server_name": "your.domain.com", // 请替换为你的域名（如 example.com）
+        "key_path": "/path/to/your/private.key", // 请替换为 TLS 私钥文件的实际路径
+        "certificate_path": "/path/to/your/certificate.crt", // 请替换为 TLS 证书文件的实际路径
+        "min_version": "1.3", // 最低 TLS 版本，仅使用 1.3
+        "max_version": "1.3" // 最高 TLS 版本，仅使用 1.3
+      },
+      "masquerade": {
+        "type": "proxy", // 伪装为 HTTP 请求
+        "proxy": {
+          "url": "https://your.domain.com", // 请替换为你的域名，用于伪装
+          "rewrite_host": true // 重写主机头，确保与域名一致
+        }
+      },
+      "obfs": {
+        "type": "salamander", // 使用 Salamander 混淆
+        "password": "your-obfs-password" // 请替换为混淆密码（如随机生成的32位字符串）
+      }
     }
   ],
-"outbounds": [
+  "outbounds": [
     {
-      "type": "direct",
-      "tag": "direct-out"
+      "type": "direct", // 直接出站，所有流量直连
+      "tag": "direct-out" // 标识直接出站
     }
-  ]
+  ],
+  "route": {
+    "rules": [
+      {
+        "inbound": [
+          "ss-in", // Shadowsocks 入站
+          "vmess-in", // VMess 入站
+          "trojan-in", // Trojan 入站
+          "hysteria2-in" // Hysteria2 入站
+        ],
+        "outbound": "direct-out" // 所有入站流量通过 direct-out 出站
+      }
+    ]
+  }
 }
