@@ -27,7 +27,7 @@
       ],
       "transport": {
         "type": "ws", // 使用 WebSocket 传输
-        "path": "/path" // WebSocket 路径，客户端需匹配，可自定义
+        "path": "/vmess-path" // WebSocket 路径，客户端需匹配，可自定义
       },
       "tcp_fast_open": true, // 启用 TCP Fast Open
       "tls": {
