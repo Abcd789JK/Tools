@@ -49,11 +49,9 @@ lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 
 ---
 
-## 换源
+## Debian 系统操作流程
 
-## Debian 系统清华源
-
-### 1.启动容器，然后使用下面命令，一键换源
+### 1.换源 (清华源)
 
 ```bash
 cat << EOF > /etc/apt/sources.list
@@ -64,7 +62,33 @@ deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main 
 EOF
 ```
 
-## Ubuntu 系统清华源
+### 2.更新系统
+
+```bash
+apt update && apt full-upgrade -y
+```
+
+### 3.安装必须插件
+
+```bash
+apt install -y curl git wget nano
+```
+
+### 4.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
+
+```bash
+apt install -y openssh-server && \
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+systemctl enable ssh && \
+systemctl restart ssh
+```
+
+---
+
+## Ubuntu 系统操作流程
+
+### 1.换源 (清华源)
 
 ```bash
 cat << EOF > /etc/apt/sources.list
@@ -75,53 +99,19 @@ deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ oracular-security main restrict
 EOF
 ```
 
-## Fedora 系统清华源
-
-```bash
-sed -e 's|^metalink=|#metalink=|g' \
-    -e 's|^#baseurl=http://download.example/pub/fedora/linux|baseurl=https://mirrors.tuna.tsinghua.edu.cn/fedora|g' \
-    -i.bak \
-    /etc/yum.repos.d/fedora.repo \
-    /etc/yum.repos.d/fedora-updates.repo
-```
-
-## Alpine 系统清华源
-
-```bash
-sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories
-```
-
-## Arch 系统清华源(二选一)
-
-```bash
-pacman -S --noconfirm reflector && reflector --country China --age 6 --protocol https --sort rate --save /etc/pacman.d/mirrorlist && pacman -Syyu
-```
-
-```bash
-echo "Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/\$repo/os/\$arch
-Server = https://mirrors.bfsu.edu.cn/archlinux/\$repo/os/\$arch
-Server = https://mirrors.aliyun.com/archlinux/\$repo/os/\$arch
-Server = https://mirrors.zju.edu.cn/archlinux/\$repo/os/\$arch
-Server = https://mirrors.sjtug.sjtu.edu.cn/archlinux/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist && pacman -Syyu
-```
-
----
-
-## Debian Ubuntu 系统操作流程
-
-### 1.更新系统
+### 2.更新系统
 
 ```bash
 apt update && apt full-upgrade -y
 ```
 
-### 2.安装必须插件
+### 3.安装必须插件
 
 ```bash
 apt install -y curl git wget nano
 ```
 
-### 3.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
+### 4.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
 
 ```bash
 apt install -y openssh-server && \
@@ -135,19 +125,29 @@ systemctl restart ssh
 
 ## Fedora 系统操作流程
 
-### 1.更新系统
+### 1.换源 (清华源)
+
+```bash
+sed -e 's|^metalink=|#metalink=|g' \
+    -e 's|^#baseurl=http://download.example/pub/fedora/linux|baseurl=https://mirrors.tuna.tsinghua.edu.cn/fedora|g' \
+    -i.bak \
+    /etc/yum.repos.d/fedora.repo \
+    /etc/yum.repos.d/fedora-updates.repo
+```
+
+### 2.更新系统
 
 ```bash
 dnf upgrade --refresh -y
 ```
 
-### 2.安装必须插件
+### 3.安装必须插件
 
 ```bash
 dnf install -y curl git wget nano bash
 ```
 
-### 3.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
+### 4.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
 
 ```bash
 dnf install -y openssh-server && \
@@ -161,19 +161,25 @@ systemctl restart sshd
 
 ## Alpine 系统操作流程
 
-### 1.更新系统
+### 1.换源 (清华源)
+
+```bash
+sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories
+```
+
+### 2.更新系统
 
 ```bash
 apk update && apk upgrade
 ```
 
-### 2.安装必须插件
+### 3.安装必须插件
 
 ```bash
 apk add curl git wget nano bash
 ```
 
-### 3.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
+### 4.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
 
 ```bash
 apk add --no-cache openssh && \
@@ -188,19 +194,33 @@ rc-service sshd restart
 
 ## Arch 系统操作流程
 
-### 1.更新系统
+### 1.换源 (清华源 二选一)
+
+```bash
+pacman -S --noconfirm reflector && reflector --country China --age 6 --protocol https --sort rate --save /etc/pacman.d/mirrorlist && pacman -Syyu
+```
+
+```bash
+echo "Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/\$repo/os/\$arch
+Server = https://mirrors.bfsu.edu.cn/archlinux/\$repo/os/\$arch
+Server = https://mirrors.aliyun.com/archlinux/\$repo/os/\$arch
+Server = https://mirrors.zju.edu.cn/archlinux/\$repo/os/\$arch
+Server = https://mirrors.sjtug.sjtu.edu.cn/archlinux/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist && pacman -Syyu
+```
+
+### 2.更新系统
 
 ```bash
 pacman -Syu --noconfirm
 ```
 
-### 2.安装必须插件
+### 3.安装必须插件
 
 ```bash
 pacman -S --noconfirm curl git wget nano bash
 ```
 
-### 3.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
+### 4.因为 PVE 虚拟机容器，默认是没有开启远程 root 登录，如需开启使用下面命令
 
 ```bash
 pacman -Sy --noconfirm openssh && \
@@ -215,7 +235,7 @@ systemctl enable --now sshd && \
 systemctl restart sshd
 ```
 
-### 4.如何出现 PGP 密钥验证错误(先试试第一组，不行在试试第二组)
+### 5.如何出现 PGP 密钥验证错误(先试试第一组，不行在试试第二组)
 
 ```bash
 # 第一组
@@ -273,7 +293,7 @@ wget -O install.sh https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/
 
 ## Linux 系统设置上海时区
 
-### 支持 Debian Ubuntu alpine 系统
+### 支持 Debian Ubuntu 系统
 
 ```bash
 # 二选一
@@ -282,4 +302,13 @@ echo "Asia/Hong_Kong" > /etc/timezone
 
 cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 echo "Asia/Shanghai" | tee /etc/timezone > /dev/null
+```
+
+### 支持 alpine 系统
+
+```bash
+apk add --no-cache tzdata && \
+ln -sf /usr/share/zoneinfo/Asia/Hong_Kong /etc/localtime && \
+echo "Asia/Hong_Kong" > /etc/timezone
+
 ```
