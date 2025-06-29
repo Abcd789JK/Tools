@@ -3,6 +3,16 @@
     "level": "info", // 日志级别，建议保持 info 以记录必要信息
     "timestamp": true // 启用日志时间戳，便于调试
   },
+  "dns": {
+    "servers": [
+      {
+        "address": "tls://223.5.5.5" // 主 DNS 服务器（阿里公共 DNS），使用 DNS over TLS
+      },
+      {
+        "address": "tls://119.29.29.29" // 备用 DNS 服务器（腾讯公共 DNS），使用 DNS over TLS
+      }
+    ]
+  },
   "inbounds": [
     {
       "type": "shadowsocks", // Shadowsocks 协议服务端
@@ -101,6 +111,10 @@
     {
       "type": "direct", // 直接出站，所有流量直连
       "tag": "direct-out" // 标识直接出站
+    },
+    {
+      "type": "dns", // DNS 出站，专门处理 DNS 查询
+      "tag": "dns-out" // DNS 出站的唯一标识
     }
   ],
   "route": {
@@ -113,6 +127,10 @@
           "hysteria2-in" // Hysteria2 入站
         ],
         "outbound": "direct-out" // 所有入站流量通过 direct-out 出站
+      },
+      {
+        "protocol": "dns", // 单独处理 DNS 查询
+        "outbound": "dns-out" // 路由到 DNS 出站
       }
     ]
   }
