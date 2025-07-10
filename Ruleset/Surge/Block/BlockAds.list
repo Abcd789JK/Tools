@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-05-28 10:46:59
+#!date = 2025-07-10 19:38:53
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -155,34 +155,29 @@ DOMAIN,pagead2.googlesyndication.com
 DOMAIN,www.googleadservices.com
 DOMAIN-KEYWORD,adservice.google.com.
 # 番茄小说
-DOMAIN,dig.bdurl.net
-DOMAIN,dig.zjurl.cn
 DOMAIN,mon.zijieapi.com
 DOMAIN,lf-ad-ies.bytecdn.cn
-DOMAIN,i.snssdk.com
-DOMAIN,is.snssdk.com
-DOMAIN,bds.snssdk.com
 DOMAIN,dm.bytedance.com
 DOMAIN,dm.pstatp.com
 DOMAIN,dm.toutiao.com
-DOMAIN,log.snssdk.com
 DOMAIN,s3a.pstatp.com
-DOMAIN,sdfp.snssdk.com
 DOMAIN,tosv.boe.byted.org
 DOMAIN,tosv.byted.org
-DOMAIN,extlog.snssdk.com
 DOMAIN,mssdk-bu.bytedance.com
 DOMAIN,toblog.ctobsnssdk.com
 DOMAIN,mssdk.volces.com
-DOMAIN,pangolin.snssdk.com
 DOMAIN,gromore.pangolin-sdk-toutiao.com
 DOMAIN,ether-pack.pangolin-sdk-toutiao.com
 DOMAIN-KEYWORD,-ad-sign.byteimg.com
 DOMAIN-KEYWORD,api-access.pangolin-sdk-toutiao
 DOMAIN-KEYWORD,log-api.pangolin-sdk-toutiao
 DOMAIN-KEYWORD,-ad.byteoversea.com
-DOMAIN-KEYWORD,video-cn.snssdk.com
+DOMAIN-KEYWORD,ads
+DOMAIN-KEYWORD,dig.zjurl
+DOMAIN-KEYWORD,dig.bdurl
+DOMAIN-KEYWORD,snssdk.com
 DOMAIN-KEYWORD,asiad.byteactivity
+AND,((DOMAIN-KEYWORD,zijieapi),(DOMAIN-KEYWORD,ads))
 AND,((DOMAIN-KEYWORD,-ad-),(DOMAIN-SUFFIX,byteimg.com))
 AND,((DOMAIN-KEYWORD,-ttam-),(DOMAIN-SUFFIX,ibyteimg.com))
 AND,((DOMAIN-KEYWORD,ssdk-),(DOMAIN-SUFFIX,pangle.io))
@@ -197,13 +192,13 @@ AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-static.i18n-pglstatp.com))
 AND,((DOMAIN-KEYWORD,if),(DOMAIN-KEYWORD,-cdn-tos.bytescm.com))
 AND,((DOMAIN-KEYWORD,if),(DOMAIN-KEYWORD,-analytics.bytescm.com))
 AND,((DOMAIN-KEYWORD,lf),(DOMAIN-KEYWORD,-analytics.bytescm.com))
+AND,((DOMAIN-KEYWORD,lf),(DOMAIN-KEYWORD,-analytics.bytescm.com))
 AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,normal),(DOMAIN-SUFFIX,zijieapi.com))
 AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-access-),(DOMAIN-SUFFIX,pangle.io))
 AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-log-),(DOMAIN-SUFFIX,pangle.io))
 AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-dual-event-),(DOMAIN-SUFFIX,pangle.io))
 AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,pangolin),(DOMAIN-SUFFIX,sgsnssdk.com))
 AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,-normal-lq),(DOMAIN-SUFFIX,zijieapi.com))
-AND,((DOMAIN-KEYWORD,tnc),(AND,((OR,((DOMAIN-KEYWORD,-bjlgy),(DOMAIN-KEYWORD,-alisc),(DOMAIN-KEYWORD,-aliec),(DOMAIN-KEYWORD,-alisg))),(OR,((DOMAIN-SUFFIX,snssdk.com),(DOMAIN-SUFFIX,isnssdk.com),(DOMAIN-SUFFIX,toutiaoapi.com),(DOMAIN-SUFFIX,bytedance.com),(DOMAIN-SUFFIX,zijieapi.com))))))
 URL-REGEX,"^http:\/\/p\d+-be-pack-sign\.pglstatp-toutiao\.com\/(ad-app-package|web\.business\.image)\/"
 
 # ======= G ======= #
