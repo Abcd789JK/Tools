@@ -6,12 +6,22 @@
   "dns": {
     "servers": [
       {
+        "tag": "ali-dns",
         "address": "tls://223.5.5.5" // 主 DNS 服务器（阿里公共 DNS），使用 DNS over TLS
       },
       {
+        "tag": "tencent-dns",
         "address": "tls://119.29.29.29" // 备用 DNS 服务器（腾讯公共 DNS），使用 DNS over TLS
       }
-    ]
+    ],
+    "strategy": "prefer_ipv4", // 优先 IPv4，适合国内网络
+    "rules": [
+      {
+        "query_type": ["A", "AAAA"],
+        "server": "ali-dns" // 国内域名解析优先使用阿里 DNS
+      }
+    ],
+    "final": "ali-dns" // 默认使用阿里 DNS
   },
   "inbounds": [
     {
@@ -115,6 +125,10 @@
     {
       "type": "dns", // DNS 出站，专门处理 DNS 查询
       "tag": "dns-out" // DNS 出站的唯一标识
+    },
+    {
+      "type": "block",
+      "tag": "block-out" // 阻止未匹配流量
     }
   ],
   "route": {
@@ -131,7 +145,19 @@
       {
         "protocol": "dns", // 单独处理 DNS 查询
         "outbound": "dns-out" // 路由到 DNS 出站
+      },
+      {
+        "ip_cidr": ["0.0.0.0/0", "::/0"],
+        "outbound": "block-out" // 阻止未匹配流量
       }
-    ]
+    ],
+    "final": "direct-out", // 默认直连
+    "auto_detect_interface": true // 自动检测网络接口
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "/etc/sing-box/cache.db" // 缓存路由数据，优化性能
+    }
   }
 }
