@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-07-10 19:38:53
+#!date = 2025-07-16 15:16:57
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -172,7 +172,6 @@ DOMAIN-KEYWORD,-ad-sign.byteimg.com
 DOMAIN-KEYWORD,api-access.pangolin-sdk-toutiao
 DOMAIN-KEYWORD,log-api.pangolin-sdk-toutiao
 DOMAIN-KEYWORD,-ad.byteoversea.com
-DOMAIN-KEYWORD,ads
 DOMAIN-KEYWORD,dig.zjurl
 DOMAIN-KEYWORD,dig.bdurl
 DOMAIN-KEYWORD,snssdk.com
