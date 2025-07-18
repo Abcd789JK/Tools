@@ -1,25 +1,25 @@
 #!/bin/bash
 
 # ---------------------------------
-# script : mihomo 一键管理脚本 Beta
+# script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2025-05-30 10:24:19
+# date   : 2025-06-05 08:43:42
 # author : ChatGPT
 # ---------------------------------
 
-# 终止脚本执行遇到错误时退出, 并启用管道错误检测
+# 当遇到错误或管道错误时立即退出
 set -e -o pipefail
-
+ 
 # 颜色变量
 red="\033[31m"    # 红色
 green="\033[32m"  # 绿色
 yellow="\033[33m" # 黄色
 blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
-reset="\033[0m"   # 重置颜色
+reset="\033[0m"   # 重置
 
 # 全局变量
-sh_ver="1.0.25"
+sh_ver="0.2.7"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -109,12 +109,6 @@ is_running_alpine() {
     return 1
 }
 
-# 返回主菜单
-start_menu() {
-    echo && echo -n -e "${yellow}* 按回车返回主菜单 *${reset}" && read temp
-    menu
-}
-
 # IP 地址获取
 get_network_info() {
   local default_iface ipv4 ipv6
@@ -124,14 +118,18 @@ get_network_info() {
   echo "$default_iface $ipv4 $ipv6"
 }
 
+# 返回主菜单
+start_menu() {
+    echo && echo -n -e "${yellow}* 按回车返回主菜单 *${reset}" && read temp
+    menu
+}
+
 # 状态显示
 show_status() {
     local file="/root/mihomo/mihomo"
     local version_file="/root/mihomo/version.txt"
     local script_file="/usr/bin/mihomo"
-    local install_status run_status auto_start software_version update_time
-    local default_iface ipv4 ipv6
-    local distro
+    local install_status run_status auto_start software_version update_time default_iface ipv4 ipv6 distro
 
     read default_iface ipv4 ipv6 <<< "$(get_network_info)"
     distro=$(grep -E '^ID=' /etc/os-release | cut -d= -f2)
@@ -144,12 +142,11 @@ show_status() {
         software_version="${red}未安装${reset}"
     else
         install_status="${green}已安装${reset}"
-
         if [ "$distro" = "alpine" ]; then
             if is_running_alpine; then
-                run_status="${green}已运行${reset}"
+              run_status="${green}已运行${reset}"
             else
-                run_status="${red}未运行${reset}"
+              run_status="${red}未运行${reset}"
             fi
             if rc-status default 2>/dev/null | awk '{print $1}' | grep -qx "mihomo"; then
                 auto_start="${green}已设置${reset}"
@@ -168,7 +165,6 @@ show_status() {
                 auto_start="${red}未设置${reset}"
             fi
         fi
-
         if [ -f "$version_file" ]; then
             software_version=$(cat "$version_file")
         else
@@ -182,7 +178,6 @@ show_status() {
     echo -e "当前系统: ${green}${distro}${reset}"
     echo -e "软件版本: ${green}${software_version}${reset}"
     echo -e "本机IPv4: ${green}${ipv4}${reset}"
-    echo -e "本机IPv6: ${green}${ipv6}${reset}"
     echo -e "脚本版本: ${green}${sh_ver}${reset}"
     echo -e "更新时间: ${green}${update_time}${reset}"
 }
@@ -359,7 +354,7 @@ install_mihomo() {
     local folders="/root/mihomo"
     local service_file="/etc/init.d/mihomo"
     local system_file="/etc/systemd/system/mihomo.service"
-    local install_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/Beta/mihomo/install.sh"
+    local install_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/mihomo/install.sh"
     if [ -d "$folders" ]; then
         echo -e "${yellow}检测到 mihomo 已经安装, 并运行在 ${folders} 目录下${reset}"
         echo -e "${red}警告: 卸载后将删除全部内容！！！${reset}"
@@ -543,7 +538,7 @@ update_shell() {
     check_network
     local shell_file="/usr/bin/mihomo"
     local tmp_file="$(mktemp /tmp/mihomo.XXXXXX)"
-    local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/Beta/mihomo/mihomo.sh"
+    local sh_ver_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/mihomo/mihomo.sh"
     trap 'rm -f "$tmp_file"' RETURN
     echo -e "${green}开始检查脚本是否有更新${reset}"
     local sh_new_ver=$(curl -sSL "$(get_url "$sh_ver_url")" | grep 'sh_ver="' | awk -F "=" '{print $NF}' | sed 's/\"//g' | head -1) || {
