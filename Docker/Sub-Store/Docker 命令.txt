@@ -1,0 +1,8 @@
+# 安装命令
+
+docker-compose up -d
+
+
+# 升级命令
+
+docker-compose pull sub-store && docker-compose down && docker-compose up -d
