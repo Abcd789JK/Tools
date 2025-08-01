@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-07-16 15:16:57
+#!date = 2025-08-01 08:03:27
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -11,12 +11,6 @@ DOMAIN,ad.iot.360.cn
 # ======= A ======= #
 # 阿里云盘
 IP-CIDR,203.107.1.1/24
-# 爱奇艺
-DOMAIN,api.iqiyi.com
-DOMAIN,access.if.iqiyi.com
-IP-CIDR,103.44.59.54/32
-IP-CIDR,111.63.147.158/32
-IP-CIDR,116.211.198.237/32
 # 艾狄墨搏 - 广告服务商
 DOMAIN,monitor.ssp.admobile.top
 DOMAIN,sdk.ssp.admobile.top
