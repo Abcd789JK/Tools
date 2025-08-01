@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-08-01 08:09:05
+#!date = 2025-08-01 08:25:55
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -18,22 +18,17 @@ DOMAIN,f74f7f7765f8a2f6.ngaa.net.cn
 DOMAIN,ef-dongfeng.tanx.com
 DOMAIN,iqiyim.adtrack.enlightent.cn
 DOMAIN,dig.bdurl.net
-DOMAIN,t7z.cupid.iqiyi.com
 DOMAIN,t7z.cupid.ptqy.gitv.tv
 DOMAIN,access.if.iqiyi.com
-DOMAIN-SUFFIX,cupid.iqiyi.com
-DOMAIN-SUFFIX,t7z.cupid.iqiyi.com
 DOMAIN-SUFFIX,static-s.iqiyi.com
 DOMAIN-SUFFIX,a.ckm.iqiyi.com
 DOMAIN-SUFFIX,ad.m.iqiyi.com
 DOMAIN-SUFFIX,afp.iqiyi.com
-DOMAIN-SUFFIX,api.cupid.iqiyi.com
 DOMAIN-SUFFIX,api.cupid.qiyi.com
 DOMAIN-SUFFIX,c.uaa.iqiyi.com
 DOMAIN-SUFFIX,cloudpush.iqiyi.com
 DOMAIN-SUFFIX,cm.passport.iqiyi.com
 DOMAIN-SUFFIX,count.game.pps.tv
-DOMAIN-SUFFIX,cupid.iqiyi.com
 DOMAIN-SUFFIX,emoticon.sns.iqiyi.com
 DOMAIN-SUFFIX,gamecenter.iqiyi.com
 DOMAIN-SUFFIX,mbdlog.iqiyi.com
@@ -45,7 +40,6 @@ DOMAIN-SUFFIX,static.g.ppstream.com
 DOMAIN-SUFFIX,store.iqiyi.com
 DOMAIN-SUFFIX,tracker.sns.iqiyi.com
 DOMAIN-SUFFIX,yuedu.iqiyi.com
-DOMAIN-SUFFIX,msga.cupid.iqiyi.com
 DOMAIN-SUFFIX,nl.notice.iqiyi.com
 DOMAIN-SUFFIX,nl.rcd.iqiyi.com
 DOMAIN-SUFFIX,notice.iqiyi.com
@@ -108,35 +102,167 @@ DOMAIN-SUFFIX,u3.ucweb.com
 
 # ======= B ======= #
 # 百度
-DOMAIN,180.76.76.200
-DOMAIN-SUFFIX, pos.baidu.com
-DOMAIN,httpdns.baidubce.com
+DOMAIN-SUFFIX,duapps.com
+DOMAIN-SUFFIX,cpro.baidu.com
+DOMAIN-SUFFIX,pos.baidu.com
+DOMAIN,afd.baidu.com
 DOMAIN,als.baidu.com
-DOMAIN,bgg.baidu.com
-DOMAIN,cpro.baidustatic.com
-DOMAIN,feed-image.baidu.com
-DOMAIN,click-bes.baidu.com
-DOMAIN,eclick.baidu.com
-DOMAIN,mobads-logs.baidu.com
-DOMAIN,mobads-pre-config.cdn.bcebos.com
+DOMAIN,duclick.baidu.com
 DOMAIN,mobads.baidu.com
+DOMAIN,mobads-logs.baidu.com
 DOMAIN,nadvideo2.baidu.com
-DOMAIN,wn.pos.baidu.com
-DOMAIN,miniapp-ad.cdn.bcebos.com
-DOMAIN,httpdns.baidu.com
-DOMAIN,httpsdns.baidu.com
-DOMAIN,httpdns.bcelive.com
-DOMAIN,httpdns.n.shifen.com
-DOMAIN-SUFFIX,union.baidu.cn
+DOMAIN,nsclick.baidu.com
+DOMAIN-SUFFIX,bce.baidu.com
+DOMAIN-SUFFIX,bar.baidu.com
+DOMAIN-SUFFIX,baiduyubaidu.com
+DOMAIN-SUFFIX,baidutv.baidu.com
+DOMAIN-SUFFIX,baichuan.baidu.com
+DOMAIN-SUFFIX,appc.baidu.com
+DOMAIN-SUFFIX,anquan.baidu.com
+DOMAIN-SUFFIX,adscdn.baidu.com
+DOMAIN-SUFFIX,adm.baidu.com
+DOMAIN-SUFFIX,ad.player.baidu.com
+DOMAIN-SUFFIX,a.baidu.com
+DOMAIN-SUFFIX,antivirus.baidu.com
+DOMAIN-SUFFIX,baifen.music.baidu.com
+DOMAIN-SUFFIX,banlv.baidu.com
+DOMAIN-SUFFIX,cm.baidu.com
+DOMAIN-SUFFIX,cpro.zhidao.baidu.com
+DOMAIN-SUFFIX,cleaner.baidu.com
+DOMAIN-SUFFIX,cjhq.baidu.com
+DOMAIN-SUFFIX,cb.baidu.com
+DOMAIN-SUFFIX,c.baidu.com
+DOMAIN-SUFFIX,btlaunch.baidu.com
+DOMAIN-SUFFIX,bdplus.baidu.com
+DOMAIN-SUFFIX,cbjs.baidu.com
+DOMAIN-SUFFIX,cpro2.baidu.com
+DOMAIN-SUFFIX,cpu-admin.baidu.com
+DOMAIN-SUFFIX,10086.cn.baidu.cdn.yiwk.com
+DOMAIN-SUFFIX,360baidus.com
+DOMAIN-SUFFIX,app.ibaiducdn.com
+DOMAIN-SUFFIX,baidu.cybcyw.com
+DOMAIN-SUFFIX,baidu.dsp.tansuotv.com
+DOMAIN-SUFFIX,baidu.greenxf.cn
+DOMAIN-SUFFIX,baidu.jz5u.net
+DOMAIN-SUFFIX,baiduace.com
+DOMAIN-SUFFIX,baidujs.cnys.com
+DOMAIN-SUFFIX,baidulao.com
+DOMAIN-SUFFIX,baidut.github.io
+DOMAIN-SUFFIX,baidu-union-js.xiachufang.com
+DOMAIN-SUFFIX,baidu-union-pos.xiachufang.com
+DOMAIN-SUFFIX,baiduzhidahao.cc
+DOMAIN-SUFFIX,cpro.baidu.cn
+DOMAIN-SUFFIX,crs.baidu.com
+DOMAIN-SUFFIX,datax.baidu.com
+DOMAIN-SUFFIX,dl.client.baidu.com
+DOMAIN-SUFFIX,dl.ops.baidu.com
+DOMAIN-SUFFIX,dl1sw.baidu.com
+DOMAIN-SUFFIX,dl2.bav.baidu.com
+DOMAIN-SUFFIX,dlsw.baidu.com
+DOMAIN-SUFFIX,dlsw.br.baidu.com
+DOMAIN-SUFFIX,dl-vip.bav.baidu.com
+DOMAIN-SUFFIX,dl-vip.pcfaster.baidu.co.th
+DOMAIN-SUFFIX,download.bav.baidu.com
+DOMAIN-SUFFIX,download.sd.baidu.com
+DOMAIN-SUFFIX,drmcmm.baidu.com
+DOMAIN-SUFFIX,duiwai.baidu.com
+DOMAIN-SUFFIX,dxp.baidu.com
+DOMAIN-SUFFIX,dzl.baidu.com
+DOMAIN-SUFFIX,e.baidu.com
+DOMAIN-SUFFIX,eclick.baidu.com
+DOMAIN-SUFFIX,eiv.baidu.com
+DOMAIN-SUFFIX,em.baidu.com
+DOMAIN-SUFFIX,entry.baidu.com
+DOMAIN-SUFFIX,ers.baidu.com
+DOMAIN-SUFFIX,fclick.baidu.com
+DOMAIN-SUFFIX,feed.baidu.com
+DOMAIN-SUFFIX,fexclick.baidu.com
+DOMAIN-SUFFIX,g.baidu.com
+DOMAIN-SUFFIX,gimg.baidu.com
+DOMAIN-SUFFIX,guanjia.baidu.com
+DOMAIN-SUFFIX,hc.baidu.com
+DOMAIN-SUFFIX,hdj.baidu.com
+DOMAIN-SUFFIX,hpd.baidu.com
+DOMAIN-SUFFIX,idm-su.baidu.com
+DOMAIN-SUFFIX,iebar.baidu.com
+DOMAIN-SUFFIX,ikcode.baidu.com
+DOMAIN-SUFFIX,iwanad.baidu.com
+DOMAIN-SUFFIX,j.br.baidu.com
+DOMAIN-SUFFIX,jb.mbaidu.top
+DOMAIN-SUFFIX,js.mbaidu.top
+DOMAIN-SUFFIX,kstj.baidu.com
+DOMAIN-SUFFIX,m.baidu.com.yiqisee.cn
+DOMAIN-SUFFIX,m.baidu.com.zhiduo.org
+DOMAIN-SUFFIX,m1.baidu.com
+DOMAIN-SUFFIX,ma.baidu.com
+DOMAIN-SUFFIX,mpro.baidu.com
+DOMAIN-SUFFIX,msite.baidu.com
+DOMAIN-SUFFIX,mssp.baidu.com
+DOMAIN-SUFFIX,mtj.baidu.com
+DOMAIN-SUFFIX,neirong.baidu.com
+DOMAIN-SUFFIX,nlog.baidu.com
+DOMAIN-SUFFIX,nsclickvideo.baidu.com
+DOMAIN-SUFFIX,openrcv.baidu.com
+DOMAIN-SUFFIX,paimgcdn.baidu.com
+DOMAIN-SUFFIX,pc.videoclick.baidu.com
+DOMAIN-SUFFIX,push.zhanzhang.baidu.com
+DOMAIN-SUFFIX,qianclick.baidu.com
+DOMAIN-SUFFIX,release.baidu.com
+DOMAIN-SUFFIX,river.zhidao.baidu.com
+DOMAIN-SUFFIX,rj.baidu.com
+DOMAIN-SUFFIX,rplog.baidu.com
+DOMAIN-SUFFIX,s.baidu.com
+DOMAIN-SUFFIX,sclick.baidu.com
+DOMAIN-SUFFIX,sestat.baidu.com
+DOMAIN-SUFFIX,shadu.baidu.com
+DOMAIN-SUFFIX,sobar.baidu.com
+DOMAIN-SUFFIX,sobartop.baidu.com
+DOMAIN-SUFFIX,spcode.baidu.com
+DOMAIN-SUFFIX,tk.baidu.com
+DOMAIN-SUFFIX,tkweb.baidu.com
+DOMAIN-SUFFIX,toolbar.baidu.com
+DOMAIN-SUFFIX,tuijian.baidu.com
+DOMAIN-SUFFIX,tuisong.baidu.com
+DOMAIN-SUFFIX,ucstat.baidu.com
+DOMAIN-SUFFIX,ulic.baidu.com
+DOMAIN-SUFFIX,ulog.imap.baidu.com
 DOMAIN-SUFFIX,union.baidu.com
-URL-REGEX,^http:\/\/180\.76\.76\.112\/v\d\/
-URL-REGEX,^http:\/\/180\.76\.76\.112\/v\d\/resolve
-URL-REGEX,^http:\/\/180\.76\.76\.220\/v\d\/resolve
-IP-CIDR,186.76.76.200/32
-IP-CIDR,180.76.76.200/32
+DOMAIN-SUFFIX,union.baidustatic.guannin.com
+DOMAIN-SUFFIX,unionimage.baidu.com
+DOMAIN-SUFFIX,utility.baidu.com
+DOMAIN-SUFFIX,utk.baidu.com
+DOMAIN-SUFFIX,videopush.baidu.com
+DOMAIN-SUFFIX,w.gdown.baidu.com
+DOMAIN-SUFFIX,w.x.baidu.com
+DOMAIN-SUFFIX,wangmeng.baidu.com
+DOMAIN-SUFFIX,weishi.baidu.com
+DOMAIN-SUFFIX,wisepush.video.baidu.com
+DOMAIN-SUFFIX,wm.baidu.com
+DOMAIN-SUFFIX,yingxiao.baidu.com
+DOMAIN-SUFFIX,znsv.baidu.com
+DOMAIN-SUFFIX,baidustatic.com
+DOMAIN-SUFFIX,als.baidu.com
+DOMAIN-SUFFIX,duclick.baidu.com
+DOMAIN-SUFFIX,hm.baidu.com
+DOMAIN-SUFFIX,hmma.baidu.com
+DOMAIN-SUFFIX,mobads.baidu.com
+DOMAIN-SUFFIX,mobads-logs.baidu.com
+DOMAIN-SUFFIX,nsclick.baidu.com
+DOMAIN,hm.baidu.com
+DOMAIN,hmma.baidu.com
 # 百度地图
 DOMAIN,afd.baidu.com
 DOMAIN,afdconf.baidu.com
+DOMAIN,afd.baidu.com
+DOMAIN,afdconf.baidu.com
+DOMAIN,httpdns.baidubce.com
+DOMAIN,lc.map.baidu.com
+DOMAIN-KEYWORD,api.sobot.com
+DOMAIN-SUFFIX,cm.ad.bilibili.com
+DOMAIN-SUFFIX,cm.adcommon.bilibili.com
+DOMAIN-SUFFIX,cm.game.bilibili.com
+DOMAIN-SUFFIX,cm.track.biligame.bilibili.com
+IP-CIDR,180.76.76.200/32
 # 哔哩哔哩
 DOMAIN,api.biliapi.com
 DOMAIN,api.biliapi.net
@@ -150,7 +276,7 @@ URL-REGEX,"^http:\/\/upos-sz-static\.bilivideo\.com\/ssaxcode\/\w{2}\/\w{2}\/\w{
 # 昌原云充
 DOMAIN,m.adyounger.com
 # ChatGPT
-DOMAIN, o33249.ingest.sentry.io
+DOMAIN,o33249.ingest.sentry.io
 # Clue 智库
 DOMAIN,api.helloclue.com
 DOMAIN,brahe.apptimize.com
@@ -209,6 +335,14 @@ DOMAIN,toblog.ctobsnssdk.com
 DOMAIN,mssdk.volces.com
 DOMAIN,gromore.pangolin-sdk-toutiao.com
 DOMAIN,ether-pack.pangolin-sdk-toutiao.com
+DOMAIN,activity-ag.awemeughun.com
+DOMAIN,v6-novelapp.ixigua.com
+DOMAIN,msync-im1-vip6-std.easemob.com
+DOMAIN,apd-pcdnwxlogin.teg.tencent-cloud.net
+DOMAIN,api.iegadp.qq.com
+DOMAIN-SUFFIX,novelapp.ixigua.com
+DOMAIN-SUFFIX,default.ixigua.com
+DOMAIN-SUFFIX,byteorge.com
 DOMAIN-KEYWORD,-ad-sign.byteimg.com
 DOMAIN-KEYWORD,api-access.pangolin-sdk-toutiao
 DOMAIN-KEYWORD,log-api.pangolin-sdk-toutiao
@@ -240,6 +374,12 @@ AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-dual-event-),(DOMAIN-SUFFIX,pangle.io
 AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,pangolin),(DOMAIN-SUFFIX,sgsnssdk.com))
 AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,-normal-lq),(DOMAIN-SUFFIX,zijieapi.com))
 URL-REGEX,"^http:\/\/p\d+-be-pack-sign\.pglstatp-toutiao\.com\/(ad-app-package|web\.business\.image)\/"
+IP-CIDR,49.71.37.101/32
+IP-CIDR,117.71.105.23/32
+IP-CIDR,218.94.207.205/32
+IP-CIDR,117.92.229.188/32
+IP-CIDR,101.36.166.16/32
+IP-CIDR,180.96.2.114/32
 
 # ======= G ======= #
 # 工商银行
