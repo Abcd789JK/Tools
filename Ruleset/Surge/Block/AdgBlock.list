@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-08-01 08:03:27
+#!date = 2025-08-01 08:09:05
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -11,6 +11,56 @@ DOMAIN,ad.iot.360.cn
 # ======= A ======= #
 # 阿里云盘
 IP-CIDR,203.107.1.1/24
+# 爱奇艺
+DOMAIN,api.iqiyi.com
+DOMAIN,cr-status.iqiyi.com
+DOMAIN,f74f7f7765f8a2f6.ngaa.net.cn
+DOMAIN,ef-dongfeng.tanx.com
+DOMAIN,iqiyim.adtrack.enlightent.cn
+DOMAIN,dig.bdurl.net
+DOMAIN,t7z.cupid.iqiyi.com
+DOMAIN,t7z.cupid.ptqy.gitv.tv
+DOMAIN,access.if.iqiyi.com
+DOMAIN-SUFFIX,cupid.iqiyi.com
+DOMAIN-SUFFIX,t7z.cupid.iqiyi.com
+DOMAIN-SUFFIX,static-s.iqiyi.com
+DOMAIN-SUFFIX,a.ckm.iqiyi.com
+DOMAIN-SUFFIX,ad.m.iqiyi.com
+DOMAIN-SUFFIX,afp.iqiyi.com
+DOMAIN-SUFFIX,api.cupid.iqiyi.com
+DOMAIN-SUFFIX,api.cupid.qiyi.com
+DOMAIN-SUFFIX,c.uaa.iqiyi.com
+DOMAIN-SUFFIX,cloudpush.iqiyi.com
+DOMAIN-SUFFIX,cm.passport.iqiyi.com
+DOMAIN-SUFFIX,count.game.pps.tv
+DOMAIN-SUFFIX,cupid.iqiyi.com
+DOMAIN-SUFFIX,emoticon.sns.iqiyi.com
+DOMAIN-SUFFIX,gamecenter.iqiyi.com
+DOMAIN-SUFFIX,mbdlog.iqiyi.com
+DOMAIN-SUFFIX,msg.iqiyi.com
+DOMAIN-SUFFIX,msg.video.qiyi.com
+DOMAIN-SUFFIX,msg2.video.qiyi.com
+DOMAIN-SUFFIX,static.g.iqiyi.com
+DOMAIN-SUFFIX,static.g.ppstream.com
+DOMAIN-SUFFIX,store.iqiyi.com
+DOMAIN-SUFFIX,tracker.sns.iqiyi.com
+DOMAIN-SUFFIX,yuedu.iqiyi.com
+DOMAIN-SUFFIX,msga.cupid.iqiyi.com
+DOMAIN-SUFFIX,nl.notice.iqiyi.com
+DOMAIN-SUFFIX,nl.rcd.iqiyi.com
+DOMAIN-SUFFIX,notice.iqiyi.com
+DOMAIN-SUFFIX,noxagile.duapp.com
+DOMAIN-SUFFIX,paopao.iqiyi.com
+DOMAIN-SUFFIX,policy.video.iqiyi.com
+DOMAIN-SUFFIX,ifacelog.iqiyi.com
+IP-CIDR,103.44.59.54/32
+IP-CIDR,203.107.63.154/32
+IP-CIDR,101.227.97.240/32
+IP-CIDR,101.227.200.11/32
+IP-CIDR,101.227.200.28/32
+IP-CIDR,124.192.153.42/32
+IP-CIDR,111.63.147.158/32
+IP-CIDR,116.211.198.237/32
 # 艾狄墨搏 - 广告服务商
 DOMAIN,monitor.ssp.admobile.top
 DOMAIN,sdk.ssp.admobile.top
@@ -59,7 +109,7 @@ DOMAIN-SUFFIX,u3.ucweb.com
 # ======= B ======= #
 # 百度
 DOMAIN,180.76.76.200
-DOMAIN-SUFFIX, pos.baidu.com
+DOMAIN-SUFFIX,pos.baidu.com
 DOMAIN,httpdns.baidubce.com
 DOMAIN,als.baidu.com
 DOMAIN,bgg.baidu.com
@@ -76,9 +126,6 @@ DOMAIN,miniapp-ad.cdn.bcebos.com
 DOMAIN,httpdns.baidu.com
 DOMAIN,httpsdns.baidu.com
 DOMAIN,httpdns.bcelive.com
-DOMAIN,dns.iqiyi.com
-DOMAIN,doh.iqiyi.com
-DOMAIN,dns.qiyipic.iqiyi.com
 DOMAIN,httpdns.n.shifen.com
 DOMAIN-SUFFIX,union.baidu.cn
 DOMAIN-SUFFIX,union.baidu.com
@@ -103,7 +150,7 @@ URL-REGEX,"^http:\/\/upos-sz-static\.bilivideo\.com\/ssaxcode\/\w{2}\/\w{2}\/\w{
 # 昌原云充
 DOMAIN,m.adyounger.com
 # ChatGPT
-DOMAIN, o33249.ingest.sentry.io
+DOMAIN,o33249.ingest.sentry.io
 # Clue 智库
 DOMAIN,api.helloclue.com
 DOMAIN,brahe.apptimize.com
