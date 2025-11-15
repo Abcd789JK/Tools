@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-08-01 08:53:42
+#!date = 2025-11-15 09:48:24
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -194,64 +194,40 @@ DOMAIN,pagead2.googlesyndication.com
 DOMAIN,www.googleadservices.com
 DOMAIN-KEYWORD,adservice.google.com.
 # 番茄小说
-DOMAIN,mon.zijieapi.com
-DOMAIN,lf-ad-ies.bytecdn.cn
-DOMAIN,dm.bytedance.com
-DOMAIN,dm.pstatp.com
-DOMAIN,dm.toutiao.com
-DOMAIN,s3a.pstatp.com
-DOMAIN,tosv.boe.byted.org
-DOMAIN,tosv.byted.org
-DOMAIN,mssdk-bu.bytedance.com
-DOMAIN,toblog.ctobsnssdk.com
-DOMAIN,mssdk.volces.com
-DOMAIN,gromore.pangolin-sdk-toutiao.com
-DOMAIN,ether-pack.pangolin-sdk-toutiao.com
-DOMAIN,activity-ag.awemeughun.com
-DOMAIN,v6-novelapp.ixigua.com
-DOMAIN,msync-im1-vip6-std.easemob.com
-DOMAIN,apd-pcdnwxlogin.teg.tencent-cloud.net
-DOMAIN,api.iegadp.qq.com
-DOMAIN-SUFFIX,novelapp.ixigua.com
-DOMAIN-SUFFIX,default.ixigua.com
-DOMAIN-SUFFIX,byteorge.com
-DOMAIN-KEYWORD,-ad-sign.byteimg.com
-DOMAIN-KEYWORD,api-access.pangolin-sdk-toutiao
-DOMAIN-KEYWORD,log-api.pangolin-sdk-toutiao
-DOMAIN-KEYWORD,-ad.byteoversea.com
-DOMAIN-KEYWORD,dig.zjurl
-DOMAIN-KEYWORD,dig.bdurl
-DOMAIN-KEYWORD,snssdk.com
-DOMAIN-KEYWORD,asiad.byteactivity
-AND,((DOMAIN-KEYWORD,zijieapi),(DOMAIN-KEYWORD,ads))
-AND,((DOMAIN-KEYWORD,-ad-),(DOMAIN-SUFFIX,byteimg.com))
-AND,((DOMAIN-KEYWORD,-ttam-),(DOMAIN-SUFFIX,ibyteimg.com))
-AND,((DOMAIN-KEYWORD,ssdk-),(DOMAIN-SUFFIX,pangle.io))
-AND,((DOMAIN-KEYWORD,pangolin),(DOMAIN-SUFFIX,sgsnssdk.com))
-AND,((DOMAIN-KEYWORD,lf),(DOMAIN-KEYWORD,-short.bytetos.com))
-AND,((DOMAIN-KEYWORD,v),(DOMAIN-KEYWORD,-be-pack.pglstatp-toutiao.com))
-AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-be-pack.pglstatp-toutiao.com))
-AND,((DOMAIN-KEYWORD,s),(DOMAIN-KEYWORD,-fe-scm.pglstatp-toutiao.com))
-AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-ttcdn-tos.pstatp.com))
-AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-fe-tos.pglstatp-toutiao.com))
-AND,((DOMAIN-KEYWORD,sf),(DOMAIN-KEYWORD,-static.i18n-pglstatp.com))
-AND,((DOMAIN-KEYWORD,if),(DOMAIN-KEYWORD,-cdn-tos.bytescm.com))
-AND,((DOMAIN-KEYWORD,if),(DOMAIN-KEYWORD,-analytics.bytescm.com))
-AND,((DOMAIN-KEYWORD,lf),(DOMAIN-KEYWORD,-analytics.bytescm.com))
-AND,((DOMAIN-KEYWORD,lf),(DOMAIN-KEYWORD,-analytics.bytescm.com))
-AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,normal),(DOMAIN-SUFFIX,zijieapi.com))
-AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-access-),(DOMAIN-SUFFIX,pangle.io))
-AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-log-),(DOMAIN-SUFFIX,pangle.io))
-AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,-dual-event-),(DOMAIN-SUFFIX,pangle.io))
-AND,((DOMAIN-KEYWORD,api),(DOMAIN-KEYWORD,pangolin),(DOMAIN-SUFFIX,sgsnssdk.com))
-AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,-normal-lq),(DOMAIN-SUFFIX,zijieapi.com))
-URL-REGEX,"^http:\/\/p\d+-be-pack-sign\.pglstatp-toutiao\.com\/(ad-app-package|web\.business\.image)\/"
-IP-CIDR,49.71.37.101/32
-IP-CIDR,117.71.105.23/32
-IP-CIDR,218.94.207.205/32
-IP-CIDR,117.92.229.188/32
-IP-CIDR,101.36.166.16/32
-IP-CIDR,180.96.2.114/32
+DOMAIN,zlink.ugsdk.cn
+DOMAIN,mon.toutiaocloud.net
+DOMAIN,lf-normal-gr-sourcecdn.bytegecko.com
+DOMAIN,lf-webcast-gr-sourcecdn.bytegecko.com
+DOMAIN,p3-developer.bytemaimg.com
+DOMAIN,webcast-open.douyin.com
+DOMAIN,p11-webcast-sign.douyinpic.com
+DOMAIN,p3-webcast-sign.douyinpic.com
+DOMAIN,log3-applog.fqnovel.com
+DOMAIN,log5-applog.fqnovel.com
+DOMAIN,mon11-misc-lq.fqnovel.com
+DOMAIN,mon11-misc.fqnovel.com
+DOMAIN,mon3-misc.fqnovel.com
+DOMAIN,rtlog3-applog.fqnovel.com
+DOMAIN,rtlog5-applog.fqnovel.com
+DOMAIN,effect.snssdk.com
+DOMAIN,i.snssdk.com
+DOMAIN,is-lq.snssdk.com
+DOMAIN,is.snssdk.com
+DOMAIN,security.snssdk.com
+DOMAIN,vas.snssdk.com
+DOMAIN,mon.toutiaocloud.com
+DOMAIN,abtest3-misc.zijieapi.com
+DOMAIN,ads3-normal.zijieapi.com
+DOMAIN,ads5-normal.zijieapi.com
+DOMAIN,feedback-c.zijieapi.com
+DOMAIN,gecko3.zijieapi.com
+DOMAIN,gecko5.zijieapi.com
+DOMAIN,ma.zijieapi.com
+DOMAIN,minigame3-normal.zijieapi.com
+DOMAIN,minigame5-normal.zijieapi.com
+DOMAIN,mssdk.zijieapi.com
+DOMAIN,timon.zijieapi.com
+DOMAIN,vcs.zijieapi.com
 
 # ======= G ======= #
 # 工商银行
@@ -520,19 +496,17 @@ AND,((URL-REGEX,^http:\/\/\[((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9
 
 # ======= Q ======= #
 # QQ音乐
+DOMAIN,adstats.tencentmusic.com
+DOMAIN,ad.tencentmusic.com
 DOMAIN,adcdn.tencentmusic.com
 DOMAIN,adcdn6.tencentmusic.com
 DOMAIN,adexpo.tencentmusic.com
 DOMAIN,adclick.tencentmusic.com
-DOMAIN,otheve.beacon.qq.com
+DOMAIN,mc.tencentmusic.com
 DOMAIN,monitor.music.qq.com
-DOMAIN,stat.y.qq.com
-DOMAIN,tmeadquic.y.qq.com
-DOMAIN,oth.str.mdt.qq.com
-DOMAIN,h.trace.qq.com
-DOMAIN,p.l.qq.com
+DOMAIN,tmead.y.qq.com
 DOMAIN,tmeadbak.y.qq.com
-DOMAIN-SUFFIX,imtmp.net
+DOMAIN,tmeadquic.y.qq.com
 # 青龙
 DOMAIN-SUFFIX,o1098464.ingest.sentry.io
 # 蜻蜓FM
