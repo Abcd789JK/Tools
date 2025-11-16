@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2025-11-15 09:48:24
+#!date = 2025-11-16 08:45:00
 #!author = RuCu6 
 
 # ======= 0 ======= #
@@ -209,12 +209,6 @@ DOMAIN,mon11-misc.fqnovel.com
 DOMAIN,mon3-misc.fqnovel.com
 DOMAIN,rtlog3-applog.fqnovel.com
 DOMAIN,rtlog5-applog.fqnovel.com
-DOMAIN,effect.snssdk.com
-DOMAIN,i.snssdk.com
-DOMAIN,is-lq.snssdk.com
-DOMAIN,is.snssdk.com
-DOMAIN,security.snssdk.com
-DOMAIN,vas.snssdk.com
 DOMAIN,mon.toutiaocloud.com
 DOMAIN,abtest3-misc.zijieapi.com
 DOMAIN,ads3-normal.zijieapi.com
@@ -228,6 +222,10 @@ DOMAIN,minigame5-normal.zijieapi.com
 DOMAIN,mssdk.zijieapi.com
 DOMAIN,timon.zijieapi.com
 DOMAIN,vcs.zijieapi.com
+DOMAIN-KEYWORD,dig.zjurl
+DOMAIN-KEYWORD,dig.bdurl
+DOMAIN-KEYWORD,snssdk.com
+AND,((DOMAIN-KEYWORD,zijieapi),(DOMAIN-KEYWORD,ads))
 
 # ======= G ======= #
 # 工商银行
