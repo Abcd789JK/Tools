@@ -1,10 +1,11 @@
 #!name = mihomo 配置文件
 #!desc = 说明：理论上适用于所有的 Meta 内核，使用最新的 mrs 规则
-#!date = 2025-04-26 20:47:53
+#!date = 2025-11-19 19:17:41
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
 # 机场配置
+
 
 proxies: 
   - name: "直连"
@@ -20,8 +21,7 @@ tcp-concurrent: true
 
 external-ui: ui
 external-controller: 0.0.0.0:9090
-# 管理面板
-external-ui-url: "https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
+external-ui-url: "https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
 
 find-process-mode: strict
 global-client-fingerprint: chrome
@@ -49,11 +49,8 @@ sniffer:
 dns:
   enable: true
   ipv6: true
-  listen: 0.0.0.0:1053
   enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - "*"
     - "+.lan"
     - "+.local"
     - "+.market.xiaomi.com"
@@ -114,7 +111,7 @@ proxy-groups:
     type: select
     proxies:  [默认,香港,台湾,日本,新加坡,美国,其它地区,全部节点,自动选择,直连]
 
-  # 分隔,下面是地区分组
+  #分隔,下面是地区分组
   - name: 香港
     type: select
     include-all: true

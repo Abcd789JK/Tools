@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-04-29 10:03:30
+# date   : 2025-11-19 19:17:41
 # author : ChatGPT
 # ---------------------------------
 
@@ -21,7 +21,7 @@ reset="\033[0m"   # 重置
 
 # ---------------------------------
 # 全局变量
-sh_ver="1.0.1"
+sh_ver="1.0.5"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -137,18 +137,16 @@ get_schema() {
 # ---------------------------------
 # IPv4/IPv6 转发检查
 check_ip_forward() {
-    local sysctl_file="/etc/sysctl.conf"
-    sed -i 's/^#[[:space:]]*\(net\.ipv4\.ip_forward\s*=\s*1\)/\1/' "$sysctl_file"
-    if ! sysctl net.ipv4.ip_forward | grep -qE '=\s*1'; then
-        sysctl -w net.ipv4.ip_forward=1
-        grep -Eq '^net\.ipv4\.ip_forward\s*=\s*1' "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
-    fi
-    sed -i 's/^#[[:space:]]*\(net\.ipv6\.conf\.all\.forwarding\s*=\s*1\)/\1/' "$sysctl_file"
-    if ! sysctl net.ipv6.conf.all.forwarding | grep -qE '=\s*1'; then
-        sysctl -w net.ipv6.conf.all.forwarding=1
-        grep -Eq '^net\.ipv6\.conf\.all\.forwarding\s*=\s*1' "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
-    fi
-    sysctl -p > /dev/null
+    local sysctl_file="/etc/sysctl.d/99-ip-forward.conf"
+    [ -f "$sysctl_file" ] || touch "$sysctl_file"
+
+    sysctl -w net.ipv4.ip_forward=1
+    sysctl -w net.ipv6.conf.all.forwarding=1
+
+    grep -Eq '^net\.ipv4\.ip_forward\s*=\s*1' "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
+    grep -Eq '^net\.ipv6\.conf\.all\.forwarding\s*=\s*1' "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
+
+    sysctl -p "$sysctl_file" > /dev/null
 }
 
 # ---------------------------------
@@ -218,28 +216,8 @@ download_service() {
 download_wbeui() {
     local wbe_file="/root/mihomo"
     local filename="gh-pages.zip"
-    local url_xd="https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
     local url_za="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
-    echo -e "${green}请选择管理面板 (推荐使用 2 面板)${reset}"
-    echo -e "${cyan}-------------------------${reset}"
-    echo -e "${green}1${reset}. metacubexd 面板"
-    echo -e "${green}2${reset}. zashboard  面板"
-    echo -e "${cyan}-------------------------${reset}"
-    read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: 2]: ${reset}")" mode_choice
-    mode_choice=${mode_choice:-2}
-    case "$mode_choice" in
-        1)
-            download_url="$url_xd"
-            ;;
-        2)
-            download_url="$url_za"
-            ;;
-        *)
-            echo -e "${red}切换至默认: zashboard 面板${reset}"
-            download_url="$url_za"
-            ;;
-    esac
-    wget -O "$filename" "$(get_url "$download_url")" || {
+    wget -O "$filename" "$(get_url "$url_za")" || {
         echo -e "${red}管理面板下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -327,25 +305,39 @@ EOF
 collect_proxy_providers() {
   local providers="proxy-providers:"
   local counter=1
+
   while true; do
-    echo -e "${cyan}正在添加第 $counter 个配置${reset}"
-    read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
-    read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
-    providers="${providers}
-  provider_$(printf "%02d" $counter):
-    url: \"${subscription_url}\"
-    type: http
-    interval: 86400
-    health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
-    override:
-      additional-prefix: \"[${subscription_name}]\""
-    counter=$((counter + 1))
-    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
-    if [[ "$cont" =~ ^[nN]$ ]]; then
-      break
-    fi
+    echo -e "${cyan}正在添加第 ${counter} 个机场配置${reset}" >&2
+
+    # 订阅链接校验
+    while true; do
+      read -p "$(echo -e "${green}请输入机场订阅链接 (http/https): ${reset}")" subscription_url
+      [[ -z "$subscription_url" ]] && { echo -e "${red}订阅链接不能为空！${reset}" >&2; continue; }
+      [[ "$subscription_url" =~ ^https?:// ]] && break
+      echo -e "${red}链接必须以 http:// 或 https:// 开头${reset}" >&2
+    done
+
+    # 机场名称校验
+    while true; do
+      read -p "$(echo -e "${green}请输入机场名称: ${reset}")" subscription_name
+      [[ -n "$subscription_name" ]] && break
+      echo -e "${red}机场名称不能为空！${reset}" >&2
+    done
+
+    # 强制添加前缀，与原始脚本完全一致
+    providers=$(printf '%s\n  provider_%02d:\n    type: http\n    url: "%s"\n    interval: 86400\n    health-check:\n      enable: true\n      interval: 300\n      url: https://www.gstatic.com/generate_404\n    override:\n      additional-prefix: "[%s] "' \
+      "$providers" "$counter" "$subscription_url" "$subscription_name")
+
+    ((counter++))
+
+    read -p "$(echo -e "${yellow}继续添加下一个订阅？(回车继续，n 结束): ${reset}")" cont
+    [[ "${cont,,}" == "n" ]] && break
   done
-  echo "$providers"
+
+  # 若一个都没添加，保留注释避免 YAML 语法错误
+  [[ "$providers" == "proxy-providers:" ]] && providers="${providers}\n  # 未添加任何订阅"
+
+  printf '%s\n' "$providers"
 }
 
 # 配置文件
