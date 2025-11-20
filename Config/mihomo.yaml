@@ -1,6 +1,6 @@
 #!name = mihomo 配置文件
 #!desc = 说明：理论上适用于所有的 Meta 内核，使用最新的 mrs 规则
-#!date = 2025-11-20 10:55:30
+#!date = 2025-11-20 11:06:18
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
@@ -192,6 +192,7 @@ rules:
 rule-anchor:
   ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
   domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
+
 rule-providers:
   private_domain:
     <<: *domain
