@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 11:46:54
+# date   : 2025-11-20 11:49:15
 # author : ChatGPT
 # ---------------------------------
 
@@ -293,6 +293,7 @@ install_mihomo() {
     echo -e "${green}恭喜你! mihomo 已经安装完成${reset}"
     echo
     echo -e "${yellow}配置文件，你可以选择使用我的，也可以选择自己上传${reset}"
+    echo
     echo -e "${red}输入 y/Y 下载默认配置文件${reset}"
     echo
     echo -e "${red}输入 n/N 取消下载默认配置, 需要上传你准备好的配置文件${reset}"
