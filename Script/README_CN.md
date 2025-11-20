@@ -51,7 +51,7 @@ lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 
 ## Debian 系统操作流程
 
-### 1.换源 (清华源)
+### 1.换源 debian 12 (清华源)
 
 ```bash
 cat << EOF > /etc/apt/sources.list
@@ -59,6 +59,17 @@ deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm main contrib non-free 
 deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware
 deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-backports main contrib non-free non-free-firmware
 deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware
+EOF
+```
+
+### debian 13 (清华源)
+
+```bash
+cat << EOF > /etc/apt/sources.list
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ trixie main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ trixie-updates main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ trixie-backports main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian-security trixie-security main contrib non-free non-free-firmware
 EOF
 ```
 
@@ -283,12 +294,6 @@ rc-service mihomo status
 ```bash
 # Debian Ubuntu Fedora 系统
 journalctl -u mihomo -o cat -e
-```
-
-### Beta 版本（我自己测试用的，不建议安装此版本）
-
-```bash
-wget -O install.sh https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/Beta/mihomo/install.sh && chmod +x install.sh && ./install.sh
 ```
 
 ## Linux 系统设置上海时区
