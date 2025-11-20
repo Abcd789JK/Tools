@@ -4,9 +4,11 @@
 >
 > 1.认真看教程，认真看教程，认真看教程，重要事情说三次！
 >
-> 2.支持 tun 和 tproxy 两种模式，看你心情选择。理论上 TUN 占用高那么一丢丢！
+> 2.本脚本支持 Arch Alpine Debian Fedora Ubuntu 系统
 >
-> 3.本脚本支持 Arch Alpine Debian Fedora Ubuntu 系统
+> 3.本脚本优先支持 Debian Ubuntu 系统
+>
+> 4.本脚本默认支持 tun 模式, 你可以在脚本里面选择 TProxy 模式
 
 ## 开启 TUN 模式 {注意：好像需要直通（PVE 虚拟机下操作）}
 
