@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 11:55:27
+# date   : 2025-11-20 12:13:02
 # author : ChatGPT
 # ---------------------------------
 
@@ -260,14 +260,16 @@ config_mihomo() {
     { print }
   ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
   service_restart
+  echo
   echo -e "${green}配置完成，配置文件已保存到：${yellow}${config_file}${reset}"
   echo -e "${green}mihomo 配置完成，正在启动中${reset}"
-  echo -e "${red}管理面板地址和管理命令${reset}"
+  echo -e "${green}恭喜你! mihomo 已成功启动并设置为开机自启${reset}"
+  echo -e "${red}下面是管理面板地址和菜单命令${reset}"
   echo -e "${cyan}=========================${reset}"
   echo -e "${green}http://$ipv4:9090/ui${reset}"
   echo -e "${green}输入: ${yellow}mihomo ${green}进入管理菜单${reset}"
   echo -e "${cyan}=========================${reset}"
-  echo -e "${green}恭喜你! mihomo 已成功启动并设置为开机自启${reset}"
+  
 }
 
 # 安装程序
