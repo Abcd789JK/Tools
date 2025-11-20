@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 11:24:55
+# date   : 2025-11-20 11:46:54
 # author : ChatGPT
 # ---------------------------------
 
@@ -27,46 +27,39 @@ arch_raw=""       # 原始架构
 
 # 系统检测
 check_distro() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        case "$ID" in
-            debian|ubuntu)
-                distro="$ID"
-                pkg_update="apt update && apt upgrade -y"
-                pkg_install="apt install -y"
-                service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl restart mihomo; }
-                ;;
-            alpine)
-                distro="alpine"
-                pkg_update="apk update && apk upgrade"
-                pkg_install="apk add"
-                service_enable() { rc-update add mihomo default; }
-                service_restart() { rc-service mihomo restart; }
-                ;;
-            fedora)
-                distro="fedora"
-                pkg_update="dnf upgrade --refresh -y"
-                pkg_install="dnf install -y"
-                service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl restart mihomo; }
-                ;;
-            arch)
-                distro="arch"
-                pkg_update="pacman -Syu --noconfirm"
-                pkg_install="pacman -S --noconfirm"
-                service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl restart mihomo; }
-                ;;
-            *)
-                echo -e "${red}不支持的系统：${ID}${reset}"
-                exit 1
-                ;;
-        esac
-    else
-        echo -e "${red}无法识别当前系统类型${reset}"
-        exit 1
-    fi
+    [[ -f /etc/os-release ]] || { echo -e "${red}无法识别当前系统类型${reset}"; exit 1; }
+    . /etc/os-release
+    case "$ID" in
+        debian|ubuntu)
+            distro="$ID"
+            pkg_update="apt update && apt upgrade -y"
+            pkg_install="apt install -y"
+            ;;
+        fedora)
+            distro="fedora"
+            pkg_update="dnf upgrade --refresh -y"
+            pkg_install="dnf install -y"
+            ;;
+        arch)
+            distro="arch"
+            pkg_update="pacman -Syu --noconfirm"
+            pkg_install="pacman -S --noconfirm"
+            ;;
+        alpine)
+            distro="alpine"
+            pkg_update="apk update && apk upgrade"
+            pkg_install="apk add"
+            service_enable() { rc-update add mihomo default; }
+            service_restart() { rc-service mihomo restart; }
+            return 0
+            ;;
+        *)
+            echo -e "${red}不支持的系统：$ID${reset}"
+            exit 1
+            ;;
+    esac
+    service_enable() { systemctl enable mihomo; }
+    service_restart() { systemctl daemon-reload && systemctl restart mihomo; }
 }
 
 # 网络检测
@@ -78,21 +71,19 @@ check_network() {
 
 # 链接处理
 get_url() {
-    local url=$1
-    local final_url
-    if [ "$use_cdn" = true ]; then
-        final_url="https://gh-proxy.com/$url"
-        if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
-            final_url="https://github.boki.moe/$url"
-        fi
+    local url="$1"
+    local candidate
+    if [[ $use_cdn == true ]]; then
+        for prefix in "https://gh-proxy.com" "https://github.boki.moe"; do
+            candidate="${prefix}/${url}"
+            curl -sI --fail --connect-timeout 1 -L "$candidate" -o /dev/null && echo "$candidate" && return 0
+        done
     else
-        final_url="$url"
+        candidate="$url"
+        curl -sI --fail --connect-timeout 1 -L "$candidate" -o /dev/null && echo "$candidate" && return 0
     fi
-    if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
-        echo -e "${red}连接失败, 检查网络或代理站点, 稍后重试${reset}" >&2
-        return 1
-    fi
-    echo "$final_url"
+    echo -e "${red}连接失败，请检查网络或代理站点${reset}" >&2
+    return 1
 }
 
 # 系统更新及插件安装
@@ -105,23 +96,13 @@ update_system() {
 get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
-        x86_64)
-            arch='amd64'
-            ;;
-        x86|i686|i386)
-            arch='386'
-            ;;
-        aarch64|arm64)
-            arch='arm64'
-            ;;
-        armv7l)
-            arch='armv7'
-            ;;
-        s390x)
-            arch='s390x'
-            ;;
+        x86_64)              arch=amd64  ;;
+        i?86)                arch=386    ;;
+        aarch64|arm64)       arch=arm64  ;;
+        armv7l)              arch=armv7  ;;
+        s390x)               arch=s390x  ;;
         *)
-            echo -e "${red}不支持的架构：${arch_raw}${reset}"
+            echo -e "${red}不支持的架构: ${arch_raw}${reset}"
             exit 1
             ;;
     esac
@@ -310,9 +291,14 @@ install_mihomo() {
     echo -e "${green}开始下载菜单脚本请等待${reset}"
     download_shell
     echo -e "${green}恭喜你! mihomo 已经安装完成${reset}"
+    echo
+    echo -e "${yellow}配置文件，你可以选择使用我的，也可以选择自己上传${reset}"
     echo -e "${red}输入 y/Y 下载默认配置文件${reset}"
+    echo
     echo -e "${red}输入 n/N 取消下载默认配置, 需要上传你准备好的配置文件${reset}"
+    echo
     echo -e "${red}把你准备好的配置文件上传到 ${folders} 目录下(文件名必须为 config.yaml)${reset}"
+    echo
     read -p "$(echo -e "${yellow}请输入选择(y/n) [默认: y]: ${reset}")" confirm
     confirm=${confirm:-y}
     case "$confirm" in

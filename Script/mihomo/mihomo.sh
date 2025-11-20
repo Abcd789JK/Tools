@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2025-11-20 10:41:50
+# date   : 2025-11-20 11:46:54
 # author : ChatGPT
 # ---------------------------------
 
@@ -27,38 +27,27 @@ arch_raw=""       # 原始架构
 
 # 系统检测
 check_distro() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        case "$ID" in
-            debian|ubuntu)
-                distro="$ID"
-                service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl restart mihomo; }
-                ;;
-            alpine)
-                distro="alpine"
-                service_enable() { rc-update add mihomo default; }
-                service_restart() { rc-service mihomo restart; }
-                ;;
-            fedora)
-                distro="fedora"
-                service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl restart mihomo; }
-                ;;
-            arch)
-                distro="arch"
-                service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl restart mihomo; }
-                ;;
-            *)
-                echo -e "${red}不支持的系统: ${ID}${reset}"
-                exit 1
-                ;;
-        esac
-    else
+    if [[ ! -f /etc/os-release ]]; then
         echo -e "${red}无法识别当前系统类型${reset}"
         exit 1
     fi
+    . /etc/os-release
+    case "$ID" in
+        debian|ubuntu|fedora|arch)
+            distro="$ID"
+            service_enable() { systemctl enable mihomo; }
+            service_restart() { systemctl restart mihomo; }
+            ;;
+        alpine)
+            distro="alpine"
+            service_enable() { rc-update add mihomo default; }
+            service_restart() { rc-service mihomo restart; }
+            ;;
+        *)
+            echo -e "${red}不支持的系统: $ID${reset}"
+            exit 1
+            ;;
+    esac
 }
 
 # 网络检测
@@ -70,21 +59,19 @@ check_network() {
 
 # URL 处理
 get_url() {
-    local url=$1
-    local final_url
-    if [ "$use_cdn" = true ]; then
-        final_url="https://gh-proxy.com/$url"
-        if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
-            final_url="https://github.boki.moe/$url"
-        fi
+    local url="$1"
+    local candidate
+    if [[ $use_cdn == true ]]; then
+        for prefix in "https://gh-proxy.com" "https://github.boki.moe"; do
+            candidate="${prefix}/${url}"
+            curl -sI --fail --connect-timeout 1 -L "$candidate" -o /dev/null && echo "$candidate" && return 0
+        done
     else
-        final_url="$url"
+        candidate="$url"
+        curl -sI --fail --connect-timeout 1 -L "$candidate" -o /dev/null && echo "$candidate" && return 0
     fi
-    if ! curl -sI --fail --connect-timeout 1 -L "$final_url" -o /dev/null; then
-        echo -e "${red}连接失败, 检查网络或代理站点, 稍后重试${reset}" >&2
-        return 1
-    fi
-    echo "$final_url"
+    echo -e "${red}连接失败，请检查网络或代理站点${reset}" >&2
+    return 1
 }
 
 # 检查 mihomo 是否已安装
@@ -380,21 +367,11 @@ install_mihomo() {
 get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
-        x86_64)
-            arch='amd64'
-            ;;
-        x86|i686|i386)
-            arch='386'
-            ;;
-        aarch64|arm64)
-            arch='arm64'
-            ;;
-        armv7l)
-            arch='armv7'
-            ;;
-        s390x)
-            arch='s390x'
-            ;;
+        x86_64)              arch=amd64  ;;
+        i?86)                arch=386    ;;
+        aarch64|arm64)       arch=arm64  ;;
+        armv7l)              arch=armv7  ;;
+        s390x)               arch=s390x  ;;
         *)
             echo -e "${red}不支持的架构: ${arch_raw}${reset}"
             exit 1
