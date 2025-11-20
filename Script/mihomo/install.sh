@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 10:51:19
+# date   : 2025-11-20 11:24:55
 # author : ChatGPT
 # ---------------------------------
 
@@ -35,7 +35,7 @@ check_distro() {
                 pkg_update="apt update && apt upgrade -y"
                 pkg_install="apt install -y"
                 service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
+                service_restart() { systemctl daemon-reload; systemctl restart mihomo; }
                 ;;
             alpine)
                 distro="alpine"
@@ -49,14 +49,14 @@ check_distro() {
                 pkg_update="dnf upgrade --refresh -y"
                 pkg_install="dnf install -y"
                 service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
+                service_restart() { systemctl daemon-reload; systemctl restart mihomo; }
                 ;;
             arch)
                 distro="arch"
                 pkg_update="pacman -Syu --noconfirm"
                 pkg_install="pacman -S --noconfirm"
                 service_enable() { systemctl enable mihomo; }
-                service_restart() { systemctl daemon-reload; systemctl start mihomo; }
+                service_restart() { systemctl daemon-reload; systemctl restart mihomo; }
                 ;;
             *)
                 echo -e "${red}不支持的系统：${ID}${reset}"
