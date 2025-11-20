@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 09:51:22
+# date   : 2025-11-20 10:22:22
 # author : ChatGPT
 # ---------------------------------
 
@@ -139,13 +139,10 @@ get_schema() {
 check_ip_forward() {
     local sysctl_file="/etc/sysctl.d/99-ip-forward.conf"
     [ -f "$sysctl_file" ] || touch "$sysctl_file"
-
     sysctl -w net.ipv4.ip_forward=1
     sysctl -w net.ipv6.conf.all.forwarding=1
-
-    grep -Eq '^net\.ipv4\.ip_forward\s*=\s*1' "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
-    grep -Eq '^net\.ipv6\.conf\.all\.forwarding\s*=\s*1' "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
-
+    grep -Eq '^\s*net\.ipv4\.ip_forward\s*=\s*1' "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
+    grep -Eq '^\s*net\.ipv6\.conf\.all\.forwarding\s*=\s*1' "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
     sysctl -p "$sysctl_file" > /dev/null
 }
 
@@ -255,31 +252,28 @@ get_network_info() {
 }
 
 # 新增订阅
-collect_proxy_providers() {
+config_proxy() {
   local providers="proxy-providers:"
   local counter=1
   while true; do
     echo -e "${cyan}正在添加第 ${counter} 个机场配置${reset}" >&2
-    while true; do
-      read -p "$(echo -e "${green}请输入机场订阅链接 (http/https): ${reset}")" subscription_url
-      [[ -z "$subscription_url" ]] && { echo -e "${red}订阅链接不能为空！${reset}" >&2; continue; }
-      [[ "$subscription_url" =~ ^https?:// ]] && break
-      echo -e "${red}链接必须以 http:// 或 https:// 开头${reset}" >&2
-    done
-    while true; do
-      read -p "$(echo -e "${green}请输入机场名称: ${reset}")" subscription_name
-      [[ -n "$subscription_name" ]] && break
-      echo -e "${red}机场名称不能为空！${reset}" >&2
-    done
-    providers=$(printf '%s\n  provider_%02d:\n    type: http\n    url: "%s"\n    interval: 86400\n    health-check:\n      enable: true\n      interval: 300\n      url: https://www.gstatic.com/generate_404\n    override:\n      additional-prefix: "[%s] "' \
-      "$providers" "$counter" "$subscription_url" "$subscription_name")
-    ((counter++))
-    read -p "$(echo -e "${yellow}继续添加下一个订阅？(回车继续，n 结束): ${reset}")" cont
-    [[ "${cont,,}" == "n" ]] && break
+    read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
+    read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
+    providers="${providers}
+  provider_$(printf "%02d" $counter):
+    url: \"${subscription_url}\"
+    type: http
+    interval: 86400
+    health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
+    override:
+      additional-prefix: \"[${subscription_name}]\""
+    counter=$((counter + 1))
+    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
+    if [[ "$cont" =~ ^[nN]$ ]]; then
+      break
+    fi
   done
-  [[ "$providers" == "proxy-providers:" ]] && providers="${providers}\n  # 未添加任何订阅"
-
-  printf '%s\n' "$providers"
+  echo "$providers"
 }
 
 # 配置文件
@@ -293,8 +287,7 @@ config_mihomo() {
     echo -e "${red}配置文件下载失败${reset}"
     exit 1
   }
-  local proxy_providers
-  proxy_providers=$(collect_proxy_providers)
+  local proxy_providers=$(config_proxy)
   awk -v providers="$proxy_providers" '
     /^# 机场配置/ { print; print providers; next }
     { print }

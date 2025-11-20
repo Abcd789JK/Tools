@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 09:51:22
+# date   : 2025-11-20 10:22:22
 # author : ChatGPT
 # ---------------------------------
 
@@ -214,79 +214,53 @@ config_proxy() {
   local providers="proxy-providers:"
   local counter=1
   while true; do
-    echo -e "${cyan}正在添加第 ${counter} 个机场配置${reset}" >&2
-    while true; do
-      read -p "$(echo -e "${green}请输入机场订阅链接 (http/https): ${reset}")" subscription_url
-      [[ -z "$subscription_url" ]] && { echo -e "${red}订阅链接不能为空！${reset}" >&2; continue; }
-      [[ "$subscription_url" =~ ^https?:// ]] && break
-      echo -e "${red}链接必须以 http:// 或 https:// 开头${reset}" >&2
-    done
-    while true; do
-      read -p "$(echo -e "${green}请输入机场名称: ${reset}")" subscription_name
-      [[ -n "$subscription_name" ]] && break
-      echo -e "${red}机场名称不能为空！${reset}" >&2
-    done
-    providers=$(printf '%s\n  provider_%02d:\n    type: http\n    url: "%s"\n    interval: 86400\n    health-check:\n      enable: true\n      interval: 300\n      url: https://www.gstatic.com/generate_404\n    override:\n      additional-prefix: "[%s] "' \
-      "$providers" "$counter" "$subscription_url" "$subscription_name")
-    ((counter++))
-    read -p "$(echo -e "${yellow}继续添加下一个订阅？(回车继续，n 结束): ${reset}")" cont
-    [[ "${cont,,}" == "n" ]] && break
+    echo -e "${cyan}正在添加第 $counter 个配置${reset}"
+    read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
+    read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
+    providers="${providers}
+  provider_$(printf "%02d" $counter):
+    url: \"${subscription_url}\"
+    type: http
+    interval: 86400
+    health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
+    override:
+      additional-prefix: \"[${subscription_name}]\""
+    counter=$((counter + 1))
+    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
+    if [[ "$cont" =~ ^[nN]$ ]]; then
+      break
+    fi
   done
-  [[ "$providers" == "proxy-providers:" ]] && providers="${providers}\n  # 未添加任何订阅"
-  printf '%s\n' "$providers"
+  echo "$providers"
 }
 
 # 配置文件
 config_mihomo() {
-    local root_folder="/root/mihomo"
-    local config_file="/root/mihomo/config.yaml"
-    local remote_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
-    mkdir -p "$root_folder"
-    read default_iface ipv4 ipv6 <<< "$(get_network_info)"
-    echo -e "${cyan}正在下载基础配置文件...${reset}"
-    wget -O "$config_file" "$(get_url "$remote_config_url")" || {
-        echo -e "${red}配置文件下载失败！请检查网络或链接是否有效${reset}"
-        exit 1
-    }
-    echo -e "${green}基础配置文件下载成功${reset}"
-    echo
-    local proxy_providers
-    if proxy_providers=$(config_proxy); then
-        echo
-        echo -e "${cyan}正在将机场订阅写入配置文件（紧贴 proxy-providers: 下一行，无空行）...${reset}"
-        awk -v p="$proxy_providers" '
-            /^# 机场配置$/ {
-                print $0
-                print p
-                skip=1
-                next
-            }
-            /^proxy-providers:/ && !skip {
-                print $0
-                print p
-                inserted=1
-                next
-            }
-            inserted && /^  provider_/ {next}   # 防止重复插入
-            {print}
-        ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
-
-        echo -e "${green}机场订阅已成功写入！共 $(grep -c '^  provider_' "$config_file") 个${reset}"
-    else
-        echo -e "${yellow}未添加任何机场订阅，使用原始配置文件${reset}"
-    fi
-    service_restart
-    clear
-    echo -e "${green}配置完成，配置文件已保存到：${yellow}${config_file}${reset}"
-    echo -e "${green}mihomo 配置完成，正在启动中${reset}"
-    echo -e "${red}管理面板地址和管理命令${reset}"
-    echo -e "${cyan}=========================${reset}"
-    echo -e "${green}http://$ipv4:9090/ui${reset}"
-    echo
-    echo -e "${green}输入: ${yellow}mihomo ${green}进入管理菜单${reset}"
-    echo -e "${cyan}=========================${reset}"
-    echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
-    echo
+  local root_folder="/root/mihomo"
+  local config_file="/root/mihomo/config.yaml"
+  local remote_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
+  mkdir -p "$root_folder"
+  read default_iface ipv4 ipv6 <<< "$(get_network_info)"
+  wget -O "$config_file" "$(get_url "$remote_config_url")" || { 
+    echo -e "${red}配置文件下载失败${reset}"
+    exit 1
+  }
+  local proxy_providers
+  proxy_providers=$(collect_proxy_providers)
+  awk -v providers="$proxy_providers" '
+    /^# 机场配置/ { print; print providers; next }
+    { print }
+  ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
+  service_restart
+  echo -e "${green}配置完成，配置文件已保存到：${yellow}${config_file}${reset}"
+  echo -e "${green}mihomo 配置完成，正在启动中${reset}"
+  echo -e "${red}管理面板地址和管理命令${reset}"
+  echo -e "${cyan}=========================${reset}"
+  echo -e "${green}http://$ipv4:9090/ui${reset}"
+  echo -e ""
+  echo -e "${green}输入: ${yellow}mihomo ${green}进入管理菜单${reset}"
+  echo -e "${cyan}=========================${reset}"
+  echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
 }
 
 # 安装程序

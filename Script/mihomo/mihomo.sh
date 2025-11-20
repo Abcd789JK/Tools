@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2025-11-20 10:03:46
+# date   : 2025-11-20 10:22:22
 # author : ChatGPT
 # ---------------------------------
 
@@ -19,7 +19,7 @@ cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置
 
 # 全局变量
-sh_ver="0.2.7"
+sh_ver="0.2.9"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -850,7 +850,7 @@ config_proxy() {
   local providers="proxy-providers:"
   local counter=1
   while true; do
-    echo -e "${cyan}正在添加第 $counter 个配置${reset}"
+    echo -e "${cyan}正在添加第 ${counter} 个机场配置${reset}" >&2
     read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
     read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
     providers="${providers}
