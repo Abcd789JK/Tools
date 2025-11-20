@@ -3,14 +3,13 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 10:41:50
+# date   : 2025-11-20 10:43:04
 # author : ChatGPT
 # ---------------------------------
 
 # 终止脚本执行遇到错误时退出, 并启用管道错误检测
 set -e -o pipefail
 
-# ---------------------------------
 # 颜色变量
 red="\033[31m"    # 红色
 green="\033[32m"  # 绿色
@@ -19,7 +18,6 @@ blue="\033[34m"   # 蓝色
 cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置
 
-# ---------------------------------
 # 全局变量
 sh_ver="1.0.5"
 use_cdn=false
@@ -27,7 +25,6 @@ distro="unknown"  # 系统类型
 arch=""           # 系统架构
 arch_raw=""       # 原始架构
 
-# ---------------------------------
 # 系统检测
 check_distro() {
     if [ -f /etc/os-release ]; then
@@ -72,7 +69,6 @@ check_distro() {
     fi
 }
 
-# ---------------------------------
 # 网络检测
 check_network() {
     if ! curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null; then
@@ -80,7 +76,6 @@ check_network() {
     fi
 }
 
-# ---------------------------------
 # 链接处理
 get_url() {
     local url=$1
@@ -100,14 +95,12 @@ get_url() {
     echo "$final_url"
 }
 
-# ---------------------------------
 # 系统更新及插件安装
 update_system() {
     eval "$pkg_update"
     eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq openssl"
 }
 
-# ---------------------------------
 # 系统架构
 get_schema() {
     arch_raw=$(uname -m)
@@ -134,7 +127,6 @@ get_schema() {
     esac
 }
 
-# ---------------------------------
 # IPv4/IPv6 转发检查
 check_ip_forward() {
     local sysctl_file="/etc/sysctl.d/99-ip-forward.conf"
@@ -146,7 +138,6 @@ check_ip_forward() {
     sysctl -p "$sysctl_file" > /dev/null
 }
 
-# ---------------------------------
 # 版本获取
 download_version() {
     local version_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/version.txt"
@@ -156,7 +147,6 @@ download_version() {
     }
 }
 
-# ---------------------------------
 # 软件下载
 download_mihomo() {
     download_version
@@ -184,7 +174,6 @@ download_mihomo() {
     echo "$version" > "$version_file"
 }
 
-# ---------------------------------
 # 服务配置
 download_service() {
     if [ "$distro" = "alpine" ]; then
@@ -208,7 +197,6 @@ download_service() {
     fi
 }
 
-# ---------------------------------
 # 管理面板
 download_wbeui() {
     local wbe_file="/root/mihomo"
@@ -227,7 +215,6 @@ download_wbeui() {
     }
 }
 
-# ---------------------------------
 # 管理脚本
 download_shell() {
     local shell_file="/usr/bin/mihomo"
@@ -241,7 +228,6 @@ download_shell() {
     hash -r
 }
 
-# ---------------------------------
 # IP 地址获取
 get_network_info() {
   local default_iface ipv4 ipv6
@@ -304,7 +290,6 @@ config_mihomo() {
   echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
 }
 
-# ---------------------------------
 # 安装程序
 install_mihomo() {
     local folders="/root/mihomo"
