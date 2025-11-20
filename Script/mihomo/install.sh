@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 10:22:22
+# date   : 2025-11-20 10:41:50
 # author : ChatGPT
 # ---------------------------------
 
@@ -254,20 +254,20 @@ get_network_info() {
 # 新增订阅
 config_proxy() {
   local providers="proxy-providers:"
-  local counter=1
+  local subscription=1
   while true; do
-    echo -e "${cyan}正在添加第 ${counter} 个机场配置${reset}" >&2
+    echo -e "${cyan}正在添加第 ${subscription} 个机场配置${reset}" >&2
     read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
-    read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
+    read -p "$(echo -e "${blue}请输入机场的名称: ${reset}")" subscription_name
     providers="${providers}
-  provider_$(printf "%02d" $counter):
+  provider_$(printf "%02d" $subscription):
     url: \"${subscription_url}\"
     type: http
     interval: 86400
     health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
     override:
       additional-prefix: \"[${subscription_name}]\""
-    counter=$((counter + 1))
+    subscription=$((subscription + 1))
     read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
     if [[ "$cont" =~ ^[nN]$ ]]; then
       break

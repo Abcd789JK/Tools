@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2025-11-20 10:22:22
+# date   : 2025-11-20 10:41:50
 # author : ChatGPT
 # ---------------------------------
 
@@ -130,11 +130,9 @@ show_status() {
     local version_file="/root/mihomo/version.txt"
     local script_file="/usr/bin/mihomo"
     local install_status run_status auto_start software_version update_time default_iface ipv4 ipv6 distro
-
     read default_iface ipv4 ipv6 <<< "$(get_network_info)"
     distro=$(grep -E '^ID=' /etc/os-release | cut -d= -f2)
     update_time=$(grep '^# date' "$script_file" | cut -d: -f2- | xargs)
-
     if [ ! -f "$file" ]; then
         install_status="${red}未安装${reset}"
         run_status="${red}未运行${reset}"
@@ -171,7 +169,6 @@ show_status() {
             software_version="${red}未安装${reset}"
         fi
     fi
-
     echo -e "安装状态: ${install_status}"
     echo -e "运行状态: ${run_status}"
     echo -e "开机自启: ${auto_start}"
@@ -608,15 +605,15 @@ add_provider() {
         echo -e "${red}配置文件不存在, 请检查路径: ${config_file}${reset}"
         exit 1
     fi
-    local current_count
-    current_count=$(grep -c "provider_" "$config_file")
-    [ -z "$current_count" ] && current_count=0
+    local subscription
+    subscription=$(grep -c "provider_" "$config_file")
+    [ -z "$subscription" ] && subscription=0
     local proxy_providers=""
-    local counter=$((current_count + 1))
-    echo -e "${yellow}当前共有 ${current_count} 个机场订阅。${reset}"
+    local counter=$((subscription + 1))
+    echo -e "${yellow}当前共有 ${subscription} 个机场订阅。${reset}" >&2
     while true; do
         read -p "$(echo -e "${green}请输入机场的订阅链接: ${reset}")" airport_url
-        read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" airport_name
+        read -p "$(echo -e "${blue}请输入机场的名称: ${reset}")" airport_name
         if [ -z "$proxy_providers" ]; then
             proxy_providers="  provider_$(printf "%02d" $counter):
     url: \"${airport_url}\"
@@ -677,17 +674,14 @@ add_provider() {
 # 修改订阅
 modify_provider() {
     local config_file="/root/mihomo/config.yaml"
-    local total_providers
-    total_providers=$(awk '/^proxy-providers:/, /^proxies:/ { if ($0 ~ /^[[:space:]]*provider_/) count++ } END { print count+0 }' "$config_file")
-
-    if [ "$total_providers" -eq 0 ]; then
+    local subscription
+    subscription=$(awk '/^proxy-providers:/, /^proxies:/ { if ($0 ~ /^[[:space:]]*provider_/) count++ } END { print count+0 }' "$config_file")
+    if [ "$subscription" -eq 0 ]; then
         echo -e "${red}当前没有任何机场订阅可供修改。${reset}"
         start_menu
         return
     fi
-
-    echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
-
+    echo -e "${yellow}当前共有 ${subscription} 个机场订阅。${reset}" >&2
     while true; do
         read -p "$(echo -e "${green}请输入要修改的 provider 编号(如 01、02): ${reset}")" number
         if ! awk "/^proxy-providers:/, /^proxies:/" "$config_file" | grep -q "^  provider_${number}:"; then
@@ -696,7 +690,6 @@ modify_provider() {
         fi
         read -p "$(echo -e "${green}新的订阅链接: ${reset}")" new_url
         read -p "$(echo -e "${green}新的机场名称: ${reset}")" new_name
-
         awk -v num="$number" -v url="$new_url" -v name="$new_name" '
         BEGIN {
             in_block = 0
@@ -740,7 +733,6 @@ modify_provider() {
 
             print
         }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
-
         echo -e "${green}编号为 ${number} 的机场订阅已修改完成。${reset}"
         read -p "$(echo -e "${yellow}是否继续修改其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
         [[ "$cont" =~ ^[nN]$ ]] && break
@@ -756,14 +748,14 @@ delete_provider() {
     get_provider_count() {
         grep -c "^  provider_" "$config_file"
     }
-    local total_providers
-    total_providers=$(get_provider_count)
-    if [ "$total_providers" -eq 0 ]; then
+    local subscription
+    subscription=$(get_provider_count)
+    if [ "$subscription" -eq 0 ]; then
         echo -e "${red}当前没有任何机场订阅可供删除。${reset}"
         start_menu
         return
     fi
-    echo -e "${yellow}当前共有 ${total_providers} 个机场订阅。${reset}"
+    echo -e "${yellow}当前共有 ${subscription} 个机场订阅。${reset}" >&2
     while true; do
         read -p "$(echo -e "${green}请输入要删除的 provider 编号(如 01、02): ${reset}")" number
         if ! grep -q "^  provider_${number}:" "$config_file"; then
@@ -832,10 +824,10 @@ delete_provider() {
             }
             print $0;
         }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
-        total_providers=$(get_provider_count)
-        echo -e "${green}编号为 ${number} 的机场订阅已删除, 当前剩余 ${total_providers} 个。${reset}"
-        if [ "$total_providers" -eq 0 ]; then
-            echo -e "${yellow}没有剩余订阅可删除。${reset}"
+        subscription=$(get_provider_count)
+        echo -e "${green}编号为 ${number} 的机场订阅已删除, 当前剩余 ${subscription} 个。${reset}"
+        if [ "$subscription" -le 1 ]; then
+            echo -e "${yellow}至少保留一个订阅，无法删除最后一个。${reset}"
             break
         fi
         read -p "$(echo -e "${yellow}是否继续删除其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
@@ -848,20 +840,20 @@ delete_provider() {
 # 新增订阅
 config_proxy() {
   local providers="proxy-providers:"
-  local counter=1
+  local subscription=1
   while true; do
-    echo -e "${cyan}正在添加第 ${counter} 个机场配置${reset}" >&2
+    echo -e "${cyan}正在添加第 ${subscription} 个机场配置${reset}" >&2
     read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
-    read -p "$(echo -e "${green}请输入机场的名称: ${reset}")" subscription_name
+    read -p "$(echo -e "${blue}请输入机场的名称: ${reset}")" subscription_name
     providers="${providers}
-  provider_$(printf "%02d" $counter):
+  provider_$(printf "%02d" $subscription):
     url: \"${subscription_url}\"
     type: http
     interval: 86400
     health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
     override:
       additional-prefix: \"[${subscription_name}]\""
-    counter=$((counter + 1))
+    subscription=$((subscription + 1))
     read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
     if [[ "$cont" =~ ^[nN]$ ]]; then
       break
