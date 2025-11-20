@@ -1,11 +1,10 @@
 #!name = mihomo 配置文件
 #!desc = 说明：理论上适用于所有的 Meta 内核，使用最新的 mrs 规则
-#!date = 2025-11-19 19:17:41
+#!date = 2025-11-20 09:51:22
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
 # 机场配置
-
 
 proxies: 
   - name: "直连"
@@ -45,6 +44,15 @@ sniffer:
     - "+.push.apple.com"
 
 # 模式配置
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
 
 dns:
   enable: true

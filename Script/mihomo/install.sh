@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-19 19:17:41
+# date   : 2025-11-20 09:51:22
 # author : ChatGPT
 # ---------------------------------
 
@@ -254,87 +254,29 @@ get_network_info() {
   echo "$default_iface $ipv4 $ipv6"
 }
 
-# 运行模式
-generate_mode_config() {
-  local iface=$1
-  local choice=$2
-  local mode_config
-  case "$choice" in
-    1)
-      mode_config=$(cat <<EOF
-tun:
-  enable: true
-  stack: mixed
-  dns-hijack:
-    - "any:53"
-    - "tcp://any:53"
-  auto-route: true
-  auto-redirect: true
-  auto-detect-interface: true
-EOF
-)
-      ;;
-    2)
-      mode_config=$(cat <<EOF
-iptables:
-  enable: true
-  inbound-interface: $iface
-EOF
-)
-      ;;
-    *)
-      echo -e "${red}无效选择，使用默认 TUN 配置。${reset}"
-      mode_config=$(cat <<EOF
-tun:
-  enable: true
-  stack: mixed
-  dns-hijack:
-    - "any:53"
-    - "tcp://any:53"
-  auto-route: true
-  auto-redirect: true
-  auto-detect-interface: true
-EOF
-)
-      ;;
-  esac
-  echo "$mode_config"
-}
-
 # 新增订阅
 collect_proxy_providers() {
   local providers="proxy-providers:"
   local counter=1
-
   while true; do
     echo -e "${cyan}正在添加第 ${counter} 个机场配置${reset}" >&2
-
-    # 订阅链接校验
     while true; do
       read -p "$(echo -e "${green}请输入机场订阅链接 (http/https): ${reset}")" subscription_url
       [[ -z "$subscription_url" ]] && { echo -e "${red}订阅链接不能为空！${reset}" >&2; continue; }
       [[ "$subscription_url" =~ ^https?:// ]] && break
       echo -e "${red}链接必须以 http:// 或 https:// 开头${reset}" >&2
     done
-
-    # 机场名称校验
     while true; do
       read -p "$(echo -e "${green}请输入机场名称: ${reset}")" subscription_name
       [[ -n "$subscription_name" ]] && break
       echo -e "${red}机场名称不能为空！${reset}" >&2
     done
-
-    # 强制添加前缀，与原始脚本完全一致
     providers=$(printf '%s\n  provider_%02d:\n    type: http\n    url: "%s"\n    interval: 86400\n    health-check:\n      enable: true\n      interval: 300\n      url: https://www.gstatic.com/generate_404\n    override:\n      additional-prefix: "[%s] "' \
       "$providers" "$counter" "$subscription_url" "$subscription_name")
-
     ((counter++))
-
     read -p "$(echo -e "${yellow}继续添加下一个订阅？(回车继续，n 结束): ${reset}")" cont
     [[ "${cont,,}" == "n" ]] && break
   done
-
-  # 若一个都没添加，保留注释避免 YAML 语法错误
   [[ "$providers" == "proxy-providers:" ]] && providers="${providers}\n  # 未添加任何订阅"
 
   printf '%s\n' "$providers"
@@ -347,23 +289,10 @@ config_mihomo() {
   local remote_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
   mkdir -p "$root_folder"
   read default_iface ipv4 ipv6 <<< "$(get_network_info)"
-  echo -e "${green}请选择运行模式 (推荐使用 TUN 模式)${reset}"
-  echo -e "${cyan}-------------------------${reset}"
-  echo -e "${green}1${reset}. TUN 模式"
-  echo -e "${green}2${reset}. TProxy 模式"
-  echo -e "${cyan}-------------------------${reset}"
-  read -p "$(echo -e "${yellow}请输入选择(1/2) [默认: TUN]: ${reset}")" mode_choice
-  mode_choice=${mode_choice:-1}
-  local mode_config
-  mode_config=$(generate_mode_config "$default_iface" "$mode_choice")
   wget -O "$config_file" "$(get_url "$remote_config_url")" || { 
     echo -e "${red}配置文件下载失败${reset}"
     exit 1
   }
-  awk -v config="$mode_config" '
-    /^# 模式配置/ { print; print config; next }
-    { print }
-  ' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
   local proxy_providers
   proxy_providers=$(collect_proxy_providers)
   awk -v providers="$proxy_providers" '
