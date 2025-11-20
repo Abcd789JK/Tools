@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 11:50:42
+# date   : 2025-11-20 11:55:27
 # author : ChatGPT
 # ---------------------------------
 
@@ -265,10 +265,9 @@ config_mihomo() {
   echo -e "${red}管理面板地址和管理命令${reset}"
   echo -e "${cyan}=========================${reset}"
   echo -e "${green}http://$ipv4:9090/ui${reset}"
-  echo -e ""
   echo -e "${green}输入: ${yellow}mihomo ${green}进入管理菜单${reset}"
   echo -e "${cyan}=========================${reset}"
-  echo -e "${green}mihomo 已成功启动并设置为开机自启${reset}"
+  echo -e "${green}恭喜你! mihomo 已成功启动并设置为开机自启${reset}"
 }
 
 # 安装程序
@@ -290,16 +289,12 @@ install_mihomo() {
     download_wbeui
     echo -e "${green}开始下载菜单脚本请等待${reset}"
     download_shell
-    echo -e "${green}恭喜你! mihomo 已经安装完成${reset}"
-    echo
-    echo -e "${yellow}配置文件, 你可以选择使用我的, 也可以选择自己上传${reset}"
-    echo
+    echo -e "${cyan}=========================${reset}"
+    echo -e "${yellow}mihomo 已经成功安装, 上传或者下载我的默认配置文件就能运行${reset}"
     echo -e "${red}输入 y/Y 下载默认配置文件${reset}"
-    echo
     echo -e "${red}输入 n/N 取消下载默认配置, 上传你自己的配置文件${reset}"
-    echo
     echo -e "${red}把你准备好的配置文件上传到 ${folders} 目录下 (文件名必须为 config.yaml)${reset}"
-    echo
+    echo -e "${cyan}=========================${reset}"
     read -p "$(echo -e "${yellow}请输入选择(y/n) [默认: y]: ${reset}")" confirm
     confirm=${confirm:-y}
     case "$confirm" in
