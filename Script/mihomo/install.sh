@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 10:43:04
+# date   : 2025-11-20 10:50:11
 # author : ChatGPT
 # ---------------------------------
 
@@ -250,7 +250,7 @@ config_proxy() {
     url: \"${subscription_url}\"
     type: http
     interval: 86400
-    health-check: { enable: true, url: \"https://www.gstatic.com/generate_204\", interval: 300 }
+    health-check: {enable: true,url: "https://www.gstatic.com/generate_204",interval: 300}
     override:
       additional-prefix: \"[${subscription_name}]\""
     subscription=$((subscription + 1))
