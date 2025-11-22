@@ -22,7 +22,10 @@
         "action": "reject" // 拒绝该请求，提升 DNS 可控性与统一性
       },
       {
-        "query_type": ["A", "AAAA"], // IPv4 和 IPv6 的常规 DNS 查询类型
+        "query_type": [
+          "A",
+          "AAAA"
+        ], // IPv4 和 IPv6 的常规 DNS 查询类型
         "server": "ali" // 指定使用 ali 标签的 DNS 服务器解析
       }
     ],
@@ -125,9 +128,8 @@
   ],
   "outbounds": [
     {
-      "tag": "Direct", // 出站策略选择器，用于灵活调度多个出站
-      "type": "selector",
-      "outbounds": ["direct-out"] // 默认选项为 direct-out
+      "type": "direct",
+      "tag": "direct-out"
     },
     {
       "tag": "direct-out", // 实际的直连通道（不经过代理）
@@ -143,10 +145,18 @@
     }
   ],
   "route": {
+    "default_domain_resolver": {
+      "server": "ali"
+    },
     "rules": [
       {
         "action": "sniff", // 启用协议嗅探（检测流量类型）
-        "sniffer": ["http", "tls", "quic", "dns"] // 支持的嗅探协议类型
+        "sniffer": [
+          "http",
+          "tls",
+          "quic",
+          "dns"
+        ] // 支持的嗅探协议类型
       },
       {
         "type": "logical", // 逻辑组合规则
