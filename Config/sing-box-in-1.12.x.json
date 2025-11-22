@@ -6,7 +6,7 @@
   "dns": {
     "servers": [
       {
-        "type": "udp",
+        "type": "tls",
         "tag": "google",
         "server": "8.8.8.8"
       },
@@ -125,7 +125,7 @@
       }
     ],
     "default_domain_resolver": {
-      "server": "google"
+      "server": "cloudflare"
     },
     "final": "direct-out",
     "auto_detect_interface": true
