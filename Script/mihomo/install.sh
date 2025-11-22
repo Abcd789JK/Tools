@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-20 12:13:02
+# date   : 2025-11-22 20:01:54
 # author : ChatGPT
 # ---------------------------------
 
@@ -62,6 +62,12 @@ check_distro() {
     service_restart() { systemctl daemon-reload && systemctl restart mihomo; }
 }
 
+# 系统更新及插件安装
+update_system() {
+    eval "$pkg_update" -qq > /dev/null 2>&1
+    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq openssl" -qq > /dev/null 2>&1
+}
+
 # 网络检测
 check_network() {
     if ! curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null; then
@@ -84,12 +90,6 @@ get_url() {
     fi
     echo -e "${red}连接失败，请检查网络或代理站点${reset}" >&2
     return 1
-}
-
-# 系统更新及插件安装
-update_system() {
-    eval "$pkg_update"
-    eval "$pkg_install curl git gzip wget nano iptables tzdata jq unzip yq openssl"
 }
 
 # 系统架构
