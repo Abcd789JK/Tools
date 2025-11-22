@@ -1,128 +1,95 @@
 {
   "log": {
-    "level": "info", // 日志等级：debug / info / warn / error。生产环境建议设为 info，便于监控
-    "timestamp": true // 是否在日志中包含时间戳，推荐开启，便于排错与追踪
+    "level": "info",
+    "timestamp": true
   },
   "dns": {
     "servers": [
       {
-        "tag": "ali", // DNS 标签，可供 rules 中引用
-        "type": "tls", // 使用 DNS over TLS（DoT），更安全，避免被劫持
-        "server": "223.5.5.5" // 阿里公共 DNS，支持 DoT
+        "type": "udp",
+        "tag": "google",
+        "server": "8.8.8.8"
       },
       {
-        "tag": "tencent",
-        "type": "tls", // 同样为 DoT
-        "server": "119.29.29.29" // 腾讯公共 DNS，备用 DNS
+        "type": "tls",
+        "tag": "cloudflare",
+        "server": "1.1.1.1"
       }
     ],
     "rules": [
       {
-        "query_type": "HTTPS", // 阻断 DoH（DNS over HTTPS）请求，防止客户端绕过代理
-        "action": "reject" // 拒绝该请求，提升 DNS 可控性与统一性
+        "query_type": "HTTPS",
+        "action": "reject"
       },
       {
         "query_type": [
           "A",
           "AAAA"
-        ], // IPv4 和 IPv6 的常规 DNS 查询类型
-        "server": "ali" // 指定使用 ali 标签的 DNS 服务器解析
+        ],
+        "server": "cloudflare"
       }
     ],
-    "final": "ali", // 所有未匹配规则的 DNS 查询默认使用 ali 解析
-    "strategy": "prefer_ipv4" // 优先返回 IPv4 地址（因国内 IPv6 覆盖差）
+    "final": "cloudflare",
+    "strategy": "ipv4_only"
   },
   "inbounds": [
     {
-      "type": "shadowsocks", // 启用 Shadowsocks 协议服务端
-      "tag": "ss-in", // 标记名称，后续可在日志、路由规则中引用
-      "listen": "::", // 监听所有 IPv4 与 IPv6 地址
-      "listen_port": 8080, // 监听端口（建议根据实际用途调整）
-      "method": "2022-blake3-aes-128-gcm", // 推荐新协议，安全性强、性能好
-      "password": "your-strong-password", // 请替换为强密码
-      "tcp_fast_open": true // 启用 TCP Fast Open（加速首次连接）
-    },
-    {
-      "type": "vmess", // 启用 VMess 协议服务端
-      "tag": "vmess-in",
+      "tag": "ss-in",
+      "type": "shadowsocks",
       "listen": "::",
-      "listen_port": 8081,
-      "users": [
-        {
-          "name": "sekai", // 用户标识，便于管理
-          "uuid": "your-strong-password", // UUID，必须是标准格式
-          "alterId": 0 // AEAD 模式固定为 0
-        }
-      ],
-      "transport": {
-        "type": "ws", // 使用 WebSocket，适合 CDN 套壳与伪装
-        "path": "/vmess-path" // WebSocket 路径，客户端需匹配
-      },
+      "listen_port": 80,
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "hztQCU1ZB8CAuPMVFJiCJw==",
       "tcp_fast_open": true,
-      "tls": {
-        "enabled": true, // 启用 TLS 加密
-        "server_name": "your.domain.com", // 你的域名（需指向服务器）
-        "key_path": "/path/to/your/private.key", // 私钥路径（PEM 格式）
-        "certificate_path": "/path/to/your/certificate.crt", // 证书路径（PEM 格式）
-        "min_version": "1.3",
-        "max_version": "1.3" // 强制 TLS 1.3，仅支持新客户端
+      "multiplex": {
+        "enabled": true,
+        "padding": true
       }
     },
     {
-      "type": "trojan", // 启用 Trojan 协议服务端
-      "tag": "trojan-in",
+      "tag": "VLESS-Vision-Reality",
+      "type": "vless",
       "listen": "::",
-      "listen_port": 8082,
+      "listen_port": 443,
       "users": [
         {
-          "name": "trojan-user",
-          "password": "your-trojan-password"
+          "uuid": "625a08bb-d372-4f7c-a2d4-6a50ca3393ce",
+          "flow": "xtls-rprx-vision"
         }
       ],
-      "transport": {
-        "type": "ws",
-        "path": "/trojan-path"
-      },
-      "tcp_fast_open": true,
       "tls": {
         "enabled": true,
-        "server_name": "your.domain.com",
-        "key_path": "/path/to/your/private.key",
-        "certificate_path": "/path/to/your/certificate.crt",
-        "min_version": "1.3",
-        "max_version": "1.3"
+        "server_name": "updates.cdn-apple.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "updates.cdn-apple.com",
+            "server_port": 443
+          },
+          "private_key": "mAQVEs96AtDg1V_b2POFVP8n-Uu6hBe0_1Zt-DtRzGE",
+          "short_id": [
+            "a118b9425a7e2dc5"
+          ]
+        }
       }
     },
     {
-      "type": "hysteria2", // 启用 Hysteria2 协议服务端（基于 QUIC + UDP 模拟）
-      "tag": "hysteria2-in",
+      "tag": "HYSTERIA2",
+      "type": "hysteria2",
       "listen": "::",
-      "listen_port": 8083,
+      "listen_port": 52021,
       "users": [
         {
-          "name": "hysteria2-user",
-          "password": "your-hysteria2-password"
+          "password": "625a08bb-d372-4f7c-a2d4-6a50ca3393ce"
         }
       ],
-      "tcp_fast_open": true,
       "tls": {
         "enabled": true,
-        "server_name": "your.domain.com",
-        "key_path": "/path/to/your/private.key",
-        "certificate_path": "/path/to/your/certificate.crt",
-        "min_version": "1.3",
-        "max_version": "1.3"
-      },
-      "masquerade": {
-        "type": "proxy", // 启用 HTTP 伪装
-        "proxy": {
-          "url": "https://your.domain.com", // 外部看起来像 HTTPS 网站
-          "rewrite_host": true // 将请求头中的 Host 改为域名
-        }
-      },
-      "obfs": {
-        "type": "salamander", // 开启 Salamander 混淆，适配 GFW 识别规避
-        "password": "your-obfs-password"
+        "alpn": [
+          "h3"
+        ],
+        "certificate_path": "/root/ssl/server.crt",
+        "key_path": "/root/ssl/server.key"
       }
     }
   ],
@@ -130,59 +97,43 @@
     {
       "type": "direct",
       "tag": "direct-out"
-    },
-    {
-      "tag": "direct-out", // 实际的直连通道（不经过代理）
-      "type": "direct"
-    },
-    {
-      "tag": "dns-out", // 专用于 DNS 查询的出站
-      "type": "dns"
-    },
-    {
-      "tag": "block-out", // 阻断流量的出站（与规则配合）
-      "type": "block"
     }
   ],
   "route": {
-    "default_domain_resolver": {
-      "server": "ali"
-    },
     "rules": [
       {
-        "action": "sniff", // 启用协议嗅探（检测流量类型）
+        "action": "sniff",
         "sniffer": [
           "http",
           "tls",
           "quic",
           "dns"
-        ] // 支持的嗅探协议类型
+        ]
       },
       {
-        "type": "logical", // 逻辑组合规则
-        "mode": "or", // 任一子规则命中即匹配
+        "type": "logical",
+        "mode": "or",
         "rules": [
           {
-            "port": 53 // DNS 通常使用端口 53
+            "port": 53
           },
           {
-            "protocol": "dns" // 或者识别为 DNS 协议
+            "protocol": "dns"
           }
         ],
-        "action": "hijack-dns" // 劫持 DNS 流量，交由本地 DNS 模块处理
-      },
-      {
-        "ip_is_private": true, // 匹配内网地址
-        "outbound": "Direct" // 内网流量不走代理，直接访问
+        "action": "hijack-dns"
       }
     ],
-    "final": "Direct", // 未匹配规则的默认出站策略（可改为代理）
-    "auto_detect_interface": true // 自动识别网络接口，适合容器或多网卡环境
+    "default_domain_resolver": {
+      "server": "google"
+    },
+    "final": "direct-out",
+    "auto_detect_interface": true
   },
   "experimental": {
     "cache_file": {
-      "enabled": true, // 启用缓存数据库（提升性能）
-      "path": "/etc/sing-box/cache.db" // 数据库存储位置（建议 SSD 路径）
+      "enabled": true,
+      "path": "/etc/sing-box/cache.db"
     }
   }
 }
