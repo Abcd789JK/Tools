@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-22 20:01:54
+# date   : 2025-11-23 11:19:16
 # author : ChatGPT
 # ---------------------------------
 
@@ -70,8 +70,12 @@ update_system() {
 
 # 网络检测
 check_network() {
-    if ! curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null; then
+    if curl -sI --fail --connect-timeout 1 https://www.google.com > /dev/null 2>&1; then
+        use_cdn=false
+        echo -e "${green}网络环境正常, 无需代理${reset}"
+    else
         use_cdn=true
+        echo -e "${yellow}无科学网络环境, 启用代理${reset}"
     fi
 }
 
@@ -112,11 +116,21 @@ get_schema() {
 check_ip_forward() {
     local sysctl_file="/etc/sysctl.d/99-ip-forward.conf"
     [ -f "$sysctl_file" ] || touch "$sysctl_file"
-    sysctl -w net.ipv4.ip_forward=1
-    sysctl -w net.ipv6.conf.all.forwarding=1
-    grep -Eq '^\s*net\.ipv4\.ip_forward\s*=\s*1' "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
-    grep -Eq '^\s*net\.ipv6\.conf\.all\.forwarding\s*=\s*1' "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
-    sysctl -p "$sysctl_file" > /dev/null
+    if [ "$(sysctl -n net.ipv4.ip_forward)" -eq 1 ]; then
+        echo -e "${yellow}IPv4 转发已开启，跳过${reset}"
+    else
+        sysctl -w net.ipv4.ip_forward=1 &> /dev/null
+        grep -Eq '^\s*net\.ipv4\.ip_forward\s*=\s*1' "$sysctl_file" || echo "net.ipv4.ip_forward=1" >> "$sysctl_file"
+        echo -e "${green}IPv4 转发已开启${reset}"
+    fi
+    if [ "$(sysctl -n net.ipv6.conf.all.forwarding)" -eq 1 ]; then
+        echo -e "${yellow}IPv6 转发已开启，跳过${reset}"
+    else
+        sysctl -w net.ipv6.conf.all.forwarding=1 &> /dev/null
+        grep -Eq '^\s*net\.ipv6\.conf\.all\.forwarding\s*=\s*1' "$sysctl_file" || echo "net.ipv6.conf.all.forwarding=1" >> "$sysctl_file"
+        echo -e "${green}IPv6 转发已开启${reset}"
+    fi
+    sysctl -p "$sysctl_file" &> /dev/null
 }
 
 # 版本获取
@@ -135,7 +149,7 @@ download_mihomo() {
     local filename="mihomo-linux-${arch}-${version}.gz"
     [ "$arch" = "amd64" ] && filename="mihomo-linux-${arch}-compatible-${version}.gz"
     local download_url="https://github.com/MetaCubeX/mihomo/releases/download/Prerelease-Alpha/${filename}"
-    wget -O "$filename" "$(get_url "$download_url")" || {
+    wget -q -O "$filename" "$(get_url "$download_url")" || {
         echo -e "${red}mihomo 下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -160,7 +174,7 @@ download_service() {
     if [ "$distro" = "alpine" ]; then
         local service_file="/etc/init.d/mihomo"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.openrc"
-        wget -O "$service_file" "$(get_url "$service_url")" || {
+        wget -q -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -169,7 +183,7 @@ download_service() {
     else
         local service_file="/etc/systemd/system/mihomo.service"
         local service_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Service/mihomo.service"
-        wget -O "$service_file" "$(get_url "$service_url")" || {
+        wget -q -O "$service_file" "$(get_url "$service_url")" || {
             echo -e "${red}系统服务下载失败，请检查网络后重试${reset}"
             exit 1
         }
@@ -183,7 +197,7 @@ download_wbeui() {
     local wbe_file="/root/mihomo"
     local filename="gh-pages.zip"
     local url_za="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
-    wget -O "$filename" "$(get_url "$url_za")" || {
+    wget -q -O "$filename" "$(get_url "$url_za")" || {
         echo -e "${red}管理面板下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -201,7 +215,7 @@ download_shell() {
     local shell_file="/usr/bin/mihomo"
     local sh_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Script/mihomo/mihomo.sh"
     [ -f "$shell_file" ] && rm -f "$shell_file"
-    wget -O "$shell_file" "$(get_url "$sh_url")" || {
+    wget -q -O "$shell_file" "$(get_url "$sh_url")" || {
         echo -e "${red}管理脚本下载失败，请检查网络后重试${reset}"
         exit 1
     }
@@ -224,8 +238,8 @@ config_proxy() {
   local subscription=1
   while true; do
     echo -e "${cyan}正在添加第 ${subscription} 个机场配置${reset}" >&2
-    read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
-    read -p "$(echo -e "${blue}请输入机场的名称: ${reset}")" subscription_name
+    read -rp "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
+    read -rp "$(echo -e "${blue}请输入机场的名称: ${reset}")" subscription_name
     providers="${providers}
   provider_$(printf "%02d" $subscription):
     url: \"${subscription_url}\"
@@ -235,7 +249,7 @@ config_proxy() {
     override:
       additional-prefix: \"[${subscription_name}]\""
     subscription=$((subscription + 1))
-    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
+    read -rp "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
     if [[ "$cont" =~ ^[nN]$ ]]; then
       break
     fi
@@ -250,7 +264,7 @@ config_mihomo() {
   local remote_config_url="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main/Config/mihomo.yaml"
   mkdir -p "$root_folder"
   read default_iface ipv4 ipv6 <<< "$(get_network_info)"
-  wget -O "$config_file" "$(get_url "$remote_config_url")" || { 
+  wget -q -O "$config_file" "$(get_url "$remote_config_url")" || { 
     echo -e "${red}配置文件下载失败${reset}"
     exit 1
   }
@@ -265,54 +279,56 @@ config_mihomo() {
   echo -e "${green}mihomo 配置完成，正在启动中${reset}"
   echo -e "${green}恭喜你! mihomo 已成功启动并设置为开机自启${reset}"
   echo -e "${red}下面是管理面板地址和菜单命令${reset}"
-  echo -e "${cyan}=========================${reset}"
+  echo -e "${blue}=========================${reset}"
   echo -e "${green}http://$ipv4:9090/ui${reset}"
   echo -e "${green}输入: ${yellow}mihomo ${green}进入管理菜单${reset}"
-  echo -e "${cyan}=========================${reset}"
+  echo -e "${blue}=========================${reset}"
   
 }
 
 # 安装程序
 install_mihomo() {
+    check_distro
+    echo -e "${cyan}开始检测网络环境, 请稍候...${reset}"
+    check_network
+    echo -e "${cyan}正在更新包列表, 请稍候...${reset}"
+    update_system
+    echo -e "${cyan}正在检查是否开启 IP 转发, 请稍候...${reset}"
+    check_ip_forward
     local folders="/root/mihomo"
     rm -rf "$folders"
     mkdir -p "$folders" && cd "$folders"
-    check_ip_forward
     echo -e "${yellow}当前系统版本：${reset}[ ${green}${distro}${reset} ]"
     get_schema
     echo -e "${yellow}当前系统架构：${reset}[ ${green}${arch_raw}${reset} ]"
     download_version
-    echo -e "${yellow}当前软件版本：${reset}[ ${green}${version}${reset} ]"
-    echo -e "${green}开始下载 mihomo 请等待${reset}"
+    echo -e "${yellow}获取软件版本：${reset}[ ${green}${version}${reset} ]"
+    echo -e "${cyan}开始下载 mihomo 请等待...${reset}"
     download_mihomo
-    echo -e "${green}开始下载配置服务请等待${reset}"
+    echo -e "${cyan}开始下载配置服务, 请等待...${reset}"
     download_service
-    echo -e "${green}开始下载管理 UI 请等待${reset}"
+    echo -e "${cyan}开始下载管理 UI 请等待...${reset}"
     download_wbeui
-    echo -e "${green}开始下载菜单脚本请等待${reset}"
+    echo -e "${cyan}开始下载菜单脚本, 请等待...${reset}"
     download_shell
-    echo -e "${cyan}=========================${reset}"
+    echo -e "${blue}=========================${reset}"
     echo -e "${yellow}mihomo 已经成功安装, 上传或者下载我的默认配置文件就能运行${reset}"
     echo -e "${red}输入 y/Y 下载默认配置文件${reset}"
     echo -e "${red}输入 n/N 取消下载默认配置, 上传你自己的配置文件${reset}"
     echo -e "${red}把你准备好的配置文件上传到 ${folders} 目录下 (文件名必须为 config.yaml)${reset}"
-    echo -e "${cyan}=========================${reset}"
-    read -p "$(echo -e "${yellow}请输入选择(y/n) [默认: y]: ${reset}")" confirm
+    echo -e "${blue}=========================${reset}"
+    read -rp "$(echo -e "${green}请输入选择(y/n) [默认: y]: ${reset}")" confirm
     confirm=${confirm:-y}
     case "$confirm" in
         [Yy]*)
             config_mihomo
             ;;
          *)
-            echo -e "${green}跳过配置文件下载${reset}"
+            echo -e "${yellow}跳过配置文件下载${reset}"
             ;;
     esac
     rm -f /root/install.sh
 }
 
 # 主菜单
-check_distro
-check_network
-update_system
-check_ip_forward
 install_mihomo

@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : singbox 一键安装脚本
 # desc   : 安装
-# date   : 2025-11-20 12:13:02
+# date   : 2025-11-23 11:19:16
 # author : ChatGPT
 # ---------------------------------
 
@@ -20,13 +20,9 @@ reset="\033[0m"   # 重置
 
 # 全局变量
 sh_ver="1.0.5"
-use_cdn=false
-distro="unknown"  # 系统类型
-arch=""           # 系统架构
-arch_raw=""       # 原始架构
 
 # 始终更新包列表
-echo "正在更新包列表，请稍候..."
+echo -e "${cyan}正在更新包列表，请稍候...${reset}"
 sudo apt update -qq > /dev/null 2>&1
 sudo apt install -y sudo -qq > /dev/null 2>&1
 
@@ -48,18 +44,20 @@ Signed-By: /etc/apt/keyrings/sagernet.asc
 
     # 选择安装稳定版或测试版
     while true; do
-        read -rp "请选择安装版本(1: 稳定版, 2: 测试版): " choice
+        echo -e "${green}1. 稳定版${reset}"
+        echo -e "${green}2. 测试版${reset}"
+        read -rp "$(echo -e "${yellow}输入数字选择 (1/2): ${reset}")" choice
         case $choice in
             1)
-                echo "安装稳定版..."
+                echo -e "${green}安装稳定版...${reset}"
                 sudo apt-get install sing-box -yq > /dev/null 2>&1
-                echo "安装已完成"
+                echo -e "${green}安装已完成${reset}"
                 break
                 ;;
             2)
-                echo "安装测试版..."
+                echo -e "${green}安装测试版...${reset}"
                 sudo apt-get install sing-box-beta -yq > /dev/null 2>&1
-                echo "安装已完成"
+                echo -e "${green}安装已完成${reset}"
                 break
                 ;;
             *)
@@ -74,10 +72,10 @@ Signed-By: /etc/apt/keyrings/sagernet.asc
          
         # 自动创建 sing-box 用户并设置权限
         if ! id sing-box &>/dev/null; then
-            echo "正在创建 sing-box 系统用户..."
+            echo -e "${green}正在创建 sing-box 系统用户...${reset}"
             sudo useradd --system --no-create-home --shell /usr/sbin/nologin sing-box
         fi
-        echo "正在设置 /var/lib/sing-box 和 /etc/sing-box 目录权限..."
+        echo -e "${green}正在设置 /var/lib/sing-box 和 /etc/sing-box 目录权限...${reset}"
         sudo mkdir -p /var/lib/sing-box
         sudo chown -R sing-box:sing-box /var/lib/sing-box
         sudo chown -R sing-box:sing-box /etc/sing-box

@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2025-11-20 11:46:54
+# date   : 2025-11-23 11:19:16
 # author : ChatGPT
 # ---------------------------------
 
@@ -19,7 +19,7 @@ cyan="\033[36m"   # 青色
 reset="\033[0m"   # 重置
 
 # 全局变量
-sh_ver="0.2.9"
+sh_ver="0.3.0"
 use_cdn=false
 distro="unknown"  # 系统类型
 arch=""           # 系统架构
@@ -297,7 +297,7 @@ uninstall_mihomo() {
     local service_file="/etc/init.d/mihomo"
     local system_file="/etc/systemd/system/mihomo.service"
     echo -e "${red}警告: 卸载后将删除全部内容！！！${reset}"
-    read -p "$(echo -e "${red}确认卸载 mihomo 吗？${reset} (y/n): ")" input
+    read -rp "$(echo -e "${red}确认卸载 mihomo 吗？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}mihomo 卸载中请等待${reset}"
@@ -342,7 +342,7 @@ install_mihomo() {
     if [ -d "$folders" ]; then
         echo -e "${yellow}检测到 mihomo 已经安装, 并运行在 ${folders} 目录下${reset}"
         echo -e "${red}警告: 卸载后将删除全部内容！！！${reset}"
-        read -p "$(echo -e "${red}是否删除并重新安装？${reset} (y/n): ")" input
+        read -rp "$(echo -e "${red}是否删除并重新安装？${reset} (y/n): ")" input
         case "$input" in
             [Yy]* )
                 echo -e "${green}开始删除, 重新安装中请等待${reset}"
@@ -485,7 +485,7 @@ update_mihomo() {
         start_menu
         return
     fi
-    read -p "$(echo -e "${yellow}检测到新版本 ${green}${latest_version} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
+    read -rp "$(echo -e "${yellow}检测到新版本 ${green}${latest_version} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
@@ -524,7 +524,7 @@ update_shell() {
         start_menu
         return 0
     fi
-    read -p "$(echo -e "${yellow}检测到新版本 ${green}${sh_new_ver} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
+    read -rp "$(echo -e "${yellow}检测到新版本 ${green}${sh_new_ver} ${yellow}是否升级到最新版本？${reset} (y/n): ")" input
     case "$input" in
         [Yy]* )
             echo -e "${green}开始升级, 升级中请等待${reset}"
@@ -565,7 +565,7 @@ config_mihomo() {
     echo -e "${green}3${reset}. 删除机场订阅"
     echo -e "${green}4${reset}. 重置配置文件"
     echo "---------------------------------"
-    read -p "$(echo -e "${yellow}输入选项数字: ${reset}")" choice
+    read -rp "$(echo -e "${yellow}输入选项数字: ${reset}")" choice
     case "$choice" in
         1) add_provider ;;
         2) modify_provider ;;
@@ -589,8 +589,8 @@ add_provider() {
     local counter=$((subscription + 1))
     echo -e "${yellow}当前共有 ${subscription} 个机场订阅。${reset}" >&2
     while true; do
-        read -p "$(echo -e "${green}请输入机场的订阅链接: ${reset}")" airport_url
-        read -p "$(echo -e "${blue}请输入机场的名称: ${reset}")" airport_name
+        read -rp "$(echo -e "${green}请输入机场的订阅链接: ${reset}")" airport_url
+        read -rp "$(echo -e "${blue}请输入机场的名称: ${reset}")" airport_name
         if [ -z "$proxy_providers" ]; then
             proxy_providers="  provider_$(printf "%02d" $counter):
     url: \"${airport_url}\"
@@ -611,7 +611,7 @@ add_provider() {
         fi
         counter=$((counter + 1))
         echo -e "${green}新增订阅完成${reset}"
-        read -p "$(echo -e "${yellow}是否继续输入订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
+        read -rp "$(echo -e "${yellow}是否继续输入订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
         [[ "$cont" =~ ^[nN]$ ]] && break
     done
     awk -v new_providers="$proxy_providers" '
@@ -660,13 +660,13 @@ modify_provider() {
     fi
     echo -e "${yellow}当前共有 ${subscription} 个机场订阅。${reset}" >&2
     while true; do
-        read -p "$(echo -e "${green}请输入要修改的 provider 编号(如 01、02): ${reset}")" number
+        read -rp "$(echo -e "${green}请输入要修改的 provider 编号(如 01、02): ${reset}")" number
         if ! awk "/^proxy-providers:/, /^proxies:/" "$config_file" | grep -q "^  provider_${number}:"; then
             echo -e "${red}未找到编号为 ${number} 的机场订阅, 请重新输入。${reset}"
             continue
         fi
-        read -p "$(echo -e "${green}新的订阅链接: ${reset}")" new_url
-        read -p "$(echo -e "${green}新的机场名称: ${reset}")" new_name
+        read -rp "$(echo -e "${green}新的订阅链接: ${reset}")" new_url
+        read -rp "$(echo -e "${green}新的机场名称: ${reset}")" new_name
         awk -v num="$number" -v url="$new_url" -v name="$new_name" '
         BEGIN {
             in_block = 0
@@ -711,7 +711,7 @@ modify_provider() {
             print
         }' "$config_file" > temp.yaml && mv temp.yaml "$config_file"
         echo -e "${green}编号为 ${number} 的机场订阅已修改完成。${reset}"
-        read -p "$(echo -e "${yellow}是否继续修改其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
+        read -rp "$(echo -e "${yellow}是否继续修改其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
         [[ "$cont" =~ ^[nN]$ ]] && break
     done
 
@@ -734,7 +734,7 @@ delete_provider() {
     fi
     echo -e "${yellow}当前共有 ${subscription} 个机场订阅。${reset}" >&2
     while true; do
-        read -p "$(echo -e "${green}请输入要删除的 provider 编号(如 01、02): ${reset}")" number
+        read -rp "$(echo -e "${green}请输入要删除的 provider 编号(如 01、02): ${reset}")" number
         if ! grep -q "^  provider_${number}:" "$config_file"; then
             echo -e "${red}未找到编号为 ${number} 的机场订阅, 请重新输入。${reset}"
             continue
@@ -807,7 +807,7 @@ delete_provider() {
             echo -e "${yellow}至少保留一个订阅，无法删除最后一个。${reset}"
             break
         fi
-        read -p "$(echo -e "${yellow}是否继续删除其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
+        read -rp "$(echo -e "${yellow}是否继续删除其他订阅, 按回车继续, (输入 n/N 结束): ${reset}")" cont
         [[ "$cont" =~ ^[nN]$ ]] && break
     done
     service_restart
@@ -820,8 +820,8 @@ config_proxy() {
   local subscription=1
   while true; do
     echo -e "${cyan}正在添加第 ${subscription} 个机场配置${reset}" >&2
-    read -p "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
-    read -p "$(echo -e "${blue}请输入机场的名称: ${reset}")" subscription_name
+    read -rp "$(echo -e "${green}请输入机场的订阅连接: ${reset}")" subscription_url
+    read -rp "$(echo -e "${blue}请输入机场的名称: ${reset}")" subscription_name
     providers="${providers}
   provider_$(printf "%02d" $subscription):
     url: \"${subscription_url}\"
@@ -831,7 +831,7 @@ config_proxy() {
     override:
       additional-prefix: \"[${subscription_name}]\""
     subscription=$((subscription + 1))
-    read -p "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
+    read -rp "$(echo -e "${yellow}是否继续输入订阅？按回车继续，输入 n/N 结束: ${reset}")" cont
     if [[ "$cont" =~ ^[nN]$ ]]; then
       break
     fi
@@ -884,7 +884,7 @@ switch_version() {
     echo -e "${green}1${reset}. 测试版 (Prerelease-Alpha)"
     echo -e "${green}2${reset}. 正式版 (Latest)"
     echo "---------------------------------"
-    read -p "$(echo -e "${yellow}请输入选项 (1/2): ${reset}")" choice
+    read -rp "$(echo -e "${yellow}请输入选项 (1/2): ${reset}")" choice
     case "$choice" in
         1)
             if [ "$download_version_type" == "alpha" ]; then
@@ -955,7 +955,7 @@ menu() {
     echo "================================="
     show_status
     echo "================================="
-    read -p "$(echo -e "${yellow}请输入上面选项: ${reset}")" input
+    read -rp "$(echo -e "${yellow}请输入上面选项: ${reset}")" input
     case "$input" in
         1) install_mihomo ;;
         2) update_mihomo ;;
