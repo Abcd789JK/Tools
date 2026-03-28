@@ -77,7 +77,7 @@
       "tag": "HYSTERIA2",
       "type": "hysteria2",
       "listen": "::",
-      "listen_port": 52021,
+      "listen_port": 443,
       "users": [
         {
           "password": "625a08bb-d372-4f7c-a2d4-6a50ca3393ce"
@@ -88,8 +88,63 @@
         "alpn": [
           "h3"
         ],
-        "certificate_path": "/root/ssl/server.crt",
-        "key_path": "/root/ssl/server.key"
+        "certificate_path": "./server.crt",
+        "key_path": "./server.key"
+      }
+    },
+    {
+      "type": "anytls",
+      "tag": "anytls-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "name": "sekai",
+          "password": "hztQCU1ZB8CAuPMVFJiCJw=="
+        }
+      ],
+      "padding_scheme": [
+        "stop=8",
+        "0=30-30",
+        "1=100-400",
+        "2=400-500,c,500-1000,c,500-1000,c,500-1000,c,500-1000",
+        "3=9-9,500-1000",
+        "4=500-1000",
+        "5=500-1000",
+        "6=500-1000",
+        "7=500-1000"
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "xxx.com",
+        "certificate_path": "./server.crt",
+        "key_path": "./server.key"
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "trojan-in",
+      "listen": "::",
+      "listen_port": 37951,
+      "tcp_fast_open": true,
+      "users": [
+        {
+          "password": "myyaXkkDt6zTO59gMldb1w=="
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "xxx.com",
+        "certificate_path": "./server.crt",
+        "key_path": "./server.key"
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/path"
+      },
+      "multiplex": {
+        "enabled": true,
+        "padding": true
       }
     }
   ],
