@@ -1,48 +1,32 @@
-# 设置工作流名称，定义该 GitHub Actions 工作流的名称
-name: 同步 mihomo 上游规则  # 工作流名称：同步 mihomo 上游规则
+name: 同步 mihomo 上游规则
 
-# 定义触发该工作流的事件
 on:
-  # 允许通过 GitHub 界面手动触发工作流
-  workflow_dispatch:  # 支持手动触发
-  schedule:  # 定时触发设置
-    # 设置定时触发规则，使用 cron 语法表示每6小时触发一次
-    - cron: '0 16,22,4,10 * * *'  # 注：以上时间均为上海时间（0:00、6:00、12:00、18:00 执行）
+  workflow_dispatch:
+  schedule:
+    - cron: '0 16,22,4,10 * * *'   # 上海时间 00:00、06:00、12:00、18:00 执行
 
-# 工作流
 jobs:
-  # 定义名为 Fork 的任务
-  Fork:
-    # 指定运行环境为最新版本的 Ubuntu
-    runs-on: ubuntu-latest  # 在 ubuntu-latest 环境中运行任务
+  Update:
+    runs-on: ubuntu-latest
     env:
-      # 设置环境变量 TZ 为上海时间，确保任务中的时间与上海时区一致
-      TZ: 'Asia/Shanghai'  # 配置时区为 Asia/Shanghai
+      TZ: 'Asia/Shanghai'
 
     steps:
-      # 检出目标仓库
-      - name: 检出目标仓库  # 定义步骤名称：检出目标仓库
-        uses: actions/checkout@v4  # 使用 GitHub 官方 checkout action 检出代码
+      - name: 检出目标仓库
+        uses: actions/checkout@v4
         with:
-          # 指定需要检出的远程仓库，格式为“用户名/仓库名”
-          repository: Abcd789JK/Tools  # 目标仓库：Abcd789JK/Tools
-          # 设置将仓库检出到本地的目录名称为 Tools-repo
-          path: Tools-repo  # 本地目录名称：Tools-repo
+          repository: Abcd789JK/Tools
+          path: Tools-repo
 
-      # 执行内嵌脚本来更新规则
-      - name: 下载 mihomo 规则  # 下载并保存 mihomo 规则文件
+      - name: 下载 mihomo 规则
         shell: bash
         run: |
           set -euo pipefail
-          echo "开始下载 mihomo 规则文件..."
-          repo_name=$(basename "$GITHUB_REPOSITORY")
-          if [[ "$repo_name" != "Tools" ]]; then
-              echo "当前仓库不是 Tools，跳过执行。"
-              exit 0
-          fi
-          echo "在 Tools 仓库中运行 mihomo 规则任务"
-          # 创建 mihomo 规则目录
+          echo "开始下载 mihomo (.mrs) 规则文件..."
+
+          # 创建目录
           mkdir -p Tools-repo/Ruleset/mihomo/{geoip,geosite}
+
           files=(
             # geosite
             "geosite/Ads_all.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
@@ -70,7 +54,6 @@ jobs:
             "geosite/Disney.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"
             "geosite/Netflix.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
             "geosite/Spotify.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
-
             # geoip
             "geoip/Local.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
             "geoip/China.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
@@ -80,39 +63,47 @@ jobs:
             "geoip/Facebook.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/facebook.mrs"
             "geoip/Google.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
           )
+
           for file in "${files[@]}"; do
-              file_name=$(echo $file | cut -d " " -f 1)
-              url=$(echo $file | cut -d " " -f 2)
-              [[ "$url" =~ ^https?: ]] || url="https:$url"
+              file_name=$(echo "$file" | awk '{print $1}')
+              url=$(echo "$file" | awk '{print $2}')
+              [[ "$url" =~ ^https?: ]] || url="https:${url}"
               echo "下载 mihomo 文件：$file_name"
-              curl -f -L "$url" -o "Tools-repo/Ruleset/mihomo/$file_name" || { echo "下载失败：$url"; exit 1; }
+              curl -f -L --retry 3 --retry-delay 5 "$url" -o "Tools-repo/Ruleset/mihomo/$file_name" || {
+                echo "❌ 下载失败：$url"
+                exit 1
+              }
           done
 
-      - name: 推送更新到 Tools-repo 仓库      # 检查变更并推送更新到 Tools-repo 仓库 main 分支
+      - name: 配置 Git 并推送更新
         shell: bash
         run: |
           set -euo pipefail
-          echo "检查仓库更新状态..."
           cd "${{ github.workspace }}/Tools-repo"
+
+          # 配置 Git
+          git config --global user.name "${{ secrets.USERNAME }}"
+          git config --global user.email "${{ secrets.EMAIL }}"
+          git remote set-url origin "https://x-access-token:${{ secrets.TOKEN }}@github.com/${{ secrets.USERNAME }}/Tools.git"
+
           git pull --rebase --autostash origin main
+
           if [[ -n $(git status --porcelain) ]]; then
-            echo "检测到变更，开始提交更新..."
-            git pull --rebase --autostash origin main
+            echo "检测到规则变更，开始提交更新..."
             git config --local user.name "GitHub Actions"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "Auto Update $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')"
-            git push origin main && echo "同步完成！"
+            git commit -m "Auto Update mihomo Rules $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')"
+            git push origin main && echo "✅ mihomo 规则同步并推送成功"
           else
-            echo "没有变更，无需同步。"
+            echo "ℹ️  没有检测到规则变更，无需推送"
           fi
 
-      - name: 设置当前时间变量  # 保存当前时间到环境变量中
+      - name: 设置当前时间变量
         shell: bash
-        run: |
-          echo "time=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+        run: echo "time=$(date +'%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_ENV
 
-      - name: 发送 Telegram 通知  # 通过 Telegram 发送执行通知
+      - name: 发送 Telegram 通知
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -120,16 +111,13 @@ jobs:
           message: |
             📢 通知
             🚀 来源：GitHub Actions
-            ✉️ 标题：同步上游规则
-            📦 仓库：JK_789
+            ✉️ 标题：同步 mihomo 上游规则
+            📦 仓库：${{ github.repository }}
             ⏰ 时间：${{ env.time }}
             🎉 状态：全部任务成功执行
 
-      # 步骤6：清理旧的工作流运行记录
-      - name: 清理工作流  # 定义步骤名称：清理工作流
-        uses: Mattraks/delete-workflow-runs@main  # 使用 Mattraks 提供的 Action 清理旧的工作流运行记录
+      - name: 清理工作流运行记录
+        uses: Mattraks/delete-workflow-runs@main
         with:
-          # 设置保留的工作流运行记录天数为 0，即清除所有过期的记录
-          retain_days: 0  # 过期记录保留天数设置为 0
-          # 保证至少保留最近 2 次的工作流运行记录，避免记录被全部清理
-          keep_minimum_runs: 2  # 最少保留 2 次工作流运行记录
+          retain_days: 0
+          keep_minimum_runs: 2
