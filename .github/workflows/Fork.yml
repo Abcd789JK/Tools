@@ -6,7 +6,7 @@ on:
     - cron: '0 16,22,4,10 * * *'   # 上海时间 00:00、06:00、12:00、18:00 执行
 
 jobs:
-  Update:
+  sync-mihomo-rules:
     runs-on: ubuntu-latest
     env:
       TZ: 'Asia/Shanghai'
@@ -17,91 +17,98 @@ jobs:
         with:
           repository: Abcd789JK/Tools
           path: Tools-repo
+          token: ${{ secrets.GITHUB_TOKEN }}   # 推荐添加以提升推送权限
 
-      - name: 下载 mihomo 规则
+      - name: 下载 mihomo 规则文件
         shell: bash
+        working-directory: ${{ github.workspace }}/Tools-repo
         run: |
           set -euo pipefail
-          echo "开始下载 mihomo (.mrs) 规则文件..."
+          echo "开始下载 mihomo 规则文件..."
 
           # 创建目录
-          mkdir -p Tools-repo/Ruleset/mihomo/{geoip,geosite}
+          mkdir -p Ruleset/mihomo/{geoip,geosite}
 
-          files=(
+          # 定义需要下载的文件列表
+          declare -A files=(
             # geosite
-            "geosite/Ads_all.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-            "geosite/Local.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
-            "geosite/China.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
-            "geosite/Openai.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"
-            "geosite/PayPal.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"
-            "geosite/Apple.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
-            "geosite/Global.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
-            "geosite/GlobalGFW.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"
-            "geosite/Google.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
-            "geosite/YouTube.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
-            "geosite/Steam.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
-            "geosite/Epic.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"
-            "geosite/Facebook.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/facebook.mrs"
-            "geosite/Instagram.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/instagram.mrs"
-            "geosite/Twitter.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"
-            "geosite/Telegram.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
-            "geosite/Line.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/line.mrs"
-            "geosite/GitHub.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"
-            "geosite/OneDrive.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"
-            "geosite/Microsoft.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
-            "geosite/Tiktok.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
-            "geosite/Bilibili.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"
-            "geosite/Disney.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"
-            "geosite/Netflix.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
-            "geosite/Spotify.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
+            ["geosite/Ads_all.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+            ["geosite/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+            ["geosite/China.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+            ["geosite/Openai.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"
+            ["geosite/PayPal.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"
+            ["geosite/Apple.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
+            ["geosite/Global.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
+            ["geosite/GlobalGFW.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"
+            ["geosite/Google.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
+            ["geosite/YouTube.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
+            ["geosite/Steam.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
+            ["geosite/Epic.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"
+            ["geosite/Facebook.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/facebook.mrs"
+            ["geosite/Instagram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/instagram.mrs"
+            ["geosite/Twitter.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"
+            ["geosite/Telegram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
+            ["geosite/Line.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/line.mrs"
+            ["geosite/GitHub.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"
+            ["geosite/OneDrive.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"
+            ["geosite/Microsoft.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
+            ["geosite/Tiktok.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
+            ["geosite/Bilibili.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"
+            ["geosite/Disney.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"
+            ["geosite/Netflix.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
+            ["geosite/Spotify.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
             # geoip
-            "geoip/Local.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
-            "geoip/China.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
-            "geoip/Netflix.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"
-            "geoip/Twitter.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.mrs"
-            "geoip/Telegram.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
-            "geoip/Facebook.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/facebook.mrs"
-            "geoip/Google.mrs https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
+            ["geoip/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+            ["geoip/China.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+            ["geoip/Netflix.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"
+            ["geoip/Twitter.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.mrs"
+            ["geoip/Telegram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
+            ["geoip/Facebook.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/facebook.mrs"
+            ["geoip/Google.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
           )
 
-          for file in "${files[@]}"; do
-              file_name=$(echo "$file" | awk '{print $1}')
-              url=$(echo "$file" | awk '{print $2}')
-              [[ "$url" =~ ^https?: ]] || url="https:${url}"
-              echo "下载 mihomo 文件：$file_name"
-              curl -f -L --retry 3 --retry-delay 5 "$url" -o "Tools-repo/Ruleset/mihomo/$file_name" || {
-                echo "❌ 下载失败：$url"
-                exit 1
-              }
+          for file_path in "${!files[@]}"; do
+            url="${files[$file_path]}"
+            echo "下载文件：$file_path"
+            curl -f -L --retry 3 --retry-delay 5 "$url" -o "Ruleset/mihomo/$file_path" || {
+              echo "❌ 下载失败：$url"
+              exit 1
+            }
           done
 
-      - name: 配置 Git 并推送更新
+          echo "✅ 所有 mihomo 规则文件下载完成。"
+
+      - name: 提交并推送更新
         shell: bash
+        working-directory: ${{ github.workspace }}/Tools-repo
         run: |
           set -euo pipefail
-          cd "${{ github.workspace }}/Tools-repo"
-
-          # 配置 Git
-          git config --global user.name "${{ secrets.USERNAME }}"
-          git config --global user.email "${{ secrets.EMAIL }}"
-          git remote set-url origin "https://x-access-token:${{ secrets.TOKEN }}@github.com/${{ secrets.USERNAME }}/Tools.git"
 
           git pull --rebase --autostash origin main
 
           if [[ -n $(git status --porcelain) ]]; then
-            echo "检测到规则变更，开始提交更新..."
+            echo "检测到规则文件更新，开始提交..."
+            
             git config --local user.name "GitHub Actions"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            
             git add -A
-            git commit -m "Auto Update mihomo Rules $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')"
-            git push origin main && echo "✅ mihomo 规则同步并推送成功"
+            git commit -m "Auto Update mihomo Rules $(date +'%Y-%m-%d %H:%M:%S %Z')"
+            
+            if git push origin main; then
+              echo "✅ 规则同步并推送成功！"
+            else
+              echo "❌ 推送失败，请检查仓库权限。"
+              exit 1
+            fi
           else
-            echo "ℹ️  没有检测到规则变更，无需推送"
+            echo "ℹ️ 规则文件无变更，无需提交。"
           fi
 
       - name: 设置当前时间变量
         shell: bash
-        run: echo "time=$(date +'%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_ENV
+        run: |
+          echo "time=$(date +'%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_ENV
 
       - name: 发送 Telegram 通知
         uses: appleboy/telegram-action@master
@@ -109,14 +116,13 @@ jobs:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            📢 通知
-            🚀 来源：GitHub Actions
-            ✉️ 标题：同步 mihomo 上游规则
-            📦 仓库：${{ github.repository }}
+            📢 GitHub Actions 通知
+            ✉️ 标题：mihomo 上游规则同步
+            📦 仓库：Abcd789JK/Tools
             ⏰ 时间：${{ env.time }}
-            🎉 状态：全部任务成功执行
+            🎉 状态：执行成功（规则已同步）
 
-      - name: 清理工作流运行记录
+      - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
         with:
           retain_days: 0
