@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2026-04-04 11:22:47
+#!date = 2026-04-04 19:55:12
 #!author = RuCu6
 
 
@@ -18,7 +18,7 @@ DOMAIN,acdn.adnxs.com
 DOMAIN,acjs.aliyun.com
 DOMAIN,acs4baichuan.m.taobao.com
 DOMAIN,activity.video.qq.com
-DOMAIN,ad-cdn. qingting.fm
+DOMAIN,ad-cdn.qingting.fm
 DOMAIN,ad-evods.tianya.tv
 DOMAIN,ad-h5-cdn.soulapp.cn
 DOMAIN,ad-h5-station-cdn.soulapp.cn
