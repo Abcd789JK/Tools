@@ -1,5 +1,5 @@
 #!name = mihomo win 配置文件
-#!date = 2025-04-06 14:57:26
+#!date = 2026-04-08 11:38:28
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 
 # 全局锚点配置
@@ -88,8 +88,9 @@ tun:
   dns-hijack:
     - "any:53"
     - "tcp://any:53"
-  auto-route: true
-  auto-redirect: true
+  # win 系统不需要
+  # auto-route: true 
+  # auto-redirect: true
   auto-detect-interface: true
 
 # DNS 配置
@@ -99,7 +100,6 @@ dns:
   prefer-h3: true
   enhanced-mode: fake-ip
   fake-ip-filter:
-    - "*"
     - "+.lan"
     - "+.local"
     - "+.market.xiaomi.com"
