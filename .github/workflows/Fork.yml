@@ -120,7 +120,7 @@ jobs:
             ✉️ 标题：mihomo 上游规则同步
             📦 仓库：Abcd789JK/Tools
             ⏰ 时间：${{ env.time }}
-            🎉 状态：执行成功（规则已同步）
+            🎉 状态：全部任务成功执行
 
       - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
