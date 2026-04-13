@@ -143,9 +143,9 @@ jobs:
             📢 GitHub Actions 自动化任务通知
             ✉️ 标题: mihomo 上游规则拉取
             📦 仓库: Abcd789JK/Tools
-            ⏰ 时间：${{ env.time }}
-            🎉 状态：${{ job.status == 'success' && '恭喜你！任务执行完成' || '很遗憾! 任务执行失败' }}
-            📊 更新：${{ env.changed == 'true' && '本次执行有更新' || '本次执行无更新' }}
+            ⏰ 时间: ${{ env.time }}
+            🎯 状态: ${{ job.status == 'success' && '恭喜你！任务执行完成' || '很遗憾! 任务执行失败' }}
+            📊 更新: ${{ env.changed == 'true' && '本次执行有更新' || '本次执行无更新' }}
 
       - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
