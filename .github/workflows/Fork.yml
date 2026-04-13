@@ -105,16 +105,32 @@ jobs:
 
           git pull --rebase --autostash origin main
 
-          if [[ -n $(git status --porcelain) ]]; then
-            echo "检测到规则文件更新，开始提交..."
+          git add -A
 
-            # 有更新才提示
+          if ! git diff --cached --quiet; then
+            echo "检测到规则文件更新，开始提交"
+
+            # 标记有更新
             echo "changed=true" >> $GITHUB_ENV
+
+            # 统计变更类型
+            added=$(git diff --cached --name-status | grep '^A' | wc -l || true)
+            modified=$(git diff --cached --name-status | grep '^M' | wc -l || true)
+            deleted=$(git diff --cached --name-status | grep '^D' | wc -l || true)
+
+            echo "added=$added" >> $GITHUB_ENV
+            echo "modified=$modified" >> $GITHUB_ENV
+            echo "deleted=$deleted" >> $GITHUB_ENV
+
+            # 获取文件列表
+            files=$(git diff --cached --name-only | head -n 10 | sed 's/^/- /')
+            echo "files<<EOF" >> $GITHUB_ENV
+            echo "$files" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
 
             git config --local user.name "GitHub Actions"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
       
-            git add -A
             git commit -m "Auto Update mihomo Rules $(date +'%Y-%m-%d %H:%M:%S %Z')"
       
             if git push origin main; then
@@ -144,8 +160,14 @@ jobs:
             ✉️ 标题: mihomo 上游规则拉取
             📦 仓库: Abcd789JK/Tools
             ⏰ 时间: ${{ env.time }}
-            🎯 状态: ${{ job.status == 'success' && '恭喜你！任务执行完成' || '很遗憾! 任务执行失败' }}
-            📊 更新: ${{ env.changed == 'true' && '本次执行有更新' || '本次执行无更新' }}
+            🎯 状态: ${{ job.status == 'success' && '恭喜你！任务完成' || '很遗憾! 任务失败' }}
+            📊 更新: ${{ env.changed == 'true' && '本次有更新' || '本次无更新' }}
+            📈 变更统计
+              ➕ 新增: ${{ env.added }}
+              ✏️ 修改: ${{ env.modified }}
+              ❌ 删除: ${{ env.deleted }}
+
+              ${{ env.changed == 'true' && format('📂 *变更文件*\n{0}', env.files) || '' }}
 
       - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
