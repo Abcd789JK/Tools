@@ -1,13 +1,13 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2026-04-13 14:25:31
+#!date = 2026-04-13 14:28:54
 #!author = RuCu6
  
 # ======= 0 ======= #
 # 360
 DOMAIN,ad.jia.360.cn
 DOMAIN,ad.iot.360.cn
-
+ 
 # ======= A ======= #
 # Apple
 DOMAIN,ca.iadsdk.apple.com
