@@ -81,17 +81,17 @@ jobs:
 
             if curl -f -L --retry 3 --retry-delay 5 --max-time 60 \
               "$url" -o "Ruleset/mihomo/$file_path"; then
-              echo "✅ 下载成功: $file_path"
+              echo "下载成功: $file_path"
             else
-              echo "❌ 下载失败: $url"
+              echo "下载失败: $url"
               ((failures++))
             fi
           done
 
           if [[ $failures -gt 0 ]]; then
-            echo "⚠️ 共有 $failures 个规则下载失败, 继续执行脚本"
+            echo "共有 $failures 个规则下载失败, 继续执行脚本"
           else
-            echo "✅ 所有 mihomo 规则文件下载完成。"
+            echo "所有 mihomo 规则文件下载完成。"
           fi
 
       - name: 提交并推送更新
@@ -134,13 +134,13 @@ jobs:
             git commit -m "Auto Update mihomo Rules $(date +'%Y-%m-%d %H:%M:%S %Z')"
       
             if git push origin main; then
-              echo "✅ 规则同步并推送成功！"
+              echo "规则同步并推送成功！"
             else
-              echo "❌ 推送失败，请检查仓库权限。"
+              echo "推送失败，请检查仓库权限。"
               exit 1
             fi
           else
-            echo "ℹ️ 规则文件无变更，无需提交。"
+            echo "规则文件无变更，无需提交。"
           fi
 
       - name: 设置当前时间变量
