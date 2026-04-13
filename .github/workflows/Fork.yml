@@ -26,7 +26,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 1          # 仅拉取最新提交，提高速度
 
-      - name: 下载 mihomo 规则文件
+      - name: 下载 mihomo 规则
         shell: bash
         working-directory: ${{ github.workspace }}/Tools-repo
         run: |
