@@ -31,10 +31,11 @@ jobs:
         working-directory: ${{ github.workspace }}/Tools-repo
         run: |
           set -euo pipefail
-          echo "开始下载 mihomo 规则文件..."
+          echo "开始下载 mihomo 规则"
 
           # 创建目录
-          mkdir -p Ruleset/mihomo/{geoip,geosite}
+          mkdir -p \
+          Ruleset/mihomo/{geoip,geosite}
 
           # 定义需要下载的文件列表
           declare -A files=(
