@@ -108,7 +108,7 @@ jobs:
 
           git add -A
 
-          if ! git diff --quiet || ! git diff --cached --quiet; then
+          if ! git diff --cached --quiet; then
             echo "检测到规则文件更新，开始提交"
 
             # 标记有更新
