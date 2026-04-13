@@ -131,7 +131,7 @@ jobs:
             git config --local user.name "GitHub Actions"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
       
-            git commit -m "Auto Update mihomo Rules $(date +'%Y-%m-%d %H:%M:%S %Z')"
+            git commit -m "Auto Update Ruleset $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')"
       
             if git push origin main; then
               echo "规则同步并推送成功！"
