@@ -38,7 +38,7 @@ jobs:
           Ruleset/mihomo/{geoip,geosite}
 
           # 定义需要下载的文件列表
-          declare -A files=(
+          declare -A file=(
             # geosite
             ["geosite/Ads_all.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
             ["geosite/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
@@ -76,8 +76,8 @@ jobs:
           )
 
           failures=0
-          for file_path in "${!files[@]}"; do
-            url="${files[$file_path]}"
+          for file_path in "${!file[@]}"; do
+            url="${file[$file_path]}"
             echo "下载规则：$file_path"
 
             if curl -f -L --retry 3 --retry-delay 5 --max-time 60 \
