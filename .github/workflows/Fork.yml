@@ -160,14 +160,12 @@ jobs:
             ✉️ 标题: mihomo 上游规则拉取
             📦 仓库: Abcd789JK/Tools
             ⏰ 时间: ${{ env.time }}
-            🎯 状态: ${{ job.status == 'success' && '恭喜你！任务完成' || '很遗憾! 任务失败' }}
+            🎯 状态: ${{ job.status == 'success' && '恭喜你! 任务成功' || '很遗憾! 任务失败' }}
             📊 更新: ${{ env.changed == 'true' && '本次有更新' || '本次无更新' }}
-            📈 变更统计
-              ➕ 新增: ${{ env.added }}
-              ✏️ 修改: ${{ env.modified }}
-              ❌ 删除: ${{ env.deleted }}
 
-              ${{ env.changed == 'true' && format('📂 *变更文件*\n{0}', env.files) || '' }}
+            ${{ env.changed == 'true' && format('📈 变更统计\n  ➕ 新增: {0}\n  ✏️ 修改: {1}\n  ❌ 删除: {2}', env.added, env.modified, env.deleted) || '' }}
+
+            ${{ env.changed == 'true' && format('📂 *变更文件*\n{0}', env.files) || '' }}
 
       - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
