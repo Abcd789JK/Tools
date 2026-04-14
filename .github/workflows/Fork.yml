@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-14 11:02:55
+#!date = 2026-04-14 11:09:38
 
 on:
   workflow_dispatch:
@@ -149,9 +149,9 @@ jobs:
             {
               echo "diff_text<<EOF"
               echo "📈 <b>变更详细</b>"
-              echo "➕ <b>新增:</b> $added"
-              echo "✏️ <b>修改:</b> $modified"
-              echo "❌ <b>删除:</b> $deleted"
+              echo "➕ 新增: $added"
+              echo "✏️ 修改: $modified"
+              echo "❌ 删除: $deleted"
               echo ""
               echo "📂 <b>变更文件</b>"
              echo "<pre>$files</pre>"
@@ -171,12 +171,12 @@ jobs:
           message: |
             📢 <b>GitHub Actions 自动化任务通知</b>
 
-            ✉️ <b>标题:</b> mihomo 上游规则拉取
-            📦 <b>仓库:</b> Abcd789JK/Tools
-            ⏰ <b>时间:</b> ${{ env.time }}
+            ✉️ 标题: mihomo 上游规则拉取
+            📦 仓库: Abcd789JK/Tools
+            ⏰ 时间: ${{ env.time }}
 
-            🎯 <b>状态:</b> ${{ job.status == 'success' && '恭喜你! 任务成功' || '很遗憾! 任务失败' }}
-            📊 <b>更新:</b> ${{ env.changed == 'true' && '本次有更新' || '本次无更新' }}
+            🎯 状态: ${{ job.status == 'success' && '恭喜你! 任务成功' || '很遗憾! 任务失败' }}
+            📊 更新: ${{ env.changed == 'true' && '本次有更新' || '本次无更新' }}
 
             ${{ env.diff_text }}
 
