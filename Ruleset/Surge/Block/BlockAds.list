@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2026-04-14 10:33:52
+#!date = 2026-04-14 10:34:44
 #!author = RuCu6
  
 # ======= 0 ======= #
@@ -194,6 +194,8 @@ URL-REGEX,"^https:\/\/d\.line-scdn\.net\/lcp-prod-photo\/20.+\.(jpg|jpeg|png)"
 URL-REGEX,"^https:\/\/web-mmap-pay\.line-apps\.com\/tw\/liff\/campaign\/v\d\/aggregate\/ad\/banner\/"
 URL-REGEX,"^https:\/\/scdn\.line-apps\.com\/lan\/image\/line\/bannerImageEvent\/"
 URL-REGEX,"^https:\/\/scdn\.line-apps\.com\/lan\/document\/pageEvent\/line\/ios\/"
+
+DOMAIN,ymg-api.terabox.com
 
 # ======= M ======= #
 # 美颜相机
