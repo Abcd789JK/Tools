@@ -1,30 +1,25 @@
 name: 拉取上游 mihomo 规则
 
-# 权限设置：遵循最小权限原则
-permissions:
-  contents: write        # 允许推送规则更新
-  actions: read          # 允许读取 workflow 信息（用于清理任务）
+#!date = 2026-04-14 08:26:34
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'      # 每 6 小时执行一次
-      timezone: 'Asia/Shanghai' # 使用上海时区（GitHub 已支持）
+    - cron: '15 */12 * * *'
 
 jobs:
-  sync-mihomo-rules:
+  git-mihomo:
     runs-on: ubuntu-latest
     env:
       TZ: 'Asia/Shanghai'
 
     steps:
-      - name: 目标仓库
+      - name: 检查当前仓库
         uses: actions/checkout@v6
         with:
           repository: Abcd789JK/Tools
           path: Tools-repo
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 1          # 仅拉取最新提交，提高速度
 
       - name: 下载 mihomo 规则
         shell: bash
@@ -171,5 +166,5 @@ jobs:
       - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
         with:
-          retain_days: 5               # 保留最近 5 天記錄
+          retain_days: 1               # 保留最近 5 天記錄
           keep_minimum_runs: 3         # 至少保留 3 次運行
