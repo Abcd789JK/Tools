@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-14 08:26:34
+#!date = 2026-04-14 08:36:52
 
 on:
   workflow_dispatch:
@@ -26,7 +26,6 @@ jobs:
         working-directory: ${{ github.workspace }}/Tools-repo
         run: |
           set -euo pipefail
-          echo "开始下载 mihomo 规则"
 
           # 创建目录
           mkdir -p \
@@ -158,6 +157,7 @@ jobs:
             ⏰ 时间: ${{ env.time }}
             🎯 状态: ${{ job.status == 'success' && '恭喜你! 任务成功' || '很遗憾! 任务失败' }}
             📊 更新: ${{ env.changed == 'true' && '本次有更新' || '本次无更新' }}
+            
             ${{ env.changed == 'true' && '📈 变更详细' || '' }}
             ${{ env.changed == 'true' && format('➕ 新增: {0}', env.added) || '' }}
             ${{ env.changed == 'true' && format('✏️ 修改: {0}', env.modified) || '' }}
@@ -166,5 +166,5 @@ jobs:
       - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
         with:
-          retain_days: 1               # 保留最近 5 天記錄
-          keep_minimum_runs: 3         # 至少保留 3 次運行
+          retain_days: 1
+          keep_minimum_runs: 3
