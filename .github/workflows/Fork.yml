@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-14 11:09:38
+#!date = 2026-04-16 10:52:08
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
   git-mihomo:
     runs-on: ubuntu-latest
     env:
-      TZ: 'Asia/Shanghai'
+      TZ: 'Asia/Hong_Kong'
 
     steps:
       - name: 检查当前仓库
@@ -118,7 +118,7 @@ jobs:
             echo "deleted=$deleted" >> $GITHUB_ENV
 
             # 获取文件列表
-            files=$(git diff --cached --name-only | head -n 10 | sed 's/^/- /')
+            files=$(git diff --cached --name-only | head -n 20 | sed 's/^/- /')
             echo "files<<EOF" >> $GITHUB_ENV
             echo "$files" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
@@ -126,7 +126,7 @@ jobs:
             git config --local user.name "GitHub Actions"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
       
-            git commit -m "Auto Update Ruleset $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S %Z')"
+            git commit -m "Auto Update Ruleset $(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M:%S %Z')"
       
             if git push origin main; then
               echo "规则同步并推送成功！"
@@ -138,7 +138,7 @@ jobs:
             echo "规则文件无变更，无需提交。"
           fi
 
-      - name: 设置当前时间变量
+      - name: 设置时间 & 变更信息
         shell: bash
         run: |
           set -euo pipefail
