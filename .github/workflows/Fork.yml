@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-16 10:52:08
+#!date = 2026-04-16 11:16:47
 
 on:
   workflow_dispatch:
@@ -98,8 +98,10 @@ jobs:
           # 默认无更新
           echo "changed=false" >> $GITHUB_ENV
 
+          # 拉取远程 main 分支代码，使用 rebase 保持提交历史干净，并自动暂存/恢复本地未提交修改（避免 pull 失败）
           git pull --rebase --autostash origin main
 
+          # 添加所有变更（新增、修改、删除）到暂存区
           git add -A
 
           if ! git diff --cached --quiet; then
@@ -143,7 +145,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "time=$(date +'%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_ENV
+          echo "time=$(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_ENV
 
           if [ "$changed" = "true" ]; then
             {
