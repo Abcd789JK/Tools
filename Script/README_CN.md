@@ -304,11 +304,12 @@ journalctl -u mihomo -o cat -e
 
 ```bash
 # 二选一
+apt update && apt install -y tzdata && \
+timedatectl set-timezone Asia/Hong_Kong
+
 ln -sf /usr/share/zoneinfo/Asia/Hong_Kong /etc/localtime
 echo "Asia/Hong_Kong" > /etc/timezone
 
-cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-echo "Asia/Shanghai" | tee /etc/timezone > /dev/null
 ```
 
 ### 支持 alpine 系统
