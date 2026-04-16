@@ -298,7 +298,7 @@ rc-service mihomo status
 journalctl -u mihomo -o cat -e
 ```
 
-## Linux 系统设置上海时区
+## Linux 系统设置时区
 
 ### 支持 Debian Ubuntu 系统
 
