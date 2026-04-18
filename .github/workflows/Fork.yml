@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-18 13:12:30
+#!date = 2026-04-18 13:22:29
 
 on:
   workflow_dispatch:
@@ -190,5 +190,5 @@ jobs:
       - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@main
         with:
-          retain_days: 1
+          retain_days: 0
           keep_minimum_runs: 3
