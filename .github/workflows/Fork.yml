@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-18 13:01:24
+#!date = 2026-04-18 13:05:53
 
 on:
   workflow_dispatch:
@@ -12,10 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TZ: 'Asia/Hong_Kong'
-
-    # 最小权限声明
-    permissions:
-      contents: write
 
     steps:
       - name: 检查当前仓库
