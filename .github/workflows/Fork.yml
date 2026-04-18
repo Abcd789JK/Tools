@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-18 15:43:41
+#!date = 2026-04-18 19:18:13
 
 on:
   workflow_dispatch:
@@ -59,6 +59,7 @@ jobs:
             ["geosite/Disney.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"
             ["geosite/Netflix.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
             ["geosite/Spotify.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
+            ["geosite/Talkatone.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/talkatone.mrs"
             # geoip
             ["geoip/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
             ["geoip/China.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
