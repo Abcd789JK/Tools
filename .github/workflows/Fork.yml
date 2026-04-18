@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-18 13:37:33
+#!date = 2026-04-18 15:43:41
 
 on:
   workflow_dispatch:
@@ -172,7 +172,7 @@ jobs:
           format: html
           message: |
             📢 <b>GitHub Actions 自动化任务通知</b>
-            ========================================
+
             ✉️ 标题: mihomo 上游规则拉取
             📦 仓库: 小姐姐
             ⏰ 时间: ${{ env.time }}
