@@ -1,6 +1,6 @@
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-04-18 09:56:05
+#!date = 2026-04-18 13:01:24
 
 on:
   workflow_dispatch:
@@ -176,14 +176,13 @@ jobs:
           format: html
           message: |
             📢 <b>GitHub Actions 自动化任务通知</b>
-
+            ========================================
             ✉️ 标题: mihomo 上游规则拉取
             📦 仓库: 小姐姐
             ⏰ 时间: ${{ env.time }}
-
             🎯 状态: ${{ job.status == 'success' && '恭喜你! 任务成功' || '很遗憾! 任务失败' }}
             📊 更新: ${{ env.changed == 'true' && '本次有更新' || '本次无更新' }}
-
+            ---------------------------------------
             ${{ env.diff_text }}
 
       - name: 清理旧工作流运行记录
