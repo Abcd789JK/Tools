@@ -1,0 +1,13 @@
+# 第一个 GitHub 账户配置
+Host Abcd789JK
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/Abcd789JK
+  IdentitiesOnly yes
+
+
+
+// Abcd789JK 可以随便命名
+
+// IdentityFile ~/.ssh/Abcd789JK
+// IdentityFile ~/.ssh/id_rsa_Abcd789JK
