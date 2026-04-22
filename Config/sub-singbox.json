@@ -359,13 +359,6 @@
         "download_detour": "Direct"
       },
       {
-        "tag": "geosite-onedrive",
-        "type": "remote",
-        "format": "binary",
-        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/onedrive.srs",
-        "download_detour": "Direct"
-      },
-      {
         "tag": "geosite-microsoft",
         "type": "remote",
         "format": "binary",
