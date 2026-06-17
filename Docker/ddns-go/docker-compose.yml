@@ -1,8 +1,8 @@
 services:
   ddns-go:
-    image: jeessy/ddns-go:latest
-    container_name: ddns-go
-    restart: always
-    network_mode: host
+    image: jeessy/ddns-go:latest       # 使用最新版镜像
+    container_name: ddns-go            # 容器名
+    restart: always                    # 容器崩溃后自动重启
+    network_mode: host                 # 使用宿主机网络，端口无需映射
     volumes:
-      - /root/ddns-go:/root
+      - /root/ddns-go:/root            # 配置挂载目录

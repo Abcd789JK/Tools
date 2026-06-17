@@ -4,11 +4,11 @@ services:
     container_name: sub-store
     restart: always
     volumes:
-      - /root/sub-store:/opt/app/data
+      - /root/Sub-Store:/opt/app/data
     environment:
       - SUB_STORE_BACKEND_SYNC_CRON=55 */4 * * *
-      - SUB_STORE_FRONTEND_BACKEND_PATH=/20位英數大小寫混和隨機字串作為後端加密
+      - SUB_STORE_FRONTEND_BACKEND_PATH=/mDZXF2gPTvA
     ports:
-      - 127.0.0.1:3001:3001
+      - 0.0.0.0:3001:3001
     stdin_open: true
     tty: true
