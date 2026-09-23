@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2026-07-16 15:18:48
+#!date = 2026-09-23 10:55:45
 #!author = RuCu6
  
 # ======= 0 ======= #
@@ -940,3 +940,4 @@ URL-REGEX,"^http:\/\/p\.kuaidi100\.com\/advertisement\/"
 DOMAIN,mall-dsp2.qinlinkeji.com
 DOMAIN,mallapi2.qinlinkeji.com
 DOMAIN,open-pixon.ads-pixiv.net
+DOMAIN,5.5.5.5
