@@ -1,6 +1,6 @@
 #!name = mihomo 配置文件
 #!desc = 说明：理论上适用于所有的 Meta 内核，使用最新的 mrs 规则
-#!date = 2026-04-16 10:03:14
+#!date = 2026-09-29 19:46:31
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
@@ -12,12 +12,11 @@ proxies:
     type: direct
     udp: true
 
+mixed-port: 7890
 ipv6: true
 allow-lan: true
-mixed-port: 7890
-tproxy-port: 7891
-unified-delay: true
-tcp-concurrent: true
+unified-delay: false
+tcp-concurrent: tru
 
 external-ui: ui
 external-controller: 0.0.0.0:9090
@@ -25,7 +24,6 @@ external-controller: 0.0.0.0:9090
 external-ui-url: "https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
 
 find-process-mode: strict
-global-client-fingerprint: chrome
 
 profile:
   store-selected: true
@@ -70,6 +68,7 @@ dns:
   nameserver:
     - https://doh.pub/dns-query
     - https://dns.alidns.com/dns-query
+
 
 proxy-groups:
 

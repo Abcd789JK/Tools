@@ -1,0 +1,79 @@
+#!name = mihomo 配置文件
+#!desc = 说明：单纯去广告
+#!date = 2026-04-16 10:03:14
+#!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
+#!author = MetaCubeX
+
+proxies: 
+  - name: "直连"
+    type: direct
+    udp: true
+  - name: "拦截"
+    type: reject
+    udp: true
+
+mixed-port: 7890
+ipv6: false
+allow-lan: true
+unified-delay: false
+tcp-concurrent: true
+
+external-ui: ui
+external-controller: 0.0.0.0:9090
+external-ui-url: "https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
+
+find-process-mode: strict
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+sniffer:
+  enable: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "Mijia Cloud"
+    - "+.push.apple.com"
+
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+dns:
+  enable: true
+  ipv6: true
+  enhanced-mode: fake-ip
+  fake-ip-filter:
+    - "+.lan"
+    - "+.local"
+    - "+.market.xiaomi.com"
+  default-nameserver:
+    - tls://223.5.5.5
+  nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+
+rules:
+  - RULE-SET,Ads_Block_domain,拦截
+  - MATCH,其他
+
+rule-anchor:
+  classical: &classical {type: http, interval: 21600, behavior: classical, format: text}
+
+rule-providers:
+  Ads_Block_domain:
+    <<: *classical
+    url: https://github.com/thNylHx/Tools/raw/main/Ruleset/mihomo/Block/Ads_Block.list
