@@ -1,6 +1,6 @@
 #!name = mihomo 配置文件
 #!desc = 说明：单纯去广告
-#!date = 2026-04-16 10:03:14
+#!date = 2026-09-29 19:52:46
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
@@ -68,12 +68,23 @@ dns:
 
 rules:
   - RULE-SET,Ads_Block_domain,拦截
-  - MATCH,其他
+  - RULE-SET,Ads_AdBlock_domain,拦截
+  - RULE-SET,Ads_Adrules_domain,拦截
+  - AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((RULE-SET,China_ip,no-resolve)))),拦截
+  - AND,((RULE-SET,Global_domain),(DST-PORT,443),(NETWORK,UDP)),拦截
+  - MATCH,直连
 
 rule-anchor:
+  domain: &domain {type: http, interval: 21600, behavior: domain, format: mrs}
   classical: &classical {type: http, interval: 21600, behavior: classical, format: text}
 
 rule-providers:
+  Ads_Adrules_domain: 
+    <<: *domain
+    url: https://adrules.top/adrules-mihomo.mrs
+  Ads_AdBlock_domain: 
+    <<: *domain
+    url: https://github.com/217heidai/adblockfilters/raw/main/rules/adblockmihomolite.mrs
   Ads_Block_domain:
     <<: *classical
     url: https://github.com/thNylHx/Tools/raw/main/Ruleset/mihomo/Block/Ads_Block.list
