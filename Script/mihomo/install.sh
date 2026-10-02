@@ -3,7 +3,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2025-11-23 11:19:16
+# date   : 2026-10-02 10:16:49
 # author : ChatGPT
 # ---------------------------------
 
@@ -101,7 +101,7 @@ get_schema() {
     arch_raw=$(uname -m)
     case "$arch_raw" in
         x86_64)              arch=amd64  ;;
-        i?86)                arch=386    ;;
+        i386|i486|i586|i686) arch=386    ;;
         aarch64|arm64)       arch=arm64  ;;
         armv7l)              arch=armv7  ;;
         s390x)               arch=s390x  ;;
