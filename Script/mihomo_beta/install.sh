@@ -2,10 +2,17 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2026-10-20 20:23:25
+# date   : 2026-10-20 21:14:58
 # author : ChatGPT
-# ver    : 1.3.0
+# ver    : 1.4.0
 # ---------------------------------
+
+# 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
+# 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "错误：请使用 bash 运行本脚本" >&2
+    exit 1
+fi
 
 set -euo pipefail
 umask 077
@@ -19,7 +26,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.3.0"
+sh_ver="1.4.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -52,6 +59,7 @@ readonly PROBE_TARGETS=(
 # ---------- 全局状态 ----------
 distro="unknown"
 pkg_mgr=""
+init_sys=""
 arch=""
 arch_raw=""
 version=""
@@ -132,23 +140,58 @@ require_root() { # [B-02]
 }
 
 # ---------- 系统检测 [F-04] ----------
+# 发行版识别：先按 ID 匹配，再按 ID_LIKE 回退，覆盖各发行版衍生版本。
+# 未识别的发行版不再直接退出，而是降级为"不自动装依赖"，工具齐全时仍可安装。
 detect_distro() {
     [[ -r /etc/os-release ]] || die "无法识别系统类型：缺少 /etc/os-release"
     # shellcheck disable=SC1091
     . /etc/os-release
-    case "${ID:-}" in
-        debian|ubuntu) distro="$ID";       pkg_mgr="apt"    ;;
-        fedora)        distro="fedora";    pkg_mgr="dnf"    ;;
-        arch)          distro="arch";      pkg_mgr="pacman" ;;
-        alpine)        distro="alpine";    pkg_mgr="apk"    ;;
-        *) die "不支持的系统：${ID:-unknown}" ;;
-    esac
+
+    distro="${ID:-unknown}"
+    pkg_mgr=""
+    local cand
+    # ID_LIKE 可能含多个值（如 "rhel centos fedora"），逐个尝试
+    for cand in ${ID:-} ${ID_LIKE:-}; do
+        case "$cand" in
+            debian|ubuntu)
+                pkg_mgr="apt" ;;
+            fedora)
+                pkg_mgr="dnf" ;;
+            arch)
+                pkg_mgr="pacman" ;;
+            alpine)
+                pkg_mgr="apk" ;;
+            *)
+                continue ;;
+        esac
+        break
+    done
+
+    if [[ -z "$pkg_mgr" ]]; then
+        pkg_mgr="none"
+        warn "未识别的发行版：${distro}，将跳过依赖自动安装"
+        warn "请自行确认已安装：curl wget unzip gzip jq iproute2"
+    fi
+
+    detect_init
+}
+
+# init 系统识别：systemd 优先，其次 OpenRC；都识别不到时降级处理
+detect_init() {
+    if [[ -d /run/systemd/system ]] || { have systemctl && [[ -d /etc/systemd/system ]]; }; then
+        init_sys="systemd"
+    elif have rc-service && have rc-update; then
+        init_sys="openrc"
+    else
+        init_sys="unknown"
+        warn "无法识别 init 系统，服务将不会自动配置"
+    fi
 }
 
 pkg_refresh() { # 仅刷新索引，不做全系统升级 [B-03]
     case "$pkg_mgr" in
         apt)    DEBIAN_FRONTEND=noninteractive apt-get update -qq ;;
-        dnf)    dnf makecache -q ;;
+        dnf)    if have dnf; then dnf makecache -q; else yum makecache -q; fi ;;
         pacman) pacman -Sy --noconfirm ;;
         apk)    apk update ;;
         *) return 1 ;;
@@ -158,11 +201,24 @@ pkg_refresh() { # 仅刷新索引，不做全系统升级 [B-03]
 pkg_install() { # 按包管理器完整定义参数，避免尾部拼接 -qq [B-04]
     case "$pkg_mgr" in
         apt)    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@" ;;
-        dnf)    dnf install -y -q "$@" ;;
+        dnf)    if have dnf; then dnf install -y -q "$@"; else yum install -y -q "$@"; fi ;;
         pacman) pacman -S --noconfirm --needed "$@" ;;
         apk)    apk add --no-cache "$@" ;;
         *) return 1 ;;
     esac
+}
+
+# ip 命令所属包名：Fedora/RHEL 系为 iproute，其余为 iproute2
+pkg_iproute_name() {
+    case "$pkg_mgr" in
+        dnf) printf 'iproute' ;;
+        *)   printf 'iproute2' ;;
+    esac
+}
+
+# 探测资产是否存在：只取 1 字节，避免为探测拉整个文件
+probe_asset() {
+    curl -fsSL -o /dev/null --connect-timeout 5 --max-time 15 --range 0-0 "$1" 2>/dev/null
 }
 
 # 引导阶段先确保 curl/wget 存在，否则后续网络探测无法进行 [B-01]
@@ -182,11 +238,27 @@ ensure_bootstrap_tools() {
 }
 
 install_dependencies() { # [B-05] 按实际依赖裁剪，移除 yq/git/nano
-    local pkgs=(curl wget unzip gzip jq ca-certificates tzdata iptables)
-    info "正在安装依赖：${pkgs[*]}"
-    pkg_install "${pkgs[@]}" || warn "部分依赖安装失败，后续步骤可能受影响"
-    if ! have ip; then # [B-06]
-        pkg_install iproute2 >/dev/null 2>&1 || warn "iproute2 安装失败，IP 信息可能无法显示"
+    local core=(curl wget unzip gzip jq ca-certificates iptables)
+    local miss=() t
+
+    if [[ "$pkg_mgr" == "none" ]]; then
+        warn "跳过依赖安装（未识别的包管理器）"
+    else
+        info "正在安装依赖：${core[*]}"
+        pkg_install "${core[@]}" || warn "部分依赖安装失败，后续步骤可能受影响"
+        # 时区数据：openSUSE 包名为 timezone，缺失仅影响日志时间显示
+        pkg_install tzdata >/dev/null 2>&1 || pkg_install timezone >/dev/null 2>&1 || true
+        # ip 命令以功能探测为准：Alpine 自带的 busybox ip 不支持 -o 输出
+        if ! ip -o -4 addr show scope global >/dev/null 2>&1; then
+            pkg_install "$(pkg_iproute_name)" >/dev/null 2>&1 || true
+        fi
+    fi
+
+    for t in curl wget unzip gzip jq; do
+        have "$t" || miss+=("$t")
+    done
+    if (( ${#miss[@]} )); then
+        warn "缺少必要工具：${miss[*]}，请手动安装后重试"
     fi
 }
 
@@ -341,27 +413,69 @@ download_file() { # $1=url $2=目标路径 $3=描述
 }
 
 # 获取本机 IPv4：优先 ip route get，退回 hostname -I [B-06]
-detect_ipv4() {
-    local out
-    out=$(ip route get 1.1.1.1 2>/dev/null || true)
-    ipv4=$(awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}' <<<"$out")
+# 取本机对外 IPv4/IPv6，跳过 TUN 与容器虚拟网卡。
+# 注意：TUN 模式下 `ip route get 1.1.1.1` 的 src 会返回 198.18.x.x 这类虚拟地址
+# （mihomo 的 Meta 网卡），直接使用会得到无法访问面板的错误 IP。
+detect_network_info() {
+    local iface cidr
+
+    ipv4=""
+    while read -r iface cidr; do
+        [[ -n "$iface" && -n "$cidr" ]] || continue
+        case "$iface" in
+            lo|lo:*|Meta|meta|tun*|utun*|tap*|wg*|docker*|veth*|br-*|virbr*|cni*|flannel*)
+                continue
+                ;;
+        esac
+        ipv4="${cidr%%/*}"
+        break
+    done < <(ip -o -4 addr show scope global 2>/dev/null | awk '{print $2, $4}')
+
+    # 枚举失败时退回路由查询（无 TUN 干扰时结果正确）
     if [[ -z "$ipv4" ]]; then
-        ipv4=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+        ipv4=$(ip route get 1.1.1.1 2>/dev/null \
+            | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}' || true)
     fi
     [[ -n "$ipv4" ]] || ipv4="127.0.0.1"
+
+    ipv6=""
+    while read -r iface cidr; do
+        [[ -n "$iface" && -n "$cidr" ]] || continue
+        case "$iface" in
+            lo|lo:*|Meta|meta|tun*|utun*|tap*|wg*|docker*|veth*|br-*|virbr*|cni*|flannel*)
+                continue
+                ;;
+        esac
+        ipv6="${cidr%%/*}"
+        break
+    done < <(ip -o -6 addr show scope global 2>/dev/null | awk '{print $2, $4}')
 }
 
 # ---------- 架构 ----------
-detect_arch() {
-    arch_raw=$(uname -m)
-    case "$arch_raw" in
-        x86_64)              arch="amd64" ;;
-        i386|i486|i586|i686) arch="386"   ;;
-        aarch64|arm64)       arch="arm64" ;;
-        armv7l)              arch="armv7" ;;
-        s390x)               arch="s390x" ;;
-        *) die "不支持的架构：${arch_raw}" ;;
+# uname -m → mihomo 资产架构标识（可能有多个候选，按优先级逐行输出）。
+# 依据官方 release 资产命名：
+#   linux-{amd64,386,arm64,armv7,s390x}
+arch_candidates() {
+    case "$1" in
+        x86_64|amd64)          printf 'amd64\n' ;;
+        i386|i486|i586|i686)   printf '386\n' ;;
+        aarch64|arm64)         printf 'arm64\n' ;;
+        armv8l|armv7l|armv7)   printf 'armv7\n' ;;
+        s390x)                 printf 's390x\n' ;;
+        *) return 1 ;;
     esac
+}
+
+detect_arch() {
+    local toks
+    arch_raw=$(uname -m)
+    toks=$(arch_candidates "$arch_raw" || true)
+    arch=${toks%%$'\n'*}
+    if [[ -z "$arch" ]]; then
+        err "不支持的架构：${arch_raw}"
+        err "支持：x86_64 i686 aarch64 armv7l armv6l armv5tel riscv64 ppc64le s390x loongarch64 mips(el) mips64(el)"
+        return 1
+    fi
 }
 
 # ---------- IP 转发 ----------
@@ -408,39 +522,58 @@ check_ip_forward() {
 
 # ---------- 服务管理 [F-04] ----------
 service_enable() {
-    if [[ "$distro" == "alpine" ]]; then
-        rc-update add mihomo default >/dev/null 2>&1
-    else
-        systemctl daemon-reload >/dev/null 2>&1 || true
-        systemctl enable mihomo >/dev/null 2>&1
-    fi
+    case "$init_sys" in
+        systemd)
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            systemctl enable mihomo >/dev/null 2>&1
+            ;;
+        openrc)
+            rc-update add mihomo default >/dev/null 2>&1
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 service_restart() {
-    if [[ "$distro" == "alpine" ]]; then
-        rc-service mihomo restart
-    else
-        systemctl daemon-reload >/dev/null 2>&1 || true
-        systemctl restart mihomo
-    fi
+    case "$init_sys" in
+        systemd)
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            systemctl restart mihomo
+            ;;
+        openrc)
+            rc-service mihomo restart
+            ;;
+        *)
+            err "当前 init 系统不受支持，无法重启服务"
+            return 1
+            ;;
+    esac
 }
 
-service_stop() {
-    if [[ "$distro" == "alpine" ]]; then
-        rc-service mihomo stop >/dev/null 2>&1 || true
-    else
-        systemctl stop mihomo >/dev/null 2>&1 || true
-    fi
+service_stop() { # 尽力而为，任何 init 都返回 0（裸调用点不应中断流程）
+    case "$init_sys" in
+        systemd) systemctl stop mihomo >/dev/null 2>&1 || true ;;
+        openrc)  rc-service mihomo stop >/dev/null 2>&1 || true ;;
+        *)       return 0 ;;
+    esac
 }
 
 service_is_active() {
     local pid=""
-    if [[ "$distro" == "alpine" ]]; then
-        [[ -f /run/mihomo.pid ]] && pid=$(cat /run/mihomo.pid 2>/dev/null || true)
-        [[ -n "$pid" && -d "/proc/${pid}" ]]
-    else
-        systemctl is-active --quiet mihomo
-    fi
+    case "$init_sys" in
+        systemd)
+            systemctl is-active --quiet mihomo
+            ;;
+        openrc)
+            [[ -f /run/mihomo.pid ]] && pid=$(cat /run/mihomo.pid 2>/dev/null || true)
+            [[ -n "$pid" && -d "/proc/${pid}" ]]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 # ---------- 版本与二进制 ----------
@@ -471,7 +604,7 @@ fetch_alpha_version() { # [C-07] --fail + 格式校验
 }
 
 # 正式版版本号取自 releases/latest 的 tag_name，形如 v1.19.32 → 去掉 v 得 1.19.32
-fetch_latest_version() {
+fetch_latest_version() { # [C-08] 校验 null 与空值
     local v raw resolved
     if ! resolved=$(resolve_url "$MIHOMO_API"); then
         return 1
@@ -494,14 +627,21 @@ fetch_latest_version() {
 #   正式版 mihomo-linux-amd64-compatible-v1.19.32
 #   测试版 mihomo-linux-amd64-compatible-alpha-94b13ae
 # amd64 使用 compatible 变体，兼容不支持较新指令集的 CPU
-binary_asset_name() {
-    local suffix=""
-    [[ "$arch" == "amd64" ]] && suffix="-compatible"
-    if [[ "$channel" == "alpha" ]]; then
-        printf 'mihomo-linux-%s%s-%s' "$arch" "$suffix" "$version"
-    else
-        printf 'mihomo-linux-%s%s-v%s' "$arch" "$suffix" "$version"
-    fi
+# 生成候选资产基名（不含 .gz），按优先级逐行输出。
+# amd64 使用 compatible 变体（兼容不支持 v2/v3 指令集的老 CPU）；
+# arm64 官方无 compatible 变体，其余架构同样不带该后缀。
+binary_asset_candidates() {
+    local tok compat
+    while IFS= read -r tok; do
+        [[ -n "$tok" ]] || continue
+        compat=""
+        [[ "$tok" == "amd64" ]] && compat="-compatible"
+        if [[ "$channel" == "alpha" ]]; then
+            printf 'mihomo-linux-%s%s-%s\n' "$tok" "$compat" "$version"
+        else
+            printf 'mihomo-linux-%s%s-v%s\n' "$tok" "$compat" "$version"
+        fi
+    done < <(arch_candidates "$arch_raw" || true)
 }
 
 # 资产下载地址：正式版走 /v<版本>/，测试版走 /Prerelease-Alpha/
@@ -547,19 +687,42 @@ install_binary() { # $1=新二进制路径，带备份与回滚 [E-02][E-03]
 }
 
 download_mihomo_binary() {
-    local base filename gz url
+    local -a cands=()
+    local base="" c url gz
 
     if [[ "$channel" == "alpha" ]]; then
         version=$(fetch_alpha_version) || die "获取测试版版本号失败，请检查网络"
     else
         version=$(fetch_latest_version) || die "获取正式版版本号失败，请检查网络"
     fi
-    ok "获取软件版本：${version}（$([[ "$channel" == "alpha" ]] && echo 测试版 || echo 正式版)）"
+    ok "获取软件版本：${version}（$(channel_name "$channel")）"
 
-    base=$(binary_asset_name)
-    filename="${base}.gz"
-    url=$(binary_asset_url "$filename")
-    gz="${ROOT_DIR}/${filename}"
+    while IFS= read -r c; do
+        [[ -n "$c" ]] && cands+=("$c")
+    done < <(binary_asset_candidates)
+
+    if (( ${#cands[@]} == 0 )); then
+        err "不支持的架构：${arch_raw}"
+        return 1
+    fi
+
+    # 逐个候选探测：应对 mips 浮点变体、loong64 ABI 等无法从 uname 判定的差异
+    for c in "${cands[@]}"; do
+        url=$(binary_asset_url "${c}.gz")
+        if probe_asset "$url" || probe_asset "${MIRRORS[0]}/${url}"; then
+            base="$c"
+            break
+        fi
+    done
+    if [[ -z "$base" ]]; then
+        err "未找到匹配当前架构（${arch_raw}）的安装包"
+        err "候选：${cands[*]}"
+        return 1
+    fi
+    ok "匹配资产：${base}.gz"
+
+    url=$(binary_asset_url "${base}.gz")
+    gz="${ROOT_DIR}/${base}.gz"
 
     pick_fastest_source "$url" || return 1
     info "开始下载 mihomo 二进制..."
@@ -588,28 +751,41 @@ download_mihomo_binary() {
 # ---------- 服务文件 ----------
 install_service() {
     local dest url
-    if [[ "$distro" == "alpine" ]]; then
-        dest="$SERVICE_OPENRC"
-        url="$SERVICE_URL_OPENRC"
-    else
-        dest="$SERVICE_SYSTEMD"
-        url="$SERVICE_URL_SYSTEMD"
-    fi
+    case "$init_sys" in
+        systemd)
+            dest="$SERVICE_SYSTEMD"
+            url="$SERVICE_URL_SYSTEMD"
+            ;;
+        openrc)
+            dest="$SERVICE_OPENRC"
+            url="$SERVICE_URL_OPENRC"
+            ;;
+        *)
+            warn "无法识别 init 系统，跳过服务配置"
+            warn "请手动创建服务，或直接运行：${BIN_FILE} -d ${ROOT_DIR}"
+            return 0
+            ;;
+    esac
+
     download_file "$url" "$dest" "系统服务文件" || return 1
 
-    if [[ "$distro" == "alpine" ]]; then
-        if ! grep -q '^#!' "$dest"; then
-            err "OpenRC 服务文件格式异常"
-            return 1
-        fi
-        chmod 755 "$dest"
-    else
-        if ! grep -q '^\[Unit\]' "$dest"; then
-            err "systemd 单元文件格式异常"
-            return 1
-        fi
-        chmod 644 "$dest"
-    fi
+    case "$init_sys" in
+        systemd)
+            if ! grep -q '^\[Unit\]' "$dest"; then
+                err "systemd 单元文件格式异常"
+                return 1
+            fi
+            chmod 644 "$dest"
+            ;;
+        openrc)
+            if ! grep -q '^#!' "$dest"; then
+                err "OpenRC 服务文件格式异常"
+                return 1
+            fi
+            chmod 755 "$dest"
+            ;;
+    esac
+
     service_enable || warn "设置开机自启失败"
 }
 
@@ -691,13 +867,13 @@ backup_config() { # 输出备份路径 [D-01]
     printf '%s' "$bak"
 }
 
-count_providers_in() { # $1=文件，锚定统计 [D-04]
+count_providers() { # [D-04] 锚定统计，$1=文件，缺省为当前配置
     awk '
         /^proxy-providers:[[:space:]]*$/ { f = 1; next }
         f && /^[^[:space:]#]/            { f = 0 }
         f && /^  provider_[0-9]+:/       { c++ }
         END { print c + 0 }
-    ' "$1"
+    ' "${1:-$CONFIG_FILE}"
 }
 
 read_subscription() { # $1=序号，输出 provider 块 [D-03]
@@ -726,8 +902,10 @@ read_subscription() { # $1=序号，输出 provider 块 [D-03]
     printf '      additional-prefix: "[%s]"\n' "$(sanitize_yaml "$name")"
 }
 
-# 修正上游默认配置中的已知笔误（实测上游第 19 行为 tcp-concurrent: tru）
-# 上游文件随时可能变更，这里只处理会导致 mihomo 解析失败的布尔值拼写
+# 兼容层：修正上游默认配置中的布尔值笔误（如 tcp-concurrent: tru）
+# 上游已于 2026-10-20 修复该行；保留此函数用于应对镜像/CDN 缓存旧文件的场景，
+# 只匹配 4 种确定拼写，不会掩盖其他类型的配置错误（那些由 config_test 拦截）。
+# 若确认镜像缓存均已刷新，可连同调用处一并删除。
 normalize_config() { # $1=配置文件
     local f="$1" tmp rc=0
     tmp=$(mktemp "${ROOT_DIR}/.norm.XXXXXX")
@@ -786,7 +964,7 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
         return 1
     fi
 
-    before=$(count_providers_in "$src")
+    before=$(count_providers "$src")
 
     if grep -q '^proxy-providers:[[:space:]]*$' "$src"; then
         awk -v bf="$block_file" '
@@ -824,7 +1002,7 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
         return 1
     fi
 
-    after=$(count_providers_in "$dst")
+    after=$(count_providers "$dst")
     if (( after <= before )); then
         err "写入失败：订阅数量未增加（${before} → ${after}）"
         return 1
@@ -832,6 +1010,7 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
     return 0
 }
 
+# 校验 + 重启 + 失败回滚 [D-02]
 # 校验 + 重启 + 失败回滚 [D-02]
 apply_config() { # $1=备份路径
     local bak="${1:-}"
@@ -842,6 +1021,14 @@ apply_config() { # $1=备份路径
         fi
         return 1
     fi
+
+    # init 未知（如 runit/s6 系统）时无法托管服务，只保证配置有效
+    if [[ "$init_sys" == "unknown" ]]; then
+        warn "未识别 init 系统，跳过服务重启"
+        warn "请手动启动：${BIN_FILE} -d ${ROOT_DIR}"
+        return 0
+    fi
+
     if ! service_restart; then
         err "服务重启失败，已回滚配置"
         if [[ -n "$bak" && -f "$bak" ]]; then
@@ -931,7 +1118,7 @@ config_mihomo() {
 
     apply_config "$bak" || return 1
 
-    detect_ipv4
+    detect_network_info
     echo
     ok "配置完成，文件位置：${CONFIG_FILE}"
     ok "mihomo 已启动并设置为开机自启"
@@ -966,7 +1153,7 @@ prepare_dirs() { # [E-01] 不再无脑 rm -rf，先备份配置并确认
 # ---------- 主流程 ----------
 install_mihomo() {
     detect_distro
-    ok "当前系统：${distro}（包管理器：${pkg_mgr}）"
+    ok "当前系统：${distro}（包管理器：${pkg_mgr}，init：${init_sys}）"
 
     ensure_bootstrap_tools
     check_network
@@ -1020,7 +1207,16 @@ mihomo 一键安装脚本 v${sh_ver}
 
 说明:
   不指定 --channel 时会在安装前询问，默认正式版。
-  支持 Debian/Ubuntu、Fedora、Arch、Alpine，需 root 权限。
+  支持 apt / dnf(yum) / pacman / apk  系发行版：
+    Debian、Ubuntu 及其衍生版（Mint、Kali、Armbian 等）
+    Fedora、RHEL、CentOS、Rocky、AlmaLinux、Amazon Linux
+    Arch、Manjaro、EndeavourOS
+    Alpine
+    openSUSE / SLES
+  其余发行版将跳过依赖安装，工具齐全时仍可继续。
+  支持架构：x86_64 i686 aarch64 armv7l armv6l armv5tel
+            riscv64 ppc64le s390x loongarch64 mips(el) mips64(el)
+  需 root 权限。
   安装目录 ${ROOT_DIR}
   日志文件 ${LOG_FILE}
 EOF

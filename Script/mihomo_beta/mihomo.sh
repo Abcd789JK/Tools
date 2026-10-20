@@ -2,10 +2,17 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2026-10-20 20:25:43
+# date   : 2026-10-20 21:14:58
 # author : ChatGPT
-# ver    : 1.1.1
+# ver    : 1.2.0
 # ---------------------------------
+
+# 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
+# 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "错误：请使用 bash 运行本脚本" >&2
+    exit 1
+fi
 
 set -euo pipefail
 umask 077
@@ -19,7 +26,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.1.1"
+sh_ver="1.2.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -49,6 +56,8 @@ readonly PROBE_TARGETS=(
 
 # ---------- 全局状态 ----------
 distro="unknown"
+pkg_mgr=""
+init_sys=""
 arch=""
 arch_raw=""
 version=""
@@ -137,61 +146,121 @@ require_root() { # [B-02]
 }
 
 # ---------- 系统检测 [F-04] ----------
+# 发行版识别：先按 ID 匹配，再按 ID_LIKE 回退，覆盖各发行版衍生版本。
+# 未识别的发行版不再直接退出，而是降级为"不自动装依赖"，工具齐全时仍可安装。
 detect_distro() {
     [[ -r /etc/os-release ]] || die "无法识别系统类型：缺少 /etc/os-release"
     # shellcheck disable=SC1091
     . /etc/os-release
-    case "${ID:-}" in
-        debian|ubuntu) distro="$ID"       ;;
-        fedora)        distro="fedora"    ;;
-        arch)          distro="arch"      ;;
-        alpine)        distro="alpine"    ;;
-        *) die "不支持的系统：${ID:-unknown}" ;;
-    esac
+
+    distro="${ID:-unknown}"
+    pkg_mgr=""
+    local cand
+    # ID_LIKE 可能含多个值（如 "rhel centos fedora"），逐个尝试
+    for cand in ${ID:-} ${ID_LIKE:-}; do
+        case "$cand" in
+            debian|ubuntu)
+                pkg_mgr="apt" ;;
+            fedora)
+                pkg_mgr="dnf" ;;
+            arch)
+                pkg_mgr="pacman" ;;
+            alpine)
+                pkg_mgr="apk" ;;
+            *)
+                continue ;;
+        esac
+        break
+    done
+
+    if [[ -z "$pkg_mgr" ]]; then
+        pkg_mgr="none"
+        warn "未识别的发行版：${distro}，将跳过依赖自动安装"
+        warn "请自行确认已安装：curl wget unzip gzip jq iproute2"
+    fi
+
+    detect_init
+}
+
+# init 系统识别：systemd 优先，其次 OpenRC；都识别不到时降级处理
+detect_init() {
+    if [[ -d /run/systemd/system ]] || { have systemctl && [[ -d /etc/systemd/system ]]; }; then
+        init_sys="systemd"
+    elif have rc-service && have rc-update; then
+        init_sys="openrc"
+    else
+        init_sys="unknown"
+        warn "无法识别 init 系统，服务将不会自动配置"
+    fi
 }
 
 # ---------- 服务后端 [F-04] ----------
 service_do() { # $1=start|stop|restart
-    if [[ "$distro" == "alpine" ]]; then
-        rc-service mihomo "$1"
-    else
-        if [[ "$1" == "restart" ]]; then
-            systemctl daemon-reload >/dev/null 2>&1 || true
-        fi
-        systemctl "$1" mihomo
-    fi
+    case "$init_sys" in
+        systemd)
+            if [[ "$1" == "restart" ]]; then
+                systemctl daemon-reload >/dev/null 2>&1 || true
+            fi
+            systemctl "$1" mihomo
+            ;;
+        openrc)
+            rc-service mihomo "$1"
+            ;;
+        *)
+            err "当前 init 系统不受支持"
+            return 1
+            ;;
+    esac
 }
 
 service_enable_toggle() { # $1=enable|disable
-    if [[ "$distro" == "alpine" ]]; then
-        if [[ "$1" == "enable" ]]; then
-            rc-update add mihomo default >/dev/null 2>&1
-        else
-            rc-update del mihomo >/dev/null 2>&1
-        fi
-    else
-        systemctl "$1" mihomo >/dev/null 2>&1
-    fi
+    case "$init_sys" in
+        systemd)
+            systemctl "$1" mihomo >/dev/null 2>&1
+            ;;
+        openrc)
+            if [[ "$1" == "enable" ]]; then
+                rc-update add mihomo default >/dev/null 2>&1
+            else
+                rc-update del mihomo >/dev/null 2>&1
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 service_is_active() {
     local pid=""
-    if [[ "$distro" == "alpine" ]]; then
-        [[ -f /run/mihomo.pid ]] && pid=$(cat /run/mihomo.pid 2>/dev/null || true)
-        [[ -n "$pid" && -d "/proc/${pid}" ]]
-    else
-        systemctl is-active --quiet mihomo
-    fi
+    case "$init_sys" in
+        systemd)
+            systemctl is-active --quiet mihomo
+            ;;
+        openrc)
+            [[ -f /run/mihomo.pid ]] && pid=$(cat /run/mihomo.pid 2>/dev/null || true)
+            [[ -n "$pid" && -d "/proc/${pid}" ]]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 service_is_enabled() {
     local out=""
-    if [[ "$distro" == "alpine" ]]; then
-        out=$(rc-status default 2>/dev/null || true)
-        [[ "$out" == *mihomo* ]]
-    else
-        systemctl is-enabled --quiet mihomo 2>/dev/null
-    fi
+    case "$init_sys" in
+        systemd)
+            systemctl is-enabled --quiet mihomo 2>/dev/null
+            ;;
+        openrc)
+            out=$(rc-status default 2>/dev/null || true)
+            [[ "$out" == *mihomo* ]]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 # ---------- 网络探测 [C-01] ----------
@@ -311,7 +380,7 @@ fetch_to() { # $1=url $2=输出文件
 }
 
 # 统一下载：.part 临时文件 + 成功才 mv，直连失败自动换镜像重试 [C-04][C-10]
-download_file() { # $1=url $2=目标 $3=描述
+download_file() { # $1=url $2=目标路径 $3=描述
     local url="$1" dest="$2" desc="${3:-文件}" resolved m
 
     if ! resolved=$(resolve_url "$url"); then
@@ -343,17 +412,36 @@ download_file() { # $1=url $2=目标 $3=描述
     return 1
 }
 
+# 探测资产是否存在：只取 1 字节，避免为探测拉整个文件
+probe_asset() {
+    curl -fsSL -o /dev/null --connect-timeout 5 --max-time 15 --range 0-0 "$1" 2>/dev/null
+}
+
 # ---------- 架构 ----------
-detect_arch() {
-    arch_raw=$(uname -m)
-    case "$arch_raw" in
-        x86_64)              arch="amd64" ;;
-        i386|i486|i586|i686) arch="386"   ;;
-        aarch64|arm64)       arch="arm64" ;;
-        armv7l)              arch="armv7" ;;
-        s390x)               arch="s390x" ;;
-        *) err "不支持的架构：${arch_raw}"; return 1 ;;
+# uname -m → mihomo 资产架构标识（可能有多个候选，按优先级逐行输出）。
+# 依据官方 release 资产命名：
+#   linux-{amd64,386,arm64,armv7,s390x}
+arch_candidates() {
+    case "$1" in
+        x86_64|amd64)          printf 'amd64\n' ;;
+        i386|i486|i586|i686)   printf '386\n' ;;
+        aarch64|arm64)         printf 'arm64\n' ;;
+        armv8l|armv7l|armv7)   printf 'armv7\n' ;;
+        s390x)                 printf 's390x\n' ;;
+        *) return 1 ;;
     esac
+}
+
+detect_arch() {
+    local toks
+    arch_raw=$(uname -m)
+    toks=$(arch_candidates "$arch_raw" || true)
+    arch=${toks%%$'\n'*}
+    if [[ -z "$arch" ]]; then
+        err "不支持的架构：${arch_raw}"
+        err "支持：x86_64 i686 aarch64 armv7l armv6l armv5tel riscv64 ppc64le s390x loongarch64 mips(el) mips64(el)"
+        return 1
+    fi
 }
 
 # ---------- 版本获取 ----------
@@ -377,7 +465,7 @@ channel_name() { # $1=通道 → 中文名
     [[ "$1" == "alpha" ]] && printf '测试版' || printf '正式版'
 }
 
-fetch_alpha_version() { # [C-07]
+fetch_alpha_version() { # [C-07] --fail + 格式校验
     local v resolved
     if ! resolved=$(resolve_url "$MIHOMO_VERSION_URL"); then
         return 1
@@ -385,7 +473,7 @@ fetch_alpha_version() { # [C-07]
     v=$(curl -fsSL --connect-timeout 10 --max-time 30 "$resolved") || return 1
     v=$(printf '%s' "$v" | tr -d '[:space:]')
     if ! valid_version "$v"; then
-        err "测试版版本号格式异常：${v:-<空>}"
+        err "获取到的版本号格式异常：${v:-<空>}"
         return 1
     fi
     printf '%s' "$v"
@@ -426,17 +514,42 @@ verify_binary() {
 }
 
 # ---------- 网络信息 ----------
+# 取本机对外 IPv4/IPv6，跳过 TUN 与容器虚拟网卡。
+# 注意：TUN 模式下 `ip route get 1.1.1.1` 的 src 会返回 198.18.x.x 这类虚拟地址
+# （mihomo 的 Meta 网卡），直接使用会得到无法访问面板的错误 IP。
 detect_network_info() {
-    local out
-    out=$(ip route get 1.1.1.1 2>/dev/null || true)
-    ipv4=$(awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}' <<<"$out")
+    local iface cidr
+
+    ipv4=""
+    while read -r iface cidr; do
+        [[ -n "$iface" && -n "$cidr" ]] || continue
+        case "$iface" in
+            lo|lo:*|Meta|meta|tun*|utun*|tap*|wg*|docker*|veth*|br-*|virbr*|cni*|flannel*)
+                continue
+                ;;
+        esac
+        ipv4="${cidr%%/*}"
+        break
+    done < <(ip -o -4 addr show scope global 2>/dev/null | awk '{print $2, $4}')
+
+    # 枚举失败时退回路由查询（无 TUN 干扰时结果正确）
     if [[ -z "$ipv4" ]]; then
-        ipv4=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+        ipv4=$(ip route get 1.1.1.1 2>/dev/null \
+            | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}' || true)
     fi
     [[ -n "$ipv4" ]] || ipv4="127.0.0.1"
 
-    out=$(ip -6 route get 2400:3200::1 2>/dev/null || true)
-    ipv6=$(awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}' <<<"$out")
+    ipv6=""
+    while read -r iface cidr; do
+        [[ -n "$iface" && -n "$cidr" ]] || continue
+        case "$iface" in
+            lo|lo:*|Meta|meta|tun*|utun*|tap*|wg*|docker*|veth*|br-*|virbr*|cni*|flannel*)
+                continue
+                ;;
+        esac
+        ipv6="${cidr%%/*}"
+        break
+    done < <(ip -o -6 addr show scope global 2>/dev/null | awk '{print $2, $4}')
 }
 
 # ---------- 安装检查 [F-03] ----------
@@ -457,12 +570,16 @@ show_status() {
     [[ -n "$script_path" ]] || script_path="$SHELL_FILE"
 
     # [A-02] 失败不再拖垮整个状态页
+    # 一次性剥掉 "# date   : " 前缀，兼容 "2026-10-20" 与 "2026-10-20 20:33:09" 两种写法
+    # 旧实现连用两次 ${var#*:}，会把 "2025-11-23 11:25:43" 截成 "25:43"
     update_time=""
     if [[ -f "$script_path" ]]; then
-        update_time=$(grep -m1 '^# date' "$script_path" 2>/dev/null || true)
-        update_time=${update_time#*: }
-        update_time=${update_time#*:}
-        update_time=$(printf '%s' "$update_time" | tr -d ' ')
+        update_time=$(awk '/^#[[:space:]]*date[[:space:]]*:/ {
+            sub(/^#[[:space:]]*date[[:space:]]*:[[:space:]]*/, "")
+            print
+            exit
+        }' "$script_path" 2>/dev/null || true)
+        update_time=${update_time%"${update_time##*[![:space:]]}"}
     fi
     [[ -n "$update_time" ]] || update_time="未知"
 
@@ -571,12 +688,20 @@ service_action() { # $1=start|stop|restart|enable|disable
 }
 
 logs_mihomo() {
-    if [[ "$distro" == "alpine" ]]; then
-        err "Alpine 暂不支持通过本脚本查看日志，请使用：logread | grep mihomo"
-        return 1
-    fi
-    info "正在实时查看 mihomo 日志，按 Ctrl+C 退出"
-    journalctl -u mihomo -o cat -f
+    case "$init_sys" in
+        systemd)
+            info "正在实时查看 mihomo 日志，按 Ctrl+C 退出"
+            journalctl -u mihomo -o cat -f
+            ;;
+        openrc)
+            err "OpenRC 暂不支持通过本脚本查看日志，请使用：logread | grep mihomo"
+            return 1
+            ;;
+        *)
+            err "当前 init 系统不受支持，无法查看日志"
+            return 1
+            ;;
+    esac
 }
 
 # ---------- 配置公共 ----------
@@ -654,8 +779,10 @@ has_provider_refs() { # $1=文件
     ' "$1"
 }
 
-# 修正上游默认配置中的已知笔误（实测上游第 19 行为 tcp-concurrent: tru）
-# 上游文件随时可能变更，这里只处理会导致 mihomo 解析失败的布尔值拼写
+# 兼容层：修正上游默认配置中的布尔值笔误（如 tcp-concurrent: tru）
+# 上游已于 2026-10-20 修复该行；保留此函数用于应对镜像/CDN 缓存旧文件的场景，
+# 只匹配 4 种确定拼写，不会掩盖其他类型的配置错误（那些由 config_test 拦截）。
+# 若确认镜像缓存均已刷新，可连同调用处一并删除。
 normalize_config() { # $1=配置文件
     local f="$1" tmp rc=0
     tmp=$(mktemp "${ROOT_DIR}/.norm.XXXXXX")
@@ -753,7 +880,7 @@ commit_config() { # $1=新文件 $2=备份路径 $3=描述
 read_subscription() { # $1=序号，输出 provider 块 [D-03]
     local idx="$1" url name
     while true; do
-        read_input url "${green}请输入订阅链接: ${reset}"
+        read_input url "${green}请输入第 ${idx} 个机场的订阅链接: ${reset}"
         if [[ -z "$url" ]]; then
             warn "订阅链接不能为空"
             continue
@@ -780,7 +907,15 @@ read_subscription() { # $1=序号，输出 provider 块 [D-03]
 # 已有 proxy-providers 段时追加到段末，保证编号与文件顺序一致；
 # 仅有 # 机场配置 标记时补全段头；两者皆无则追加到文件末尾。
 inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
-    local block_file="$1" src="$2" out="$3"
+    local block_file="$1" src="$2" dst="$3" before after
+
+    if [[ ! -s "$block_file" ]]; then
+        err "没有可写入的订阅内容"
+        return 1
+    fi
+
+    before=$(count_providers "$src")
+
     if grep -q '^proxy-providers:[[:space:]]*$' "$src"; then
         awk -v bf="$block_file" '
             function flush(   line) {
@@ -791,7 +926,7 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
             in_pp && /^[^[:space:]#]/ { flush(); in_pp = 0; print; next }
             { print }
             END { if (in_pp) flush() }
-        ' "$src" >"$out"
+        ' "$src" >"$dst"
     elif grep -q '^# 机场配置' "$src"; then
         awk -v bf="$block_file" '
             /^# 机场配置/ {
@@ -803,14 +938,26 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
                 next
             }
             { print }
-        ' "$src" >"$out"
-        warn "配置中缺少 proxy-providers 段，已按标记补全"
+        ' "$src" >"$dst"
+        warn "配置中缺少 proxy-providers 段，已按 # 机场配置 标记补全"
     else
-        cp -f -- "$src" "$out"
-        printf '\nproxy-providers:\n' >>"$out"
-        cat "$block_file" >>"$out"
-        warn "配置中无 proxy-providers 段，已追加到文件末尾"
+        cp -f -- "$src" "$dst"
+        printf '\nproxy-providers:\n' >>"$dst"
+        cat "$block_file" >>"$dst"
+        warn "配置中既无 proxy-providers 段也无标记，已追加到文件末尾"
     fi
+
+    if ! grep -q '^proxy-providers:' "$dst"; then
+        err "写入失败：结果中缺少 proxy-providers 段"
+        return 1
+    fi
+
+    after=$(count_providers "$dst")
+    if (( after <= before )); then
+        err "写入失败：订阅数量未增加（${before} → ${after}）"
+        return 1
+    fi
+    return 0
 }
 
 # ---------- 新增订阅 ----------
@@ -821,7 +968,7 @@ add_provider() {
         return 1
     fi
 
-    local bak block_file tmp idx ans block="" before after
+    local bak block_file tmp idx ans block="" before
     bak=$(backup_config) || return 1
     before=$(count_providers)
     idx=$(next_provider_index)
@@ -841,11 +988,9 @@ add_provider() {
 
     tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
     TMP_FILES+=("$tmp")
-    inject_providers "$block_file" "$CONFIG_FILE" "$tmp"
-
-    after=$(count_providers "$tmp")
-    if (( after <= before )); then
-        err "写入失败：订阅数量未增加（${before} → ${after}）"
+    # inject_providers 内部已做空块校验、段存在校验与数量校验
+    if ! inject_providers "$block_file" "$CONFIG_FILE" "$tmp"; then
+        err "新增订阅失败，现有配置未改动"
         return 1
     fi
 
@@ -1085,15 +1230,13 @@ reset_config() {
 
     merged=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
     TMP_FILES+=("$merged")
-    inject_providers "$block_file" "$tmp" "$merged"
-
-    if ! config_test "$merged"; then
-        err "写入订阅后配置校验失败，已中止（现有配置未改动）"
+    if ! inject_providers "$block_file" "$tmp" "$merged"; then
+        err "订阅写入失败（现有配置未改动）"
         return 1
     fi
 
-    if [[ "$(count_providers "$merged")" -eq 0 ]]; then
-        err "写入失败：订阅数量为 0，已中止"
+    if ! config_test "$merged"; then
+        err "写入订阅后配置校验失败，已中止（现有配置未改动）"
         return 1
     fi
 
@@ -1184,14 +1327,21 @@ install_mihomo() {
 # 资产基名（不含 .gz）。两种通道命名差异：
 #   正式版 mihomo-linux-amd64-compatible-v1.19.32
 #   测试版 mihomo-linux-amd64-compatible-alpha-94b13ae
-binary_asset_name() {
-    local suffix=""
-    [[ "$arch" == "amd64" ]] && suffix="-compatible"
-    if [[ "$channel" == "alpha" ]]; then
-        printf 'mihomo-linux-%s%s-%s' "$arch" "$suffix" "$version"
-    else
-        printf 'mihomo-linux-%s%s-v%s' "$arch" "$suffix" "$version"
-    fi
+# 生成候选资产基名（不含 .gz），按优先级逐行输出。
+# amd64 使用 compatible 变体（兼容不支持 v2/v3 指令集的老 CPU）；
+# arm64 官方无 compatible 变体，其余架构同样不带该后缀。
+binary_asset_candidates() {
+    local tok compat
+    while IFS= read -r tok; do
+        [[ -n "$tok" ]] || continue
+        compat=""
+        [[ "$tok" == "amd64" ]] && compat="-compatible"
+        if [[ "$channel" == "alpha" ]]; then
+            printf 'mihomo-linux-%s%s-%s\n' "$tok" "$compat" "$version"
+        else
+            printf 'mihomo-linux-%s%s-v%s\n' "$tok" "$compat" "$version"
+        fi
+    done < <(arch_candidates "$arch_raw" || true)
 }
 
 # 资产下载地址：正式版走 /v<版本>/，测试版走 /Prerelease-Alpha/
@@ -1204,7 +1354,8 @@ binary_asset_url() { # $1=资产文件名
 }
 
 download_and_install() { # $1=alpha|stable
-    local base filename gz url bak
+    local -a cands=()
+    local base="" c url gz bak
 
     channel="$1"
     detect_arch || return 1
@@ -1216,10 +1367,31 @@ download_and_install() { # $1=alpha|stable
         version=$(fetch_latest_version) || { err "获取正式版版本失败"; return 1; }
     fi
 
-    base=$(binary_asset_name)
-    filename="${base}.gz"
-    url=$(binary_asset_url "$filename")
-    gz="${ROOT_DIR}/${filename}"
+    while IFS= read -r c; do
+        [[ -n "$c" ]] && cands+=("$c")
+    done < <(binary_asset_candidates)
+
+    if (( ${#cands[@]} == 0 )); then
+        err "不支持的架构：${arch_raw}"
+        return 1
+    fi
+
+    # 逐个候选探测：应对 mips 浮点变体、loong64 ABI 等无法从 uname 判定的差异
+    for c in "${cands[@]}"; do
+        url=$(binary_asset_url "${c}.gz")
+        if probe_asset "$url" || probe_asset "${MIRRORS[0]}/${url}"; then
+            base="$c"
+            break
+        fi
+    done
+    if [[ -z "$base" ]]; then
+        err "未找到匹配当前架构（${arch_raw}）的安装包"
+        err "候选：${cands[*]}"
+        return 1
+    fi
+
+    url=$(binary_asset_url "${base}.gz")
+    gz="${ROOT_DIR}/${base}.gz"
 
     pick_fastest_source "$url" || return 1
     info "开始下载 mihomo ${version}..."
@@ -1255,6 +1427,14 @@ download_and_install() { # $1=alpha|stable
     fi
     chmod +x "$BIN_FILE"
 
+    # init 未知时无法托管服务，替换完直接结束
+    if [[ "$init_sys" == "unknown" ]]; then
+        warn "未识别 init 系统，跳过服务重启；请手动重启以生效"
+        printf '%s\n' "$version" >"$VERSION_FILE"
+        ok "更新完成，当前版本：${version}（$(channel_name "$channel")）"
+        return 0
+    fi
+
     if ! service_do start; then
         err "新版本启动失败，正在回滚"
         cp -f -- "$bak" "$BIN_FILE"
@@ -1272,7 +1452,7 @@ download_and_install() { # $1=alpha|stable
     fi
 
     printf '%s\n' "$version" >"$VERSION_FILE"
-    ok "更新完成，当前版本：${version}（$([[ "$channel" == "alpha" ]] && echo 测试版 || echo 正式版)）"
+    ok "更新完成，当前版本：${version}（$(channel_name "$channel")）"
 }
 
 update_mihomo() {
@@ -1361,9 +1541,13 @@ uninstall_mihomo() {
     fi
 
     local failures=0
-    info "正在停止服务..."
-    service_do stop >/dev/null 2>&1 || failures=$((failures + 1))
-    service_enable_toggle disable >/dev/null 2>&1 || true
+    if [[ "$init_sys" == "unknown" ]]; then
+        warn "未识别 init 系统，跳过服务停止与自启处理"
+    else
+        info "正在停止服务..."
+        service_do stop >/dev/null 2>&1 || failures=$((failures + 1))
+        service_enable_toggle disable >/dev/null 2>&1 || true
+    fi
 
     # [E-04] 尽力而为，不因单步失败中断
     rm -f -- "$SERVICE_SYSTEMD" || failures=$((failures + 1))
