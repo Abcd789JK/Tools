@@ -2,7 +2,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2026-10-20 20:07:16
+# date   : 2026-10-20 20:23:25
 # author : ChatGPT
 # ver    : 1.3.0
 # ---------------------------------
@@ -38,7 +38,7 @@ readonly MIHOMO_API="https://api.github.com/repos/MetaCubeX/mihomo/releases/late
 readonly CONFIG_URL="${REPO_RAW}/Config/mihomo.yaml"
 readonly SERVICE_URL_SYSTEMD="${REPO_RAW}/Service/mihomo.service"
 readonly SERVICE_URL_OPENRC="${REPO_RAW}/Service/mihomo.openrc"
-readonly SHELL_URL="${REPO_RAW}/Script/mihomo/mihomo.sh"
+readonly SHELL_URL="${REPO_RAW}/Script/mihomo_beta/mihomo.sh"
 readonly WEBUI_URL="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
 
 readonly MIRRORS=("https://gh-proxy.com" "https://github.boki.moe")

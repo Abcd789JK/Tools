@@ -2,7 +2,7 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2026-10-20 20:07:16
+# date   : 2026-10-20 20:23:25
 # author : ChatGPT
 # ver    : 1.1.1
 # ---------------------------------
@@ -36,7 +36,7 @@ readonly MIHOMO_RELEASE="https://github.com/MetaCubeX/mihomo/releases/download"
 readonly MIHOMO_VERSION_URL="${MIHOMO_RELEASE}/Prerelease-Alpha/version.txt"
 readonly MIHOMO_API="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
 readonly CONFIG_URL="${REPO_RAW}/Config/mihomo.yaml"
-readonly SHELL_URL="${REPO_RAW}/Script/mihomo/mihomo.sh"
+readonly SHELL_URL="${REPO_RAW}/Script/mihomo_beta/mihomo.sh"
 readonly INSTALL_URL="${REPO_RAW}/Script/mihomo/install.sh"
 
 readonly MIRRORS=("https://gh-proxy.com" "https://github.boki.moe")
