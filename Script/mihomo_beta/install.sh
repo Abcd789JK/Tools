@@ -2,9 +2,9 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2026-10-20
+# date   : 2026-10-20 20:04:27
 # author : ChatGPT
-# ver    : 1.2.0
+# ver    : 1.3.0
 # ---------------------------------
 #
 # 本文件与 mihomo.sh 存在刻意重复的公共函数（颜色、系统检测、网络探测、
@@ -32,7 +32,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.2.0"
+sh_ver="1.3.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -68,7 +68,7 @@ pkg_mgr=""
 arch=""
 arch_raw=""
 version=""
-channel="stable"       # stable=正式版(v1.19.32) / alpha=测试版(alpha-<哈希>)
+channel=""             # 空=未指定（交互询问，默认 stable）；stable=正式版 / alpha=测试版
 ipv4=""
 use_cdn=false
 url_prefix=""          # 空 = 直连；非空 = 已验证可用的镜像前缀
@@ -465,6 +465,10 @@ valid_version() {
     grep -Eq '^[0-9A-Za-z][0-9A-Za-z._-]*$' <<<"$v"
 }
 
+channel_name() { # $1=通道 → 中文名
+    [[ "$1" == "alpha" ]] && printf '测试版' || printf '正式版'
+}
+
 fetch_alpha_version() { # [C-07] --fail + 格式校验
     local v resolved
     if ! resolved=$(resolve_url "$MIHOMO_VERSION_URL"); then
@@ -735,22 +739,69 @@ read_subscription() { # $1=序号，输出 provider 块 [D-03]
     printf '      additional-prefix: "[%s]"\n' "$(sanitize_yaml "$name")"
 }
 
-# 读 provider 块文件并写入配置，带数量校验 [D-07]
+# 修正上游默认配置中的已知笔误（实测上游第 19 行为 tcp-concurrent: tru）
+# 上游文件随时可能变更，这里只处理会导致 mihomo 解析失败的布尔值拼写
+normalize_config() { # $1=配置文件
+    local f="$1" tmp rc=0
+    tmp=$(mktemp "${ROOT_DIR}/.norm.XXXXXX")
+    TMP_FILES+=("$tmp")
+
+    awk '
+        {
+            sub(/\r$/, "")
+            if ($0 ~ /^[[:space:]]*[A-Za-z0-9_-]+:[[:space:]]*(tru|ture)[[:space:]]*$/) {
+                sub(/(tru|ture)[[:space:]]*$/, "true")
+                fixed = 1
+            } else if ($0 ~ /^[[:space:]]*[A-Za-z0-9_-]+:[[:space:]]*(flase|fasle)[[:space:]]*$/) {
+                sub(/(flase|fasle)[[:space:]]*$/, "false")
+                fixed = 1
+            }
+            print
+        }
+        END { exit(fixed ? 3 : 0) }
+    ' "$f" >"$tmp" || rc=$?
+
+    case "$rc" in
+        0)
+            mv -f -- "$tmp" "$f"
+            ;;
+        3)
+            mv -f -- "$tmp" "$f"
+            warn "已修正上游默认配置中的布尔值笔误（如 tcp-concurrent: tru → true）"
+            ;;
+        *)
+            rm -f -- "$tmp"
+            err "配置规范化失败"
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+# 用 mihomo 自身校验配置，失败时打印原因 [D-02]
+config_test() { # $1=配置文件
+    local out
+    if ! out=$("$BIN_FILE" -t -f "$1" 2>&1); then
+        printf '%s\n' "$out" | tail -n 20 >&2
+        return 1
+    fi
+    return 0
+}
+
+# 把 provider 块写入 src，结果输出到 dst，带数量校验 [D-07]
 # 注意：必须接收文件路径而非 stdin —— 管道会让函数在子 shell 中执行，
 # 导致 TMP_FILES 无法被 trap 清理。
-inject_providers() {
-    local block_file="$1" tmp before after
+inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
+    local block_file="$1" src="$2" dst="$3" before after
 
     if [[ ! -s "$block_file" ]]; then
         err "没有可写入的订阅内容"
         return 1
     fi
 
-    before=$(count_providers_in "$CONFIG_FILE")
-    tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$tmp")
+    before=$(count_providers_in "$src")
 
-    if grep -q '^proxy-providers:[[:space:]]*$' "$CONFIG_FILE"; then
+    if grep -q '^proxy-providers:[[:space:]]*$' "$src"; then
         awk -v bf="$block_file" '
             function flush(   line) {
                 while ((getline line < bf) > 0) print line
@@ -760,8 +811,8 @@ inject_providers() {
             in_pp && /^[^[:space:]#]/ { flush(); in_pp = 0; print; next }
             { print }
             END { if (in_pp) flush() }
-        ' "$CONFIG_FILE" >"$tmp"
-    elif grep -q '^# 机场配置' "$CONFIG_FILE"; then
+        ' "$src" >"$dst"
+    elif grep -q '^# 机场配置' "$src"; then
         awk -v bf="$block_file" '
             /^# 机场配置/ {
                 print
@@ -772,36 +823,33 @@ inject_providers() {
                 next
             }
             { print }
-        ' "$CONFIG_FILE" >"$tmp"
+        ' "$src" >"$dst"
         warn "配置中缺少 proxy-providers 段，已按 # 机场配置 标记补全"
     else
-        cp -f -- "$CONFIG_FILE" "$tmp"
-        printf '\nproxy-providers:\n' >>"$tmp"
-        cat "$block_file" >>"$tmp"
+        cp -f -- "$src" "$dst"
+        printf '\nproxy-providers:\n' >>"$dst"
+        cat "$block_file" >>"$dst"
         warn "配置中既无 proxy-providers 段也无标记，已追加到文件末尾"
     fi
 
-    if ! grep -q '^proxy-providers:' "$tmp"; then
+    if ! grep -q '^proxy-providers:' "$dst"; then
         err "写入失败：结果中缺少 proxy-providers 段"
         return 1
     fi
 
-    after=$(count_providers_in "$tmp")
+    after=$(count_providers_in "$dst")
     if (( after <= before )); then
         err "写入失败：订阅数量未增加（${before} → ${after}）"
         return 1
     fi
-
-    mv -f -- "$tmp" "$CONFIG_FILE"
-    chmod 600 "$CONFIG_FILE"
+    return 0
 }
 
 # 校验 + 重启 + 失败回滚 [D-02]
 apply_config() { # $1=备份路径
-    local bak="${1:-}" out
-    if ! out=$("$BIN_FILE" -t -f "$CONFIG_FILE" 2>&1); then
+    local bak="${1:-}"
+    if ! config_test "$CONFIG_FILE"; then
         err "配置校验未通过，已回滚"
-        printf '%s\n' "$out" | tail -n 20 >&2
         if [[ -n "$bak" && -f "$bak" ]]; then
             cp -f -- "$bak" "$CONFIG_FILE"
         fi
@@ -849,13 +897,22 @@ controller_url() { # 从配置读取面板地址
 }
 
 config_mihomo() {
-    local bak idx=1 ans block="" block_file
+    local bak idx=1 ans block="" block_file base merged
     bak=$(backup_config) || die "配置备份失败，已中止"
     [[ -n "$bak" ]] && ok "原配置已备份：${bak}"
 
     info "开始下载默认配置文件..."
-    download_file "$CONFIG_URL" "$CONFIG_FILE" "默认配置" || die "配置文件下载失败"
-    chmod 600 "$CONFIG_FILE"
+    base=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
+    TMP_FILES+=("$base")
+    download_file "$CONFIG_URL" "$base" "默认配置" || die "配置文件下载失败"
+    normalize_config "$base" || die "配置规范化失败"
+
+    # 先校验上游配置本身：不通过就中止，现有配置保持不动
+    if ! config_test "$base"; then
+        err "上游默认配置未通过 mihomo 校验，已中止（现有配置未改动）"
+        err "可自行准备配置文件放到 ${CONFIG_FILE} 后重启服务"
+        return 1
+    fi
 
     while true; do
         block+=$(read_subscription "$idx")
@@ -869,13 +926,21 @@ config_mihomo() {
     TMP_FILES+=("$block_file")
     printf '%s' "$block" >"$block_file"
 
-    if ! inject_providers "$block_file"; then
-        err "订阅写入失败"
-        if [[ -n "$bak" && -f "$bak" ]]; then
-            cp -f -- "$bak" "$CONFIG_FILE"
-        fi
+    merged=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
+    TMP_FILES+=("$merged")
+    if ! inject_providers "$block_file" "$base" "$merged"; then
+        err "订阅写入失败（现有配置未改动）"
         return 1
     fi
+
+    # 写入订阅后再校验一次，仍不通过则完全不落地
+    if ! config_test "$merged"; then
+        err "写入订阅后配置校验失败，已中止（现有配置未改动）"
+        return 1
+    fi
+
+    mv -f -- "$merged" "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
 
     apply_config "$bak" || return 1
 
@@ -963,10 +1028,11 @@ mihomo 一键安装脚本 v${sh_ver}
 选项:
   -h, --help           显示帮助
   -v, --version        显示版本
-  --channel stable     安装正式版（默认，如 v1.19.32）
+  --channel stable     安装正式版（如 v1.19.32）
   --channel alpha      安装测试版（如 alpha-94b13ae）
 
 说明:
+  不指定 --channel 时会在安装前询问，默认正式版。
   支持 Debian/Ubuntu、Fedora、Arch、Alpine，需 root 权限。
   安装目录 ${ROOT_DIR}
   日志文件 ${LOG_FILE}
@@ -996,14 +1062,40 @@ parse_args() {
     done
 
     case "$channel" in
-        stable|alpha) ;;
+        ""|stable|alpha) ;;
         *) die "无效的通道：${channel}（可选 stable / alpha）" ;;
     esac
+}
+
+# 未通过 --channel 指定且处于交互终端时，询问安装通道
+choose_channel() {
+    [[ -n "$channel" ]] && return 0
+
+    if [[ ! -t 0 ]]; then
+        channel="stable"
+        return 0
+    fi
+
+    printf '%s\n' "${blue}=========================${reset}"
+    printf '%s\n' "请选择要安装的版本通道："
+    printf '%s\n' "${green}1${reset}. 正式版 Release（默认，如 v1.19.32）"
+    printf '%s\n' "${green}2${reset}. 测试版 Alpha（如 alpha-94b13ae）"
+    printf '%s\n' "${blue}=========================${reset}"
+
+    local ans=""
+    read_input ans "${green}请输入选项 [1]: ${reset}"
+    ans=${ans//[[:space:]]/}
+    case "$ans" in
+        2|a|A|alpha|Alpha) channel="alpha" ;;
+        *)                 channel="stable" ;;
+    esac
+    ok "已选择：$(channel_name "$channel")"
 }
 
 main() {
     parse_args "$@"
     require_root          # 全局守卫：除帮助与版本外，一律要求 root
+    choose_channel        # 未指定 --channel 时交互询问，默认正式版
     install_mihomo
 }
 

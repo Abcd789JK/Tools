@@ -2,9 +2,9 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2026-10-20
+# date   : 2026-10-20 20:04:27
 # author : ChatGPT
-# ver    : 1.1.0
+# ver    : 1.1.1
 # ---------------------------------
 #
 # 本文件与 install.sh 存在刻意重复的公共函数（颜色、系统检测、网络探测、
@@ -32,7 +32,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.1.0"
+sh_ver="1.1.1"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -667,12 +667,60 @@ has_provider_refs() { # $1=文件
     ' "$1"
 }
 
+# 修正上游默认配置中的已知笔误（实测上游第 19 行为 tcp-concurrent: tru）
+# 上游文件随时可能变更，这里只处理会导致 mihomo 解析失败的布尔值拼写
+normalize_config() { # $1=配置文件
+    local f="$1" tmp rc=0
+    tmp=$(mktemp "${ROOT_DIR}/.norm.XXXXXX")
+    TMP_FILES+=("$tmp")
+
+    awk '
+        {
+            sub(/\r$/, "")
+            if ($0 ~ /^[[:space:]]*[A-Za-z0-9_-]+:[[:space:]]*(tru|ture)[[:space:]]*$/) {
+                sub(/(tru|ture)[[:space:]]*$/, "true")
+                fixed = 1
+            } else if ($0 ~ /^[[:space:]]*[A-Za-z0-9_-]+:[[:space:]]*(flase|fasle)[[:space:]]*$/) {
+                sub(/(flase|fasle)[[:space:]]*$/, "false")
+                fixed = 1
+            }
+            print
+        }
+        END { exit(fixed ? 3 : 0) }
+    ' "$f" >"$tmp" || rc=$?
+
+    case "$rc" in
+        0)
+            mv -f -- "$tmp" "$f"
+            ;;
+        3)
+            mv -f -- "$tmp" "$f"
+            warn "已修正上游默认配置中的布尔值笔误（如 tcp-concurrent: tru → true）"
+            ;;
+        *)
+            rm -f -- "$tmp"
+            err "配置规范化失败"
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+# 用 mihomo 自身校验配置，失败时打印原因 [D-02]
+config_test() { # $1=配置文件
+    local out
+    if ! out=$("$BIN_FILE" -t -f "$1" 2>&1); then
+        printf '%s\n' "$out" | tail -n 20 >&2
+        return 1
+    fi
+    return 0
+}
+
 # 校验 + 重启 + 失败回滚 [D-02]
 apply_config() { # $1=备份路径
-    local bak="${1:-}" out
-    if ! out=$("$BIN_FILE" -t -f "$CONFIG_FILE" 2>&1); then
+    local bak="${1:-}"
+    if ! config_test "$CONFIG_FILE"; then
         err "配置校验未通过"
-        printf '%s\n' "$out" | tail -n 20 >&2
         if [[ -n "$bak" && -f "$bak" ]]; then
             cp -f -- "$bak" "$CONFIG_FILE"
             err "已回滚到备份：${bak}"
@@ -744,9 +792,9 @@ read_subscription() { # $1=序号，输出 provider 块 [D-03]
 # 在配置中插入 provider 块文件 [D-07]
 # 已有 proxy-providers 段时追加到段末，保证编号与文件顺序一致；
 # 仅有 # 机场配置 标记时补全段头；两者皆无则追加到文件末尾。
-inject_providers() { # $1=块文件 $2=目标文件（就地生成新内容）
-    local block_file="$1" out="$2"
-    if grep -q '^proxy-providers:[[:space:]]*$' "$CONFIG_FILE"; then
+inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
+    local block_file="$1" src="$2" out="$3"
+    if grep -q '^proxy-providers:[[:space:]]*$' "$src"; then
         awk -v bf="$block_file" '
             function flush(   line) {
                 while ((getline line < bf) > 0) print line
@@ -756,8 +804,8 @@ inject_providers() { # $1=块文件 $2=目标文件（就地生成新内容）
             in_pp && /^[^[:space:]#]/ { flush(); in_pp = 0; print; next }
             { print }
             END { if (in_pp) flush() }
-        ' "$CONFIG_FILE" >"$out"
-    elif grep -q '^# 机场配置' "$CONFIG_FILE"; then
+        ' "$src" >"$out"
+    elif grep -q '^# 机场配置' "$src"; then
         awk -v bf="$block_file" '
             /^# 机场配置/ {
                 print
@@ -768,10 +816,10 @@ inject_providers() { # $1=块文件 $2=目标文件（就地生成新内容）
                 next
             }
             { print }
-        ' "$CONFIG_FILE" >"$out"
+        ' "$src" >"$out"
         warn "配置中缺少 proxy-providers 段，已按标记补全"
     else
-        cp -f -- "$CONFIG_FILE" "$out"
+        cp -f -- "$src" "$out"
         printf '\nproxy-providers:\n' >>"$out"
         cat "$block_file" >>"$out"
         warn "配置中无 proxy-providers 段，已追加到文件末尾"
@@ -806,7 +854,7 @@ add_provider() {
 
     tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
     TMP_FILES+=("$tmp")
-    inject_providers "$block_file" "$tmp"
+    inject_providers "$block_file" "$CONFIG_FILE" "$tmp"
 
     after=$(count_providers "$tmp")
     if (( after <= before )); then
@@ -1028,6 +1076,13 @@ reset_config() {
         err "下载的配置为空，现有配置未改动"
         return 1
     fi
+    normalize_config "$tmp" || { err "配置规范化失败，现有配置未改动"; return 1; }
+
+    # 先校验上游配置本身，不通过就中止，现有配置保持不动
+    if ! config_test "$tmp"; then
+        err "上游默认配置未通过 mihomo 校验，已中止（现有配置未改动）"
+        return 1
+    fi
 
     while true; do
         block+=$(read_subscription "$idx")
@@ -1043,21 +1098,11 @@ reset_config() {
 
     merged=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
     TMP_FILES+=("$merged")
-    if grep -q '^proxy-providers:[[:space:]]*$' "$tmp"; then
-        awk -v bf="$block_file" '
-            function flush(   line) {
-                while ((getline line < bf) > 0) print line
-                close(bf)
-            }
-            /^proxy-providers:[[:space:]]*$/ { in_pp = 1; print; next }
-            in_pp && /^[^[:space:]#]/ { flush(); in_pp = 0; print; next }
-            { print }
-            END { if (in_pp) flush() }
-        ' "$tmp" >"$merged"
-    else
-        cp -f -- "$tmp" "$merged"
-        printf '\nproxy-providers:\n' >>"$merged"
-        cat "$block_file" >>"$merged"
+    inject_providers "$block_file" "$tmp" "$merged"
+
+    if ! config_test "$merged"; then
+        err "写入订阅后配置校验失败，已中止（现有配置未改动）"
+        return 1
     fi
 
     if [[ "$(count_providers "$merged")" -eq 0 ]]; then
