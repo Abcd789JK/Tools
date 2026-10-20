@@ -1,6 +1,6 @@
 #!name = mihomo 配置文件
 #!desc = 说明：单纯去广告
-#!date = 2026-09-29 19:52:46
+#!date = 2026-10-20 19:57:29
 #!source = https://wiki.metacubex.one/example/conf/#__tabbed_1_2
 #!author = MetaCubeX
 
@@ -70,8 +70,6 @@ rules:
   - RULE-SET,Ads_Block_domain,拦截
   - RULE-SET,Ads_AdBlock_domain,拦截
   - RULE-SET,Ads_Adrules_domain,拦截
-  - AND,((DST-PORT,443),(NETWORK,UDP),(NOT,((RULE-SET,China_ip,no-resolve)))),拦截
-  - AND,((RULE-SET,Global_domain),(DST-PORT,443),(NETWORK,UDP)),拦截
   - MATCH,直连
 
 rule-anchor:
