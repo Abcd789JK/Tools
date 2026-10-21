@@ -2,9 +2,9 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2026-10-21 20:19:13
+# date   : 2026-10-21 20:37:16
 # author : ChatGPT
-# ver    : 1.3.0
+# ver    : 1.4.0
 # ---------------------------------
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -25,8 +25,13 @@ else
     red=''; green=''; yellow=''; blue=''; cyan=''; reset=''
 fi
 
+# ---------- 输出格式 ----------
+# 与 install.sh 保持同一套交互规范：统一 40 字符分隔线
+readonly HR="----------------------------------------"
+readonly HR_EQ="========================================"
+
 # ---------- 常量 ----------
-sh_ver="1.3.0"
+sh_ver="1.4.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -447,26 +452,16 @@ probe_asset() {
 
 # ---------- 架构 ----------
 # uname -m → mihomo 资产架构标识（可能有多个候选，按优先级逐行输出）。
-# 依据官方 release 资产命名：
-#   linux-{amd64,386,arm64,armv5,armv6,armv7,s390x,riscv64,loong64,ppc64le,mips,mipsle,mips64,mips64le}
-# armv8l 是 32 位用户空间的 ARMv8，仍应取 armv7 资产。
-# mips 系按 softfloat 优先探测，官方对无 FPU 的设备单独出包。
+# 仅保留主流架构：x86_64 / i686 / aarch64 / armv7l / s390x。
+# amd64 使用 compatible 变体，兼容不支持 v2/v3 指令集的老 CPU；
+# arm64 官方无 compatible 变体；armv8l 是 32 位用户空间的 ARMv8，仍取 armv7 资产。
 arch_candidates() {
     case "$1" in
         x86_64|amd64)          printf 'amd64\n' ;;
         i386|i486|i586|i686)   printf '386\n' ;;
         aarch64|arm64)         printf 'arm64\n' ;;
         armv8l|armv7l|armv7)   printf 'armv7\n' ;;
-        armv6l)                printf 'armv6\n' ;;
-        armv5tel|armv5l|armv5) printf 'armv5\n' ;;
         s390x)                 printf 's390x\n' ;;
-        riscv64)               printf 'riscv64\n' ;;
-        loongarch64|loong64)   printf 'loong64\n' ;;
-        ppc64le)               printf 'ppc64le\n' ;;
-        mips)                  printf 'mips-softfloat\nmips\n' ;;
-        mipsel)                printf 'mipsle-softfloat\nmipsle\n' ;;
-        mips64)                printf 'mips64\n' ;;
-        mips64el)              printf 'mips64le\n' ;;
         *) return 1 ;;
     esac
 }
@@ -478,7 +473,7 @@ detect_arch() {
     arch=${toks%%$'\n'*}
     if [[ -z "$arch" ]]; then
         err "不支持的架构：${arch_raw}"
-        err "支持：x86_64 i686 aarch64 armv7l armv6l armv5tel riscv64 ppc64le s390x loongarch64 mips(el) mips64(el)"
+        err "支持：x86_64 i686 aarch64 armv7l s390x"
         return 1
     fi
 }
@@ -603,9 +598,17 @@ verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd6
         return 0
     fi
 
-    # checksums.txt 形如：<sha256>  <文件名>（二进制模式下为 <sha256> *<文件名>）
-    expect=$(printf '%s\n' "$sums" \
-        | awk -v n="$name" '$NF == n || $NF == "*" n { print $1; exit }')
+    # 兼容常见格式：<hash>  <file>、<hash> *<file>、<hash>  ./<file>；
+    # 并去掉行尾 CR（上游校验文件可能是 CRLF，否则 $NF 会带上 \r 导致匹配失败）
+    expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
+        {
+            sub(/\r$/, "")
+            f = $NF
+            sub(/^\*/, "", f)
+            sub(/^\.\//, "", f)
+            if (f == n) { print tolower($1); exit }
+        }
+    ')
     if [[ -z "$expect" ]]; then
         warn "校验文件中未包含 ${name}，跳过完整性校验"
         return 0
@@ -1551,29 +1554,29 @@ reset_config() {
 
     detect_network_info
     echo
-    printf '%s\n' "${blue}=========================${reset}"
+    printf '%s\n' "${blue}${HR_EQ}${reset}"
     printf '%s\n' "${green}面板地址：$(panel_url)${reset}"
     if [[ -n "$controller_secret" ]]; then
         printf '%s\n' "${green}面板密钥：${controller_secret}${reset}"
     fi
     printf '%s\n' "${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
-    printf '%s\n' "${blue}=========================${reset}"
+    printf '%s\n' "${blue}${HR_EQ}${reset}"
 }
 
 # ---------- 配置菜单 ----------
 config_mihomo() {
     check_installation || return 1
-    printf '%s\n' "================================="
+    printf '%s\n' "${HR_EQ}"
     printf '%s\n' "${red}操作说明:"
     printf '%s\n' "    1. 订阅编号从 01 开始依次排列"
     printf '%s\n' "    2. 订阅不能全部删除，至少保留一个"
     printf '%s\n' "    3. 所有写操作前自动备份配置${reset}"
-    printf '%s\n' "---------------------------------"
+    printf '%s\n' "${HR}"
     printf '%s\n' "${green}1${reset}. 新增机场订阅"
     printf '%s\n' "${green}2${reset}. 修改机场订阅"
     printf '%s\n' "${green}3${reset}. 删除机场订阅"
     printf '%s\n' "${green}4${reset}. 重置配置文件"
-    printf '%s\n' "---------------------------------"
+    printf '%s\n' "${HR}"
 
     local choice=""
     read_input choice "${yellow}输入选项数字: ${reset}"
@@ -1824,12 +1827,12 @@ switch_version() {
     current=$(cat "$VERSION_FILE" 2>/dev/null || true)
     channel=$(detect_channel "$current")
 
-    printf '%s\n' "================================="
+    printf '%s\n' "${HR_EQ}"
     printf '当前版本: %s（%s）\n' "$current" "$(channel_name "$channel")"
-    printf '%s\n' "---------------------------------"
+    printf '%s\n' "${HR}"
     printf '%s\n' "${green}1${reset}. 测试版 (Alpha，如 alpha-94b13ae)"
     printf '%s\n' "${green}2${reset}. 正式版 (Release，如 v1.19.32)"
-    printf '%s\n' "---------------------------------"
+    printf '%s\n' "${HR}"
 
     read_input choice "${yellow}请输入选项 (1/2): ${reset}"
     case "$choice" in
@@ -1957,32 +1960,32 @@ menu() {
     local input=""
     while true; do
         clear 2>/dev/null || true
-        printf '%s\n' "================================="
+        printf '%s\n' "${HR_EQ}"
         printf '%s\n' "${green}欢迎使用 mihomo 一键脚本${reset}"
         printf '%s\n' "${green}作者: ${yellow}ChatGPT JK789${reset}"
         printf '%s\n' "${red}使用说明:"
         printf '%s\n' "    1. 更换订阅可以保存原有机场订阅"
         printf '%s\n' "    2. 需要通过脚本添加机场订阅${reset}"
-        printf '%s\n' "================================="
+        printf '%s\n' "${HR_EQ}"
         printf '%s\n' "${green} 1${reset}. 安装 mihomo"
         printf '%s\n' "${green} 2${reset}. 更新 mihomo"
         printf '%s\n' "${green} 3${reset}. 卸载 mihomo"
-        printf '%s\n' "---------------------------------"
+        printf '%s\n' "${HR}"
         printf '%s\n' "${green} 4${reset}. 启动 mihomo"
         printf '%s\n' "${green} 5${reset}. 停止 mihomo"
         printf '%s\n' "${green} 6${reset}. 重启 mihomo"
-        printf '%s\n' "---------------------------------"
+        printf '%s\n' "${HR}"
         printf '%s\n' "${green} 7${reset}. 添加开机自启"
         printf '%s\n' "${green} 8${reset}. 关闭开机自启"
         printf '%s\n' "${green} 9${reset}. 切换软件版本"
-        printf '%s\n' "---------------------------------"
+        printf '%s\n' "${HR}"
         printf '%s\n' "${green}10${reset}. 配置管理"
         printf '%s\n' "${green}11${reset}. 查看日志"
         printf '%s\n' "${green}12${reset}. 更新脚本"
         printf '%s\n' "${green} 0${reset}. 退出脚本"
-        printf '%s\n' "================================="
+        printf '%s\n' "${HR_EQ}"
         show_status
-        printf '%s\n' "================================="
+        printf '%s\n' "${HR_EQ}"
 
         read_input input "${yellow}请输入上面选项: ${reset}"
         case "$input" in

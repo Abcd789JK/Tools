@@ -2,9 +2,9 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2026-10-21 20:19:13
+# date   : 2026-10-21 20:37:16
 # author : ChatGPT
-# ver    : 1.5.0
+# ver    : 1.6.0
 # ---------------------------------
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -26,7 +26,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.5.0"
+sh_ver="1.6.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -79,6 +79,24 @@ ok()   { printf '%s\n' "${green}$*${reset}"; log "OK    $*"; }
 warn() { printf '%s\n' "${yellow}$*${reset}" >&2; log "WARN  $*"; }
 err()  { printf '%s\n' "${red}$*${reset}" >&2; log "ERROR $*"; }
 die()  { err "$*"; err "详细日志：${LOG_FILE}"; exit 1; }
+
+# ---------- 输出格式 ----------
+# 统一交互规范：首尾信息块 + 40 字符分隔线 + 带序号的步骤标题。
+readonly HR="----------------------------------------"
+STEP_TOTAL=11
+STEP_CUR=0
+
+hr()    { printf '%s\n' "${blue}${HR}${reset}"; }
+step()  { STEP_CUR=$((STEP_CUR + 1)); printf '\n%s\n' "${blue}[${STEP_CUR}/${STEP_TOTAL}]${reset} ${cyan}$*${reset}"; }
+
+print_header() {
+    printf '\n'
+    printf '%s\n' "${blue}========================================${reset}"
+    printf '%s\n' "${cyan}  mihomo 一键安装脚本${reset}  ${blue}v${sh_ver}${reset}"
+    printf '%s\n' "${blue}  安装目录  ${ROOT_DIR}${reset}"
+    printf '%s\n' "${blue}  日志文件  ${LOG_FILE}${reset}"
+    printf '%s\n' "${blue}========================================${reset}"
+}
 
 # ---------- 清理 ----------
 cleanup() {
@@ -471,26 +489,16 @@ detect_network_info() {
 
 # ---------- 架构 ----------
 # uname -m → mihomo 资产架构标识（可能有多个候选，按优先级逐行输出）。
-# 依据官方 release 资产命名：
-#   linux-{amd64,386,arm64,armv5,armv6,armv7,s390x,riscv64,loong64,ppc64le,mips,mipsle,mips64,mips64le}
-# armv8l 是 32 位用户空间的 ARMv8，仍应取 armv7 资产。
-# mips 系按 softfloat 优先探测，官方对无 FPU 的设备单独出包。
+# 仅保留主流架构：x86_64 / i686 / aarch64 / armv7l / s390x。
+# amd64 使用 compatible 变体，兼容不支持 v2/v3 指令集的老 CPU；
+# arm64 官方无 compatible 变体；armv8l 是 32 位用户空间的 ARMv8，仍取 armv7 资产。
 arch_candidates() {
     case "$1" in
         x86_64|amd64)          printf 'amd64\n' ;;
         i386|i486|i586|i686)   printf '386\n' ;;
         aarch64|arm64)         printf 'arm64\n' ;;
         armv8l|armv7l|armv7)   printf 'armv7\n' ;;
-        armv6l)                printf 'armv6\n' ;;
-        armv5tel|armv5l|armv5) printf 'armv5\n' ;;
         s390x)                 printf 's390x\n' ;;
-        riscv64)               printf 'riscv64\n' ;;
-        loongarch64|loong64)   printf 'loong64\n' ;;
-        ppc64le)               printf 'ppc64le\n' ;;
-        mips)                  printf 'mips-softfloat\nmips\n' ;;
-        mipsel)                printf 'mipsle-softfloat\nmipsle\n' ;;
-        mips64)                printf 'mips64\n' ;;
-        mips64el)              printf 'mips64le\n' ;;
         *) return 1 ;;
     esac
 }
@@ -502,7 +510,7 @@ detect_arch() {
     arch=${toks%%$'\n'*}
     if [[ -z "$arch" ]]; then
         err "不支持的架构：${arch_raw}"
-        err "支持：x86_64 i686 aarch64 armv7l armv6l armv5tel riscv64 ppc64le s390x loongarch64 mips(el) mips64(el)"
+        err "支持：x86_64 i686 aarch64 armv7l s390x"
         return 1
     fi
 }
@@ -767,9 +775,17 @@ verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd6
         return 0
     fi
 
-    # checksums.txt 形如：<sha256>  <文件名>（二进制模式下为 <sha256> *<文件名>）
-    expect=$(printf '%s\n' "$sums" \
-        | awk -v n="$name" '$NF == n || $NF == "*" n { print $1; exit }')
+    # 兼容常见格式：<hash>  <file>、<hash> *<file>、<hash>  ./<file>；
+    # 并去掉行尾 CR（上游校验文件可能是 CRLF，否则 $NF 会带上 \r 导致匹配失败）
+    expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
+        {
+            sub(/\r$/, "")
+            f = $NF
+            sub(/^\*/, "", f)
+            sub(/^\.\//, "", f)
+            if (f == n) { print tolower($1); exit }
+        }
+    ')
     if [[ -z "$expect" ]]; then
         warn "校验文件中未包含 ${name}，跳过完整性校验"
         return 0
@@ -1400,18 +1416,17 @@ config_mihomo() {
     apply_config "$bak" || return 1
 
     detect_network_info
-    echo
-    ok "配置完成，文件位置：${CONFIG_FILE}"
+    printf '\n'
+    hr
+    ok "配置完成：${CONFIG_FILE}"
     ok "mihomo 已启动并设置为开机自启"
-    printf '%s\n' "${blue}=========================${reset}"
-    printf '%s\n' "${green}面板地址：$(controller_url)${reset}"
+    printf '%s\n' "  ${green}面板地址${reset}  $(controller_url)"
     if [[ -n "$controller_secret" ]]; then
-        printf '%s\n' "${green}面板密钥：${controller_secret}${reset}"
-        printf '%s\n' "${yellow}面板已开启鉴权，首次访问需填写上述密钥${reset}"
+        printf '%s\n' "  ${green}面板密钥${reset}  ${controller_secret}"
+        printf '%s\n' "  ${yellow}面板已开启鉴权，首次访问需填写该密钥${reset}"
     fi
-    printf '%s\n' "${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
-    printf '%s\n' "${green}输入 ${yellow}mihomo ${green}进入管理菜单${reset}"
-    printf '%s\n' "${blue}=========================${reset}"
+    printf '%s\n' "  ${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
+    hr
 }
 
 # 跳过订阅时仍要落地一份可用配置：
@@ -1459,12 +1474,15 @@ install_default_config_only() {
     fi
 
     detect_network_info
+    printf '\n'
+    hr
     ok "已使用默认配置启动（尚未添加机场订阅）"
-    printf '%s\n' "${green}面板地址：$(controller_url)${reset}"
+    printf '%s\n' "  ${green}面板地址${reset}  $(controller_url)"
     if [[ -n "$controller_secret" ]]; then
-        printf '%s\n' "${green}面板密钥：${controller_secret}${reset}"
+        printf '%s\n' "  ${green}面板密钥${reset}  ${controller_secret}"
     fi
-    printf '%s\n' "${green}执行 ${yellow}mihomo ${green}→ 配置管理 添加机场订阅${reset}"
+    printf '%s\n' "  ${blue}下一步${reset}    执行 ${green}mihomo${reset} → 配置管理 → 添加机场订阅"
+    hr
     return 0
 }
 
@@ -1492,40 +1510,52 @@ prepare_dirs() { # [E-01] 不再无脑 rm -rf，先备份配置并确认
 
 # ---------- 主流程 ----------
 install_mihomo() {
+    step "检测系统环境"
     detect_distro
-    ok "当前系统：${distro}（包管理器：${pkg_mgr}，init：${init_sys}）"
+    ok "系统：${distro}    包管理器：${pkg_mgr}    init：${init_sys}"
 
+    step "安装基础工具"
     ensure_bootstrap_tools
+
+    step "检测网络连通性"
     check_network
+
+    step "安装运行依赖"
     install_dependencies
 
-    info "正在检查 IP 转发..."
+    step "检查 IP 转发"
     check_ip_forward
 
+    step "检测系统架构"
     detect_arch
-    ok "当前架构：${arch_raw}（${arch}）"
+    ok "架构：${arch_raw} → ${arch}"
 
+    step "下载 mihomo 内核"
     prepare_dirs
     download_mihomo_binary || die "mihomo 安装失败"
+
+    step "安装系统服务"
     install_service || die "系统服务安装失败"
+
+    step "安装管理面板"
     install_webui || warn "管理面板安装失败，不影响内核运行"
+
+    step "安装管理脚本"
     install_manager || die "管理脚本安装失败"
 
-    printf '%s\n' "${blue}=========================${reset}"
-    ok "mihomo 已安装完成"
-    printf '%s\n' "${yellow}输入 y/Y 下载默认配置并添加机场订阅${reset}"
-    printf '%s\n' "${yellow}输入 n/N 仅安装默认配置，稍后再添加订阅${reset}"
-    printf '%s\n' "${blue}=========================${reset}"
+    step "写入配置"
+    printf '%s\n' "  ${green}y${reset}  下载默认配置并添加机场订阅"
+    printf '%s\n' "  ${green}n${reset}  仅安装默认配置，稍后再添加订阅"
 
     local ans="y"
-    read_input ans "${green}请选择 (y/n) [默认 y]: ${reset}"
+    read_input ans "  请选择 [y/n，默认 y]: "
     ans=${ans:-y}
     case "$ans" in
         [Yy]*)
             config_mihomo || die "配置写入失败，请检查日志 ${LOG_FILE}"
             ;;
         *)
-            warn "已跳过订阅配置，将仅安装默认配置"
+            warn "已跳过订阅配置，仅安装默认配置"
             if ! install_default_config_only; then
                 warn "默认配置安装失败，服务可能无法启动"
                 info "请手动准备配置放到 ${CONFIG_FILE} 后执行：systemctl restart mihomo"
@@ -1533,7 +1563,13 @@ install_mihomo() {
             ;;
     esac
 
-    info "安装日志：${LOG_FILE}"
+    printf '\n'
+    hr
+    ok "安装完成"
+    printf '%s\n' "  ${blue}安装目录${reset}  ${ROOT_DIR}"
+    printf '%s\n' "  ${blue}日志文件${reset}  ${LOG_FILE}"
+    printf '%s\n' "  ${blue}管理菜单${reset}  输入 ${green}mihomo${reset}"
+    hr
 }
 
 usage() {
@@ -1557,8 +1593,7 @@ mihomo 一键安装脚本 v${sh_ver}
     Alpine
     openSUSE / SLES
   其余发行版将跳过依赖安装，工具齐全时仍可继续。
-  支持架构：x86_64 i686 aarch64 armv7l armv6l armv5tel
-            riscv64 ppc64le s390x loongarch64 mips(el) mips64(el)
+  支持架构：x86_64 i686 aarch64 armv7l s390x
   需 root 权限。
   安装目录 ${ROOT_DIR}
   日志文件 ${LOG_FILE}
@@ -1602,25 +1637,27 @@ choose_channel() {
         return 0
     fi
 
-    printf '%s\n' "${blue}=========================${reset}"
-    printf '%s\n' "请选择要安装的版本通道："
-    printf '%s\n' "${green}1${reset}. 正式版 Release（默认，如 v1.19.32）"
-    printf '%s\n' "${green}2${reset}. 测试版 Alpha（如 alpha-94b13ae）"
-    printf '%s\n' "${blue}=========================${reset}"
+    printf '\n'
+    hr
+    printf '%s\n' "  ${cyan}请选择要安装的版本通道${reset}"
+    printf '%s\n' "  ${green}1${reset}. 正式版 Release（默认，如 v1.19.32）"
+    printf '%s\n' "  ${green}2${reset}. 测试版 Alpha（如 alpha-94b13ae）"
+    hr
 
     local ans=""
-    read_input ans "${green}请输入选项 [1]: ${reset}"
+    read_input ans "  请输入选项 [1]: "
     ans=${ans//[[:space:]]/}
     case "$ans" in
         2|a|A|alpha|Alpha) channel="alpha" ;;
         *)                 channel="stable" ;;
     esac
-    ok "已选择：$(channel_name "$channel")"
+    ok "已选择：$(channel_name "$channel")（${channel}）"
 }
 
 main() {
     parse_args "$@"
     require_root          # 全局守卫：除帮助与版本外，一律要求 root
+    print_header
     choose_channel        # 未指定 --channel 时交互询问，默认正式版
     install_mihomo
 }
