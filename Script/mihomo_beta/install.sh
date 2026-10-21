@@ -2,7 +2,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2026-10-21 19:54:36
+# date   : 2026-10-21 20:08:57
 # author : ChatGPT
 # ver    : 1.5.0
 # ---------------------------------
@@ -995,7 +995,7 @@ count_providers() { # [D-04] 锚定统计，$1=文件，缺省为当前配置
     awk '
         /^proxy-providers:[[:space:]]*$/ { f = 1; next }
         f && /^[^[:space:]#]/            { f = 0 }
-        f && /^  provider_[0-9]+:/       { c++ }
+        f && /^[[:space:]]+provider_[0-9]+:/ { c++ }
         END { print c + 0 }
     ' "${1:-$CONFIG_FILE}"
 }
@@ -1078,6 +1078,10 @@ config_test() { # $1=配置文件
 }
 
 # 把 provider 块写入 src，结果输出到 dst，带数量校验 [D-07]
+# 已有 proxy-providers 段时追加到段末，并把整段缩进重排为 2/4/6 的规范层级、
+# 去掉段内空行，保证多次追加后条目始终连续且彼此对齐；
+# 仅有 # 机场配置 标记时补全段头；两者皆无则追加到文件末尾。
+# 三个分支都会顺带清掉 CR，避免 Windows 编辑过的配置把 \r 带进 YAML 值。
 # 注意：必须接收文件路径而非 stdin —— 管道会让函数在子 shell 中执行，
 # 导致 TMP_FILES 无法被 trap 清理。
 inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
@@ -1091,33 +1095,103 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
     before=$(count_providers "$src")
 
     if grep -q '^proxy-providers:[[:space:]]*$' "$src"; then
+        # 追加到段末，并把整段重排为规范缩进（provider 键 2 空格、子键 4 空格、
+        # additional-prefix 6 空格），段内空行一律去掉。
+        # 这样无论原文件是脚本生成还是手工编辑过缩进，追加后都能与既有条目对齐，
+        # 也不会出现段头与下一个顶层键之间的空行被夹到两个 provider 之间。
         awk -v bf="$block_file" '
-            function flush(   line) {
-                while ((getline line < bf) > 0) print line
-                close(bf)
+            function lead(s,    n) {
+                n = 0
+                while (substr(s, n + 1, 1) == " ") n++
+                return n
             }
-            /^proxy-providers:[[:space:]]*$/ { in_pp = 1; print; next }
-            in_pp && /^[^[:space:]#]/ { flush(); in_pp = 0; print; next }
-            { print }
-            END { if (in_pp) flush() }
+            # 按缩进单位重算：键统一到 2 空格，子层按 (2,4,6,...) 逐级归一
+            function reindent(s, ind, unit,    cur, n) {
+                cur = lead(s)
+                if (cur <= ind) return s
+                n = int((cur - ind) / unit) * 2
+                return sprintf("%" (2 + n) "s%s", "", substr(s, cur + 1))
+            }
+            { sub(/\r$/, ""); lines[NR] = $0 }
+            END {
+                s = 0; e = 0
+                for (i = 1; i <= NR; i++) {
+                    if (s == 0 && lines[i] ~ /^proxy-providers:[[:space:]]*$/) { s = i; continue }
+                    if (s > 0 && lines[i] ~ /^[^[:space:]#]/) { e = i; break }
+                }
+                if (s == 0) { for (i = 1; i <= NR; i++) print lines[i]; exit }
+                if (e == 0) e = NR + 1
+
+                for (i = 1; i < s; i++) print lines[i]
+                print "proxy-providers:"
+
+                nb = 0
+                for (i = s + 1; i < e; i++) {
+                    ln = lines[i]
+                    if (ln ~ /^[[:space:]]*$/) continue
+                    if (ln ~ /^[[:space:]]*provider_[0-9]+:/) {
+                        nb++
+                        blk[nb, 0] = ln
+                        cnt[nb] = 1
+                    } else if (nb == 0) {
+                        pre[++np] = ln
+                    } else {
+                        blk[nb, cnt[nb]] = ln
+                        cnt[nb]++
+                    }
+                }
+                for (i = 1; i <= np; i++) print pre[i]
+                for (b = 1; b <= nb; b++) {
+                    ind = lead(blk[b, 0])
+                    unit = 0
+                    for (j = 1; j < cnt[b]; j++) {
+                        c = lead(blk[b, j])
+                        if (c > ind && (unit == 0 || c - ind < unit)) unit = c - ind
+                    }
+                    if (unit <= 0) unit = 2
+                    print "  " substr(blk[b, 0], ind + 1)
+                    for (j = 1; j < cnt[b]; j++) print reindent(blk[b, j], ind, unit)
+                }
+                while ((getline line < bf) > 0) {
+                    sub(/\r$/, "", line)
+                    if (line ~ /^[[:space:]]*$/) continue
+                    print line
+                }
+                close(bf)
+                for (i = e; i <= NR; i++) print lines[i]
+            }
         ' "$src" >"$dst"
     elif grep -q '^# 机场配置' "$src"; then
         awk -v bf="$block_file" '
             /^# 机场配置/ {
+                sub(/\r$/, "")
                 print
                 print "proxy-providers:"
-                while ((getline line < bf) > 0) print line
+                while ((getline line < bf) > 0) {
+                    sub(/\r$/, "", line)
+                    if (line ~ /^[[:space:]]*$/) continue
+                    print line
+                }
                 close(bf)
-                done = 1
                 next
             }
-            { print }
+            { sub(/\r$/, ""); print }
         ' "$src" >"$dst"
         warn "配置中缺少 proxy-providers 段，已按 # 机场配置 标记补全"
     else
-        cp -f -- "$src" "$dst"
-        printf '\nproxy-providers:\n' >>"$dst"
-        cat "$block_file" >>"$dst"
+        awk -v bf="$block_file" '
+            { sub(/\r$/, ""); print }
+            END {
+                print ""
+                print "proxy-providers:"
+                while ((getline line < bf) > 0) {
+                    sub(/\r$/, "", line)
+                    if (line ~ /^[[:space:]]*$/) continue
+                    print line
+                }
+                close(bf)
+            }
+        ' "$src" >"$dst"
         warn "配置中既无 proxy-providers 段也无标记，已追加到文件末尾"
     fi
 
