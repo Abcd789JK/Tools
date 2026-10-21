@@ -2,9 +2,9 @@
 # ---------------------------------
 # script : mihomo 一键管理脚本
 # desc   : 管理 & 面板
-# date   : 2026-10-20 21:14:58
+# date   : 2026-10-21 19:54:36
 # author : ChatGPT
-# ver    : 1.2.0
+# ver    : 1.3.0
 # ---------------------------------
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -26,7 +26,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.2.0"
+sh_ver="1.3.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -66,6 +66,7 @@ ipv4=""
 ipv6=""
 use_cdn=false
 url_prefix=""
+controller_secret=""   # 面板密钥，重置配置时重新生成
 TMP_FILES=()
 
 # ---------- 日志 ----------
@@ -167,6 +168,8 @@ detect_distro() {
                 pkg_mgr="pacman" ;;
             alpine)
                 pkg_mgr="apk" ;;
+            opensuse*|suse|sles)
+                pkg_mgr="zypper" ;;
             *)
                 continue ;;
         esac
@@ -245,6 +248,19 @@ service_is_active() {
             return 1
             ;;
     esac
+}
+
+# 等待服务进入运行状态：systemd 处于 activating 时 is-active 返回非 0，
+# 启动稍慢就被单次判定为失败会导致配置被无谓回滚，故改为轮询。
+wait_active() { # $1=最多等待秒数，默认 10
+    local i limit="${1:-10}"
+    for ((i = 0; i < limit; i++)); do
+        if service_is_active; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
 }
 
 service_is_enabled() {
@@ -383,6 +399,9 @@ fetch_to() { # $1=url $2=输出文件
 download_file() { # $1=url $2=目标路径 $3=描述
     local url="$1" dest="$2" desc="${3:-文件}" resolved m
 
+    # 登记 .part，中断时由 cleanup 一并清理，避免残留半截文件
+    TMP_FILES+=("${dest}.part")
+
     if ! resolved=$(resolve_url "$url"); then
         err "${desc}地址解析失败：${url}"
         return 1
@@ -412,22 +431,42 @@ download_file() { # $1=url $2=目标路径 $3=描述
     return 1
 }
 
-# 探测资产是否存在：只取 1 字节，避免为探测拉整个文件
+# 探测资产是否存在：优先用 HEAD 取状态码。
+# 不用 --range 打头，是因为部分镜像/CDN 忽略 Range 而直接返回整包，
+# 20MB+ 的响应会在 --max-time 内超时，反而把存在的资产误判为不存在。
 probe_asset() {
-    curl -fsSL -o /dev/null --connect-timeout 5 --max-time 15 --range 0-0 "$1" 2>/dev/null
+    local url="$1" code
+    code=$(curl -sSL -I -o /dev/null -w '%{http_code}' \
+               --connect-timeout 5 --max-time 12 "$url" 2>/dev/null || true)
+    if [[ "$code" == "200" || "$code" == "206" ]]; then
+        return 0
+    fi
+    # 部分镜像不支持 HEAD，退回范围请求兜底
+    curl -fsSL -o /dev/null --connect-timeout 5 --max-time 15 --range 0-0 "$url" 2>/dev/null
 }
 
 # ---------- 架构 ----------
 # uname -m → mihomo 资产架构标识（可能有多个候选，按优先级逐行输出）。
 # 依据官方 release 资产命名：
-#   linux-{amd64,386,arm64,armv7,s390x}
+#   linux-{amd64,386,arm64,armv5,armv6,armv7,s390x,riscv64,loong64,ppc64le,mips,mipsle,mips64,mips64le}
+# armv8l 是 32 位用户空间的 ARMv8，仍应取 armv7 资产。
+# mips 系按 softfloat 优先探测，官方对无 FPU 的设备单独出包。
 arch_candidates() {
     case "$1" in
         x86_64|amd64)          printf 'amd64\n' ;;
         i386|i486|i586|i686)   printf '386\n' ;;
         aarch64|arm64)         printf 'arm64\n' ;;
         armv8l|armv7l|armv7)   printf 'armv7\n' ;;
+        armv6l)                printf 'armv6\n' ;;
+        armv5tel|armv5l|armv5) printf 'armv5\n' ;;
         s390x)                 printf 's390x\n' ;;
+        riscv64)               printf 'riscv64\n' ;;
+        loongarch64|loong64)   printf 'loong64\n' ;;
+        ppc64le)               printf 'ppc64le\n' ;;
+        mips)                  printf 'mips-softfloat\nmips\n' ;;
+        mipsel)                printf 'mipsle-softfloat\nmipsle\n' ;;
+        mips64)                printf 'mips64\n' ;;
+        mips64el)              printf 'mips64le\n' ;;
         *) return 1 ;;
     esac
 }
@@ -479,23 +518,40 @@ fetch_alpha_version() { # [C-07] --fail + 格式校验
     printf '%s' "$v"
 }
 
+# 正式版版本号：优先 api.github.com 的 tag_name（v1.19.32 → 1.19.32）；
+# 该域名在部分网络下不可达且未认证请求有 60 次/时限流，故增加
+# releases/latest 的 302 Location 兜底（走 github.com 本体，镜像可代理）。
 fetch_latest_version() { # [C-08] 校验 null 与空值
-    local v raw resolved
-    if ! resolved=$(resolve_url "$MIHOMO_API"); then
+    local v raw resolved tag m
+    if resolved=$(resolve_url "$MIHOMO_API" 2>/dev/null); then
+        raw=$(curl -fsSL --connect-timeout 10 --max-time 30 "$resolved" 2>/dev/null || true)
+        v=$(printf '%s' "$raw" | jq -r '.tag_name // empty' 2>/dev/null || true)
+        v=${v#v}
+        if [[ -n "$v" && "$v" != "null" ]] && valid_version "$v"; then
+            printf '%s' "$v"
+            return 0
+        fi
+    fi
+
+    info "API 不可用，改用 releases/latest 重定向获取版本号..."
+    tag=$(curl -sSI -o /dev/null -w '%{redirect_url}' \
+              --connect-timeout 8 --max-time 20 \
+              "https://github.com/MetaCubeX/mihomo/releases/latest" 2>/dev/null || true)
+    if [[ -z "$tag" ]]; then
+        for m in "${MIRRORS[@]}"; do
+            tag=$(curl -sSI -o /dev/null -w '%{redirect_url}' \
+                      --connect-timeout 8 --max-time 20 \
+                      "${m}/https://github.com/MetaCubeX/mihomo/releases/latest" 2>/dev/null || true)
+            [[ -n "$tag" ]] && break
+        done
+    fi
+    tag=${tag##*/}
+    tag=${tag#v}
+    if [[ -z "$tag" ]] || ! valid_version "$tag"; then
+        err "获取正式版版本号失败（API 与重定向均不可用，可能触发 GitHub 限流）"
         return 1
     fi
-    raw=$(curl -fsSL --connect-timeout 10 --max-time 30 "$resolved") || return 1
-    v=$(printf '%s' "$raw" | jq -r '.tag_name // empty' 2>/dev/null || true)
-    v=${v#v}
-    if [[ -z "$v" || "$v" == "null" ]]; then
-        err "获取正式版版本号失败（可能触发 GitHub API 限流）"
-        return 1
-    fi
-    if ! valid_version "$v"; then
-        err "正式版版本号格式异常：${v}"
-        return 1
-    fi
-    printf '%s' "$v"
+    printf '%s' "$tag"
 }
 
 # 二进制自检：ELF 魔数 + 可执行 [C-06]
@@ -511,6 +567,61 @@ verify_binary() {
         err "二进制无法在当前架构上运行"
         return 1
     fi
+}
+
+# 完整性校验：上游 Release 附带 checksums.txt，可用 SHA256 比对，防御镜像投毒。
+# 镜像常不缓存该文件，取不到时降级为告警而不阻断安装，避免误伤。
+verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd64-compatible-v1.19.32.gz）
+    local file="$1" name="$2" sums_url sums expect actual tool=""
+
+    if have sha256sum; then
+        tool="sha256sum"
+    elif have shasum; then
+        tool="shasum"
+    elif have openssl; then
+        tool="openssl"
+    else
+        warn "未找到 SHA256 校验工具，跳过完整性校验"
+        return 0
+    fi
+
+    if [[ "$channel" == "alpha" ]]; then
+        sums_url="${MIHOMO_RELEASE}/Prerelease-Alpha/checksums.txt"
+    else
+        sums_url="${MIHOMO_RELEASE}/v${version}/checksums.txt"
+    fi
+
+    sums=$(curl -fsSL --connect-timeout 8 --max-time 30 "$sums_url" 2>/dev/null || true)
+    if [[ -z "$sums" ]]; then
+        local resolved
+        if resolved=$(resolve_url "$sums_url" 2>/dev/null); then
+            sums=$(curl -fsSL --connect-timeout 8 --max-time 30 "$resolved" 2>/dev/null || true)
+        fi
+    fi
+    if [[ -z "$sums" ]]; then
+        warn "无法获取 checksums.txt，跳过完整性校验"
+        return 0
+    fi
+
+    # checksums.txt 形如：<sha256>  <文件名>（二进制模式下为 <sha256> *<文件名>）
+    expect=$(printf '%s\n' "$sums" \
+        | awk -v n="$name" '$NF == n || $NF == "*" n { print $1; exit }')
+    if [[ -z "$expect" ]]; then
+        warn "校验文件中未包含 ${name}，跳过完整性校验"
+        return 0
+    fi
+
+    case "$tool" in
+        sha256sum) actual=$(sha256sum "$file" 2>/dev/null | awk '{print $1}') ;;
+        shasum)    actual=$(shasum -a 256 "$file" 2>/dev/null | awk '{print $1}') ;;
+        openssl)   actual=$(openssl dgst -sha256 "$file" 2>/dev/null | awk '{print $NF}') ;;
+    esac
+
+    if [[ "$actual" != "$expect" ]]; then
+        err "SHA256 校验失败：期望 ${expect}，实际 ${actual:-<空>}"
+        return 1
+    fi
+    ok "SHA256 校验通过"
 }
 
 # ---------- 网络信息 ----------
@@ -670,7 +781,6 @@ service_action() { # $1=start|stop|restart|enable|disable
         err "${text}失败"
         return 1
     fi
-    sleep 1
     if [[ "$action" == "stop" ]]; then
         if service_is_active; then
             err "${text}失败：进程仍在运行"
@@ -679,7 +789,7 @@ service_action() { # $1=start|stop|restart|enable|disable
         ok "${text}成功"
         return 0
     fi
-    if service_is_active; then
+    if wait_active 10; then
         ok "${text}成功"
     else
         err "${text}失败，请查看日志：journalctl -u mihomo -n 50"
@@ -705,10 +815,102 @@ logs_mihomo() {
 }
 
 # ---------- 配置公共 ----------
-backup_config() { # 输出备份路径 [D-01]
-    local bak
+# 面板鉴权：远程配置不含 secret，而 external-controller 监听 0.0.0.0:9090，
+# 等于把控制 API 无鉴权暴露到公网。重置配置后重新生成并注入；
+# 已有非空 secret 时保留用户设置，重复执行不会重复插入。
+ensure_controller_secret() { # $1=配置文件，输出最终密钥
+    local f="$1" cur new tmp q
+    q=$'\x27'
+
+    cur=$(awk -v q="$q" '
+        /^secret:[[:space:]]*/ {
+            v = $0
+            sub(/^secret:[[:space:]]*/, "", v)
+            gsub("[[:space:]\"" q "]", "", v)
+            print v
+            exit
+        }
+    ' "$f" 2>/dev/null || true)
+
+    if [[ -n "$cur" ]]; then
+        controller_secret="$cur"
+        printf '%s' "$cur"
+        return 0
+    fi
+
+    new=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 24 || true)
+    [[ -n "$new" ]] || new="mihomo$(date +%s)$$"
+
+    # 必须整体读入后再决定插入位置：secret 可能出现在 external-controller 之前，
+    # 单趟流式处理会先命中 controller 分支而漏掉占位空值，导致出现重复 secret 键。
+    tmp=$(mktemp "${ROOT_DIR}/.secret.XXXXXX")
+    TMP_FILES+=("$tmp")
+    awk -v s="$new" -v q="$q" '
+        { lines[NR] = $0 }
+        END {
+            s_idx = 0; s_empty = 0; c_idx = 0
+            for (i = 1; i <= NR; i++) {
+                if (s_idx == 0 && lines[i] ~ /^secret:[[:space:]]*/) {
+                    s_idx = i
+                    v = lines[i]
+                    sub(/^secret:[[:space:]]*/, "", v)
+                    sub(/[[:space:]]+$/, "", v)
+                    if (v == "" || v == "\"\"" || v == q q) s_empty = 1
+                }
+                if (c_idx == 0 && lines[i] ~ /^external-controller:/) c_idx = i
+            }
+
+            if (s_idx > 0 && !s_empty) {           # 已有有效密钥，原样输出
+                for (i = 1; i <= NR; i++) print lines[i]
+                exit
+            }
+            if (s_idx > 0) {                       # 替换 secret 占位空值
+                for (i = 1; i <= NR; i++) {
+                    if (i == s_idx) print "secret: \"" s "\""
+                    else print lines[i]
+                }
+                exit
+            }
+            if (c_idx > 0) {                       # 插到 external-controller 之后
+                for (i = 1; i <= NR; i++) {
+                    print lines[i]
+                    if (i == c_idx) print "secret: \"" s "\""
+                }
+                exit
+            }
+            for (i = 1; i <= NR; i++) print lines[i]
+            print "secret: \"" s "\""
+        }
+    ' "$f" >"$tmp"
+
+    mv -f -- "$tmp" "$f"
+    controller_secret="$new"
+    printf '%s' "$new"
+}
+
+panel_url() { # 从配置读取面板地址
+    local addr
+    addr=$(awk -F': *' '
+        /^[[:space:]]*external-controller:/ {
+            gsub(/["'"'"']/, "", $2)
+            print $2
+            exit
+        }
+    ' "$CONFIG_FILE" 2>/dev/null || true)
+    if [[ -z "$addr" ]]; then
+        printf 'http://%s:9090/ui' "${ipv4:-127.0.0.1}"
+        return 0
+    fi
+    case "$addr" in
+        0.0.0.0:*) printf 'http://%s:%s/ui' "${ipv4:-127.0.0.1}" "${addr##*:}" ;;
+        *:*)       printf 'http://%s/ui' "$addr" ;;
+        *)         printf 'http://%s:9090/ui' "$addr" ;;
+    esac
+}
+
+backup_config() { # 输出备份路径 [D-01]；固定覆盖同一份 .bak，不累积时间戳文件
+    local bak="${CONFIG_FILE}.bak"
     [[ -f "$CONFIG_FILE" ]] || return 0
-    bak="${CONFIG_FILE}.bak.$(date +%Y%m%d-%H%M%S)"
     if ! cp -f -- "$CONFIG_FILE" "$bak"; then
         err "配置备份失败，已中止写入"
         return 1
@@ -742,11 +944,21 @@ next_provider_index() {
     printf '%d' "$((max + 1))"
 }
 
+# 列出订阅：必须覆盖没有 additional-prefix 的条目（例如手工编辑过的 provider），
+# 否则这些编号不会出现在列表中，用户无法选中它们做修改或删除。
 list_providers() {
     awk '
+        function show() {
+            if (cur != "") {
+                printf "  %s  %s\n", cur, (pname == "" ? "<未命名>" : pname)
+                cur = ""
+                pname = ""
+            }
+        }
         /^proxy-providers:[[:space:]]*$/ { f = 1; next }
-        f && /^[^[:space:]#]/            { f = 0; cur = "" }
+        f && /^[^[:space:]#]/            { show(); f = 0 }
         f && /^  provider_[0-9]+:/ {
+            show()
             cur = $1
             sub(/^provider_/, "", cur)
             sub(/:$/, "", cur)
@@ -756,9 +968,10 @@ list_providers() {
             v = $0
             sub(/.*additional-prefix:[[:space:]]*/, "", v)
             gsub(/["\[\]]/, "", v)
-            printf "  %s  %s\n", cur, v
-            cur = ""
+            pname = v
+            next
         }
+        END { show() }
     ' "$CONFIG_FILE"
 }
 
@@ -841,6 +1054,15 @@ apply_config() { # $1=备份路径
         fi
         return 1
     fi
+
+    # init 未知（如 runit/s6 系统）时无法托管服务，只保证配置有效。
+    # 缺少此分支会让 service_do 返回 1，导致每次写配置都被误判为失败并回滚。
+    if [[ "$init_sys" == "unknown" ]]; then
+        warn "未识别 init 系统，跳过服务重启"
+        warn "请手动重启使配置生效：${BIN_FILE} -d ${ROOT_DIR}"
+        return 0
+    fi
+
     if ! service_do restart; then
         err "服务重启失败"
         if [[ -n "$bak" && -f "$bak" ]]; then
@@ -851,7 +1073,7 @@ apply_config() { # $1=备份路径
         return 1
     fi
     sleep 1
-    if ! service_is_active; then
+    if ! wait_active 10; then
         err "服务未处于运行状态"
         if [[ -n "$bak" && -f "$bak" ]]; then
             cp -f -- "$bak" "$CONFIG_FILE"
@@ -1235,12 +1457,25 @@ reset_config() {
         return 1
     fi
 
+    # 面板密钥必须在校验前注入，避免把非法配置写进正式文件
+    ensure_controller_secret "$merged" >/dev/null
+
     if ! config_test "$merged"; then
         err "写入订阅后配置校验失败，已中止（现有配置未改动）"
         return 1
     fi
 
-    commit_config "$merged" "$bak" "重置配置"
+    commit_config "$merged" "$bak" "重置配置" || return 1
+
+    detect_network_info
+    echo
+    printf '%s\n' "${blue}=========================${reset}"
+    printf '%s\n' "${green}面板地址：$(panel_url)${reset}"
+    if [[ -n "$controller_secret" ]]; then
+        printf '%s\n' "${green}面板密钥：${controller_secret}${reset}"
+    fi
+    printf '%s\n' "${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
+    printf '%s\n' "${blue}=========================${reset}"
 }
 
 # ---------- 配置菜单 ----------
@@ -1280,9 +1515,10 @@ install_mihomo() {
             warn "已取消安装"
             return 0
         fi
-        # [E-05] 先停服务，再把旧目录整体暂存，失败可恢复
+        # [E-05] 先停服务，再把旧目录整体暂存，失败可恢复。
+        # 服务单元文件不在此处删除：若后续下载或校验安装脚本失败，
+        # 提前删除会让机器重启后彻底失去自启；由 install.sh 覆盖写入即可。
         service_do stop >/dev/null 2>&1 || true
-        rm -f -- "$SERVICE_SYSTEMD" "$SERVICE_OPENRC"
         rm -rf -- "$old"
         if ! mv -f -- "$ROOT_DIR" "$old"; then
             err "无法暂存旧安装目录，已取消"
@@ -1398,6 +1634,10 @@ download_and_install() { # $1=alpha|stable
     if ! download_file "$url" "$gz" "mihomo 二进制"; then
         return 1
     fi
+    if ! verify_checksum "$gz" "${base}.gz"; then
+        rm -f -- "$gz"
+        return 1
+    fi
     if ! gzip -t "$gz" 2>/dev/null; then
         rm -f -- "$gz"
         err "压缩包完整性校验失败"
@@ -1443,7 +1683,7 @@ download_and_install() { # $1=alpha|stable
         return 1
     fi
     sleep 1
-    if ! service_is_active; then
+    if ! wait_active 10; then
         err "新版本未正常运行，正在回滚"
         cp -f -- "$bak" "$BIN_FILE"
         chmod +x "$BIN_FILE"
@@ -1533,7 +1773,12 @@ switch_version() {
 
 # ---------- 卸载 ----------
 uninstall_mihomo() {
-    check_installation || return 1
+    # 卸载不依赖安装完整性：二进制丢失或安装中断后仍需能够清理残留
+    if [[ ! -d "$ROOT_DIR" && ! -f "$SERVICE_SYSTEMD" && ! -f "$SERVICE_OPENRC" \
+          && ! -f "$SHELL_FILE" ]]; then
+        warn "未检测到任何 mihomo 残留，无需卸载"
+        return 0
+    fi
     err "警告：卸载将删除 ${ROOT_DIR} 下全部内容（含配置文件与订阅）"
     if ! confirm "确认卸载 mihomo？(y/N):" "n"; then
         warn "已取消卸载"
@@ -1559,7 +1804,9 @@ uninstall_mihomo() {
         rm -f -- "$SYSCTL_FILE" || failures=$((failures + 1))
         warn "已移除 ${SYSCTL_FILE}（如需保留 IP 转发请自行恢复）"
     fi
-    systemctl daemon-reload >/dev/null 2>&1 || true
+    if [[ "$init_sys" == "systemd" ]]; then
+        systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
 
     sleep 1
     if (( failures == 0 )) && [[ ! -d "$ROOT_DIR" ]]; then
@@ -1588,7 +1835,8 @@ update_shell() {
         err "下载的脚本语法校验失败，已取消更新"
         return 1
     fi
-    newver=$(grep -m1 '^sh_ver=' "$tmp" 2>/dev/null | cut -d'"' -f2 || true)
+    # 同时兼容 sh_ver="x" 与 sh_ver='x'，避免上游改用单引号后解析为空
+    newver=$(sed -n "s/^sh_ver=[\"']\(.*\)[\"']\$/\1/p" "$tmp" 2>/dev/null | head -n1 || true)
     if [[ -z "$newver" ]]; then
         err "无法解析新脚本版本号，已取消更新"
         return 1
@@ -1693,6 +1941,7 @@ mihomo 一键管理脚本 v${sh_ver}
   logs                实时查看日志
   config              配置管理（交互）
   update              更新 mihomo 内核
+  switch              切换正式版 / 测试版
   install             安装 / 重装
   uninstall           卸载
   update-shell        更新本管理脚本
@@ -1726,6 +1975,7 @@ main() {
         logs)                   logs_mihomo ;;
         config)                 config_mihomo ;;
         update)                 update_mihomo ;;
+        switch)                 switch_version ;;
         install)                install_mihomo ;;
         uninstall)              uninstall_mihomo ;;
         update-shell)           update_shell ;;
