@@ -1,8 +1,8 @@
 #!/bin/bash
 # ---------- mihomo 一键管理脚本 ----------
 # desc   : 管理 & 面板
-# date   : 2026-10-21 21:04:12
-# author : ChatGPT
+# date   : 2026-10-21 21:18:21
+# author : ChatGPT DeepSeek
 # ver    : 1.4.1
 # sync   : 与 install.sh 共用 35 个同名函数，改动需同步两份
 
@@ -1982,7 +1982,7 @@ menu() {
         clear 2>/dev/null || true
         printf '%s\n' "${HR_EQ}"
         printf '%s\n' "${green}欢迎使用 mihomo 一键脚本${reset}"
-        printf '%s\n' "${green}作者: ${yellow}ChatGPT JK789${reset}"
+        printf '%s\n' "${green}作者: ${yellow}ChatGPT DeepSeek${reset}"
         printf '%s\n' "${red}使用说明:"
         printf '%s\n' "    1. 更换订阅可以保存原有机场订阅"
         printf '%s\n' "    2. 需要通过脚本添加机场订阅${reset}"
@@ -2018,8 +2018,8 @@ menu() {
             7)  service_action enable   || true ;;
             8)  service_action disable  || true ;;
             9)  switch_version          || true ;;
-            10|20) config_mihomo        || true ;;
-            11|30) logs_mihomo          || true ;;
+            10) config_mihomo           || true ;;
+            11) logs_mihomo             || true ;;
             12) update_shell            || true ;;
             0|q|Q|exit) exit 0 ;;
             *)  warn "无效选项，请重新选择"; continue ;;

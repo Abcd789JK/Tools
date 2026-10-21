@@ -1,8 +1,8 @@
 #!/bin/bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-21 21:04:12
-# author : ChatGPT
+# date   : 2026-10-21 21:18:21
+# author : ChatGPT DeepSeek
 # ver    : 1.6.1
 # sync   : 与 mihomo.sh 共用 35 个同名函数，改动需同步两份
 
