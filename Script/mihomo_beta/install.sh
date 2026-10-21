@@ -2,7 +2,7 @@
 # ---------------------------------
 # script : mihomo 一键安装脚本
 # desc   : 安装 & 配置
-# date   : 2026-10-21 20:08:57
+# date   : 2026-10-21 20:19:13
 # author : ChatGPT
 # ver    : 1.5.0
 # ---------------------------------
@@ -1158,6 +1158,8 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
                     print line
                 }
                 close(bf)
+                # 段内不空行，但保留与下一个顶层键之间的一个空行作为分隔
+                if (e <= NR) print ""
                 for (i = e; i <= NR; i++) print lines[i]
             }
         ' "$src" >"$dst"
@@ -1173,9 +1175,15 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
                     print line
                 }
                 close(bf)
+                skip = 1
                 next
             }
-            { sub(/\r$/, ""); print }
+            # 吞掉原有空行，改为在块后补一个空行，与"追加"分支的输出保持一致
+            skip && /^[[:space:]]*$/ { next }
+            {
+                if (skip) { print ""; skip = 0 }
+                sub(/\r$/, ""); print
+            }
         ' "$src" >"$dst"
         warn "配置中缺少 proxy-providers 段，已按 # 机场配置 标记补全"
     else
