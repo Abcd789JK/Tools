@@ -1,10 +1,9 @@
 #!/bin/bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-21 21:18:21
+# date   : 2026-10-22 20:45:57
 # author : ChatGPT DeepSeek
 # ver    : 1.6.7
-# sync   : 与 mihomo.sh 共用 35 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
 # 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
