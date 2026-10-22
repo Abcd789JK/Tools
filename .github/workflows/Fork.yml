@@ -1,175 +1,239 @@
+# ---------- 拉取上游 mihomo 规则 ----------
+# desc   : 定时拉取上游 mihomo 规则文件，提交并推送
+# date   : 2026-10-22 20:54:16
+
 name: 拉取上游 mihomo 规则
 
-#!date = 2026-09-23 10:07:56
-
+# ---------- 触发条件 ----------
 on:
   workflow_dispatch:
   schedule:
     - cron: '15 */12 * * *'
 
+# ---------- 权限与并发 ----------
+# 显式声明最小权限：push 需要 contents:write，清理历史运行需要 actions:write
+permissions:
+  contents: write
+  actions: write
+
+# 防止定时任务与手动触发并发导致 push 冲突
+concurrency:
+  group: fork-mihomo-rules
+  cancel-in-progress: false
+
+# 统一 shell，避免逐 step 重复声明
+defaults:
+  run:
+    shell: bash
+
+# ---------- 运行环境 ----------
+env:
+  TZ: Asia/Hong_Kong
+  UPSTREAM_BRANCH: main
+  DOWNLOAD_PARALLEL: '8'
+
+# ---------- 任务 ----------
 jobs:
   git-mihomo:
     runs-on: ubuntu-latest
-    env:
-      TZ: 'Asia/Hong_Kong'
+    timeout-minutes: 15
 
     steps:
-      - name: 检查当前仓库
+      - name: 检出上游仓库
         uses: actions/checkout@v6
         with:
           repository: Abcd789JK/Tools
+          ref: main
           path: Tools-repo
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
 
       - name: 下载 mihomo 规则
-        shell: bash
         working-directory: ${{ github.workspace }}/Tools-repo
         run: |
           set -euo pipefail
 
-          # 创建目录
+          # 目录必须在这里一次性建全，避免后续 cp 因目录缺失失败
           mkdir -p \
-          Ruleset/mihomo/{geoip,geosite}
+            Ruleset/mihomo/geoip \
+            Ruleset/mihomo/geosite
 
-          # 定义需要下载的文件列表
-          declare -A file=(
-            # geosite
-            ["geosite/Ads_all.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-            ["geosite/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
-            ["geosite/China.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
-            ["geosite/Openai.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"
-            ["geosite/PayPal.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"
-            ["geosite/Apple.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
-            ["geosite/Apple@cn.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple@cn.mrs"
-            ["geosite/Global.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
-            ["geosite/GlobalGFW.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"
-            ["geosite/Google.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
-            ["geosite/YouTube.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
-            ["geosite/Steam.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
-            ["geosite/Steam@cn.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam@cn.mrs"
-            ["geosite/Epic.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"
-            ["geosite/Facebook.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/facebook.mrs"
-            ["geosite/Instagram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/instagram.mrs"
-            ["geosite/Twitter.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"
-            ["geosite/Telegram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
-            ["geosite/Line.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/line.mrs"
-            ["geosite/GitHub.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"
-            ["geosite/OneDrive.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"
-            ["geosite/Microsoft.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
-            ["geosite/Microsoft@cn.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft@cn.mrs"
-            ["geosite/Tiktok.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
-            ["geosite/Bilibili.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"
-            ["geosite/Disney.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"
-            ["geosite/Netflix.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
-            ["geosite/Spotify.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
-            ["geosite/Talkatone.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/talkatone.mrs"
-            # geoip
-            ["geoip/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
-            ["geoip/China.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
-            ["geoip/Netflix.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"
-            ["geoip/Twitter.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.mrs"
-            ["geoip/Telegram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
-            ["geoip/Facebook.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/facebook.mrs"
-            ["geoip/Google.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
+          # 目标路径（相对仓库根） => 上游 URL
+          declare -A files=(
+            # ---------- mihomo geosite (.mrs) ----------
+            ["Ruleset/mihomo/geosite/Ads_all.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+            ["Ruleset/mihomo/geosite/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+            ["Ruleset/mihomo/geosite/China.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+            ["Ruleset/mihomo/geosite/Openai.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"
+            ["Ruleset/mihomo/geosite/PayPal.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"
+            ["Ruleset/mihomo/geosite/Apple.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
+            ["Ruleset/mihomo/geosite/Apple@cn.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple@cn.mrs"
+            ["Ruleset/mihomo/geosite/Global.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
+            ["Ruleset/mihomo/geosite/GlobalGFW.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"
+            ["Ruleset/mihomo/geosite/Google.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
+            ["Ruleset/mihomo/geosite/YouTube.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
+            ["Ruleset/mihomo/geosite/Steam.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
+            ["Ruleset/mihomo/geosite/Steam@cn.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam@cn.mrs"
+            ["Ruleset/mihomo/geosite/Epic.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"
+            ["Ruleset/mihomo/geosite/Facebook.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/facebook.mrs"
+            ["Ruleset/mihomo/geosite/Instagram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/instagram.mrs"
+            ["Ruleset/mihomo/geosite/Twitter.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"
+            ["Ruleset/mihomo/geosite/Telegram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
+            ["Ruleset/mihomo/geosite/Line.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/line.mrs"
+            ["Ruleset/mihomo/geosite/GitHub.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"
+            ["Ruleset/mihomo/geosite/OneDrive.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"
+            ["Ruleset/mihomo/geosite/Microsoft.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
+            ["Ruleset/mihomo/geosite/Microsoft@cn.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft@cn.mrs"
+            ["Ruleset/mihomo/geosite/Tiktok.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
+            ["Ruleset/mihomo/geosite/Bilibili.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"
+            ["Ruleset/mihomo/geosite/Disney.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"
+            ["Ruleset/mihomo/geosite/Netflix.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
+            ["Ruleset/mihomo/geosite/Spotify.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
+            ["Ruleset/mihomo/geosite/Talkatone.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/talkatone.mrs"
+
+            # ---------- mihomo geoip (.mrs) ----------
+            ["Ruleset/mihomo/geoip/Local.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+            ["Ruleset/mihomo/geoip/China.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+            ["Ruleset/mihomo/geoip/Netflix.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"
+            ["Ruleset/mihomo/geoip/Twitter.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.mrs"
+            ["Ruleset/mihomo/geoip/Telegram.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
+            ["Ruleset/mihomo/geoip/Facebook.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/facebook.mrs"
+            ["Ruleset/mihomo/geoip/Google.mrs"]="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
           )
 
-          failures=0
-          for file_path in "${!file[@]}"; do
-            url="${file[$file_path]}"
-            echo "下载规则：$file_path"
+          # 生成 "目标路径 <TAB> URL" 清单，交给 xargs 并发下载
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          fail_log="$workdir/failures.log"
+          : > "$fail_log"
+          export fail_log
 
-            if curl -f -L --retry 3 --retry-delay 5 --max-time 60 \
-              "$url" -o "Ruleset/mihomo/$file_path"; then
-              echo "下载成功: $file_path"
-            else
-              echo "下载失败: $url"
-              ((failures++))
-            fi
+          manifest="$workdir/manifest.tsv"
+          : > "$manifest"
+          for dest in "${!files[@]}"; do
+              printf '%s\t%s\n' "$dest" "${files[$dest]}" >> "$manifest"
           done
 
-          if [[ $failures -gt 0 ]]; then
-            echo "共有 $failures 个规则下载失败, 继续执行脚本"
+          # 单文件下载：失败不落盘（.part 临时文件），成功才 mv
+          fetch_one() {
+              local entry="$1"
+              local dest="${entry%%$'\t'*}"
+              local url="${entry#*$'\t'}"
+              local part="${dest}.part"
+
+              mkdir -p "$(dirname "$dest")"
+              if curl -fsSL --compressed \
+                        --connect-timeout 15 --max-time 90 \
+                        --retry 3 --retry-delay 3 --retry-all-errors \
+                        --remove-on-error \
+                        -o "$part" "$url" && [[ -s "$part" ]]; then
+                  mv -f "$part" "$dest"
+              else
+                  rm -f "$part"
+                  printf '%s\n' "$url" >> "$fail_log"
+                  return 1
+              fi
+          }
+          export -f fetch_one
+
+          echo "开始并发下载（并行度 ${DOWNLOAD_PARALLEL}）..."
+          # xargs 在有失败项时返回 123，这里用 || true 吞掉，改为按日志统计
+          xargs -r -d '\n' -P "${DOWNLOAD_PARALLEL}" -n 1 \
+              bash -c 'fetch_one "$1"' _ < "$manifest" || true
+
+          failures=$(wc -l < "$fail_log" | tr -d ' ')
+          if [[ "$failures" -gt 0 ]]; then
+              echo "::warning::共有 ${failures} 个上游文件下载失败，继续执行"
+              cat "$fail_log"
           else
-            echo "所有 mihomo 规则文件下载完成。"
+              echo "全部上游规则下载成功"
           fi
+          echo "failures=${failures}" >> "$GITHUB_ENV"
 
       - name: 提交并推送更新
-        shell: bash
         working-directory: ${{ github.workspace }}/Tools-repo
         run: |
           set -euo pipefail
 
-          # 默认无更新
-          echo "changed=false" >> $GITHUB_ENV
+          git config --local user.name "GitHub Actions"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 拉取远程 main 分支代码，使用 rebase 保持提交历史干净，并自动暂存/恢复本地未提交修改（避免 pull 失败）
-          git pull --rebase --autostash origin main
-
-          # 添加所有变更（新增、修改、删除）到暂存区
           git add -A
 
-          if ! git diff --cached --quiet; then
-            echo "检测到规则文件更新，开始提交"
-
-            # 标记有更新
-            echo "changed=true" >> $GITHUB_ENV
-
-            # 统计变更类型
-            added=$(git diff --cached --name-status | grep '^A' | wc -l || true)
-            modified=$(git diff --cached --name-status | grep '^M' | wc -l || true)
-            deleted=$(git diff --cached --name-status | grep '^D' | wc -l || true)
-
-            echo "added=$added" >> $GITHUB_ENV
-            echo "modified=$modified" >> $GITHUB_ENV
-            echo "deleted=$deleted" >> $GITHUB_ENV
-
-            # 获取文件列表
-            files=$(git diff --cached --name-only | head -n 20 | sed 's/^/- /')
-            echo "files<<EOF" >> $GITHUB_ENV
-            echo "$files" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
-
-            git config --local user.name "GitHub Actions"
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-      
-            git commit -m "Auto Update Ruleset $(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M:%S %Z')"
-      
-            if git push origin main; then
-              echo "规则同步并推送成功！"
-            else
-              echo "推送失败，请检查仓库权限。"
-              exit 1
-            fi
-          else
-            echo "规则文件无变更，无需提交。"
+          if git diff --cached --quiet; then
+              echo "规则文件无变更，跳过提交"
+              {
+                  echo "changed=false"
+                  echo "added=0"
+                  echo "modified=0"
+                  echo "deleted=0"
+                  echo "files="
+              } >> "$GITHUB_ENV"
+              exit 0
           fi
 
-      - name: 设置时间 & 变更信息
-        shell: bash
+          echo "changed=true" >> "$GITHUB_ENV"
+
+          # 用 awk 统计，避免 grep 无匹配时返回 1 触发 pipefail
+          added="$(git diff --cached --name-status | awk '$1=="A"' | wc -l | tr -d ' ')"
+          modified="$(git diff --cached --name-status | awk '$1=="M"' | wc -l | tr -d ' ')"
+          deleted="$(git diff --cached --name-status | awk '$1=="D"' | wc -l | tr -d ' ')"
+          echo "added=${added}"       >> "$GITHUB_ENV"
+          echo "modified=${modified}" >> "$GITHUB_ENV"
+          echo "deleted=${deleted}"   >> "$GITHUB_ENV"
+
+          # 用 awk 取前 20 行，避免 head 提前关闭管道触发 SIGPIPE
+          {
+              echo "files<<__EOF__"
+              git diff --cached --name-only | awk 'NR<=20{print "- "$0}'
+              echo "__EOF__"
+          } >> "$GITHUB_ENV"
+
+          git commit -m "Auto Update Ruleset $(date +'%Y-%m-%d %H:%M:%S')"
+
+          # 先提交再 rebase：工作区已干净，无需 --autostash，冲突概率大幅降低
+          pushed=0
+          for attempt in 1 2 3; do
+              if git pull --rebase origin "${UPSTREAM_BRANCH}" \
+                    && git push origin "HEAD:${UPSTREAM_BRANCH}"; then
+                  pushed=1
+                  break
+              fi
+              echo "第 ${attempt} 次推送失败，$((attempt * 5))s 后重试"
+              sleep $((attempt * 5))
+          done
+
+          if [[ "$pushed" -ne 1 ]]; then
+              echo "::error::推送失败，请检查仓库权限或分支保护规则"
+              exit 1
+          fi
+          echo "规则同步并推送成功"
+
+      - name: 设置时间与变更信息
         run: |
           set -euo pipefail
 
-          echo "time=$(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M:%S %Z')" >> $GITHUB_ENV
+          echo "time=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
-          if [ "$changed" = "true" ]; then
-            {
-              echo "diff_text<<EOF"
-              echo "📈 <b>变更详细</b>"
-              echo "➕ 新增: $added"
-              echo "✏️ 修改: $modified"
-              echo "❌ 删除: $deleted"
-              echo ""
-              echo "📂 <b>变更文件</b>"
-             echo "<pre>$files</pre>"
-              echo "EOF"
-            } >> $GITHUB_ENV
+          if [[ "${changed:-false}" == "true" ]]; then
+              {
+                  echo "diff_text<<__EOF__"
+                  echo "📈 <b>变更详细</b>"
+                  echo "➕ 新增: ${added:-0}"
+                  echo "✏️ 修改: ${modified:-0}"
+                  echo "❌ 删除: ${deleted:-0}"
+                  echo ""
+                  echo "📂 <b>变更文件</b>"
+                  echo "<pre>${files:-}</pre>"
+                  echo "__EOF__"
+              } >> "$GITHUB_ENV"
           else
-            echo "diff_text=" >> $GITHUB_ENV
+              echo "diff_text=" >> "$GITHUB_ENV"
           fi
 
       - name: 发送 Telegram 通知
-        uses: appleboy/telegram-action@master
         if: always()
+        uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
@@ -179,14 +243,16 @@ jobs:
 
             ✉️ 标题: mihomo 上游规则拉取
             📦 仓库: 小姐姐
-            ⏰ 时间: ${{ env.time }}
+            ⏰ 时间: ${{ env.time || 'N/A' }}
 
             🎯 状态: ${{ job.status == 'success' && '恭喜你! 任务成功' || '很遗憾! 任务失败' }}
-            📊 更新: ${{ env.changed == 'true' && '本次有更新' || '本次无更新' }}
+            📊 更新: ${{ env.changed == 'true' && '本次有更新' || (env.changed == 'false' && '本次无更新' || '未执行到提交阶段') }}
+            ⚠️ 下载失败: ${{ env.failures || '0' }} 个
 
             ${{ env.diff_text }}
 
       - name: 清理旧工作流运行记录
+        if: always()
         uses: Mattraks/delete-workflow-runs@main
         with:
           retain_days: 0
