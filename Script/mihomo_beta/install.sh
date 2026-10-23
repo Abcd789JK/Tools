@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-23 08:15:11
+# date   : 2026-10-23 10:29:00
 # author : ChatGPT
-# ver    : 1.7.0
+# ver    : 1.7.2
+# sync   : 与 mihomo.sh 共用 49 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
 # 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
@@ -24,7 +25,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.7.0"
+sh_ver="1.7.2"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -72,7 +73,29 @@ TMP_FILES=()
 
 # ---------- 日志 ----------
 # 日志：2>/dev/null 必须写在 >> 之前，否则重定向失败的错误会漏到终端
+# 日志只由本套脚本写入、不会自行增长，因此不依赖定时任务：
+# 每次落盘前检查大小，超过 1 MB 就地只保留最近 1000 行。
+log_trim() { # $1=日志文件；返回 0=已截断 1=未超限或文件不存在 2=失败
+    local f="$1" size limit=$((1024 * 1024)) keep=1000 tmp
+    [[ -f "$f" ]] || return 1
+    size=$(wc -c <"$f" 2>/dev/null) || return 2
+    (( size > limit )) || return 1
+
+    tmp="${f}.tmp"
+    if ! tail -n "$keep" "$f" >"$tmp" 2>/dev/null; then
+        rm -f -- "$tmp" 2>/dev/null || true
+        return 2
+    fi
+    if ! mv -f -- "$tmp" "$f" 2>/dev/null; then
+        rm -f -- "$tmp" 2>/dev/null || true
+        return 2
+    fi
+    chmod 640 "$f" 2>/dev/null || true
+    return 0
+}
+
 log() {
+    log_trim "$LOG_FILE" || true
     printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" 2>/dev/null \
         >>"$LOG_FILE" 2>/dev/null || true
 }
@@ -120,6 +143,10 @@ trap 'exit 130' INT TERM
 
 # ---------- 通用 ----------
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# 是否处于交互终端：curl | bash 等管道场景下为假，
+# 各交互点据此取默认值，避免 read 遇 EOF 直接退出
+is_interactive() { [[ -t 0 ]]; }
 
 # 原子替换文件：先写同目录临时文件再 mv，避免截断正在运行的脚本
 atomic_install() { # $1=源 $2=目标 $3=权限
@@ -336,11 +363,14 @@ check_network() {
 }
 
 # 地址解析：直连优先 → 镜像兜底，并缓存可用前缀
-resolve_url() {
-    local url="$1" cand m
+# $2=探测函数，默认 probe_url。probe_url 是全量 GET 且只等 8 秒，
+# 仅适用于小文件；大资产（内核二进制、面板压缩包）必须传 probe_asset，
+# 用 HEAD + Range 探测，否则慢速网络下会把可达地址误判为不可达。
+resolve_url() { # $1=url $2=探测函数
+    local url="$1" probe="${2:-probe_url}" cand m
     if [[ -n "$url_prefix" ]]; then
         cand="${url_prefix}/${url}"
-        if probe_url "$cand"; then
+        if "$probe" "$cand"; then
             printf '%s' "$cand"
             return 0
         fi
@@ -349,20 +379,20 @@ resolve_url() {
     if [[ "$use_cdn" == true ]]; then
         for m in "${MIRRORS[@]}"; do
             cand="${m}/${url}"
-            if probe_url "$cand"; then
+            if "$probe" "$cand"; then
                 url_prefix="$m"
                 printf '%s' "$cand"
                 return 0
             fi
         done
     fi
-    if probe_url "$url"; then
+    if "$probe" "$url"; then
         printf '%s' "$url"
         return 0
     fi
     for m in "${MIRRORS[@]}"; do
         cand="${m}/${url}"
-        if probe_url "$cand"; then
+        if "$probe" "$cand"; then
             url_prefix="$m"
             printf '%s' "$cand"
             return 0
@@ -435,13 +465,14 @@ fetch_to() { # $1=url $2=输出文件
 }
 
 # 统一下载：.part 临时文件 + 成功才 mv，直连失败自动换镜像重试
-download_file() { # $1=url $2=目标路径 $3=描述
-    local url="$1" dest="$2" desc="${3:-文件}" resolved m
+# $4=探测函数，大资产（二进制、面板包）必须传 probe_asset，避免全量 GET 探测拖慢或误判
+download_file() { # $1=url $2=目标路径 $3=描述 $4=探测函数
+    local url="$1" dest="$2" desc="${3:-文件}" probe="${4:-probe_url}" resolved m
 
     # 登记 .part，中断时由 cleanup 一并清理，避免残留半截文件
     TMP_FILES+=("${dest}.part")
 
-    if ! resolved=$(resolve_url "$url"); then
+    if ! resolved=$(resolve_url "$url" "$probe"); then
         err "${desc}地址解析失败：${url}"
         return 1
     fi
@@ -555,16 +586,18 @@ check_ip_forward() {
         warn "无法写入 ${sysctl_dir}，IP 转发配置仅在本次运行生效"
     fi
 
+    # 运行时值与持久化解耦：运行时已开启（如 Docker 宿主）只跳过 sysctl -w，
+    # 持久化文件仍要写，否则卸载 docker 或重启后转发丢失
     for pair in "net.ipv4.ip_forward=1" "net.ipv6.conf.all.forwarding=1"; do
         key="${pair%%=*}"
         val="${pair##*=}"
         if [[ "$(sysctl_get "$key")" == "$val" ]]; then
-            warn "${key} 已开启，跳过"
-            continue
-        fi
-        if ! sysctl -w "${key}=${val}" >/dev/null 2>&1; then
+            warn "${key} 已开启，跳过运行时设置"
+        elif ! sysctl -w "${key}=${val}" >/dev/null 2>&1; then
             warn "设置 ${key} 失败（系统可能不支持 IPv6），已跳过"
             continue
+        else
+            ok "${key} 已开启"
         fi
         # 用 POSIX 字符类，避免 BusyBox grep 不识别 \s
         pat="^[[:space:]]*${key//./\\.}[[:space:]]*=[[:space:]]*${val}[[:space:]]*$"
@@ -572,7 +605,6 @@ check_ip_forward() {
            ! grep -Eq "$pat" "$SYSCTL_FILE" 2>/dev/null; then
             printf '%s=%s\n' "$key" "$val" >>"$SYSCTL_FILE" 2>/dev/null || true
         fi
-        ok "${key} 已开启"
     done
 
     if [[ "$persist_ok" == true ]]; then
@@ -730,18 +762,27 @@ fetch_latest_version() { # 校验 null 与空值
 # 两种通道的命名差异：
 #   正式版 mihomo-linux-amd64-compatible-v1.19.32
 #   测试版 mihomo-linux-amd64-compatible-alpha-94b13ae
-# amd64 使用 compatible 变体（兼容不支持 v2/v3 指令集的老 CPU）；
-# arm64 官方无 compatible 变体，其余架构同样不带该后缀。
+# amd64 优先 compatible 变体（兼容不支持 v2/v3 指令集的老 CPU），
+# 官方未发布该变体时回退到普通 amd64；arm64 无 compatible 变体，
+# 其余架构同样不带该后缀。
 binary_asset_candidates() {
-    local tok compat
+    local tok
     while IFS= read -r tok; do
         [[ -n "$tok" ]] || continue
-        compat=""
-        [[ "$tok" == "amd64" ]] && compat="-compatible"
+        if [[ "$tok" == "amd64" ]]; then
+            if [[ "$channel" == "alpha" ]]; then
+                printf 'mihomo-linux-amd64-compatible-%s\n' "$version"
+                printf 'mihomo-linux-amd64-%s\n' "$version"
+            else
+                printf 'mihomo-linux-amd64-compatible-v%s\n' "$version"
+                printf 'mihomo-linux-amd64-v%s\n' "$version"
+            fi
+            continue
+        fi
         if [[ "$channel" == "alpha" ]]; then
-            printf 'mihomo-linux-%s%s-%s\n' "$tok" "$compat" "$version"
+            printf 'mihomo-linux-%s-%s\n' "$tok" "$version"
         else
-            printf 'mihomo-linux-%s%s-v%s\n' "$tok" "$compat" "$version"
+            printf 'mihomo-linux-%s-v%s\n' "$tok" "$version"
         fi
     done < <(arch_candidates "$arch_raw" || true)
 }
@@ -884,6 +925,7 @@ download_mihomo_binary() {
     if [[ -z "$base" ]]; then
         err "未找到匹配当前架构（${arch_raw}）的安装包"
         err "候选：${cands[*]}"
+        err "amd64 已同时尝试 compatible 与普通变体，仍失败说明该版本未发布此架构资产"
         return 1
     fi
     ok "匹配资产：${base}.gz"
@@ -893,7 +935,7 @@ download_mihomo_binary() {
 
     pick_fastest_source "$url" || return 1
     info "开始下载 mihomo 二进制..."
-    download_file "$url" "$gz" "mihomo 二进制" || return 1
+    download_file "$url" "$gz" "mihomo 二进制" probe_asset || return 1
 
     if ! verify_checksum "$gz" "${base}.gz"; then
         rm -f -- "$gz"
@@ -949,24 +991,40 @@ install_service() {
             ;;
     esac
 
-    download_file "$url" "$dest" "系统服务文件" || return 1
+    # 先下载到同目录临时文件并校验，通过后才原子替换：
+    # 上游文件异常时旧单元保持不动，也不会把坏文件留在系统里
+    local tmp
+    tmp=$(mktemp "$(dirname "$dest")/.svc.XXXXXX")
+    TMP_FILES+=("$tmp")
+    if ! download_file "$url" "$tmp" "系统服务文件"; then
+        rm -f -- "$tmp"
+        return 1
+    fi
 
     case "$init_sys" in
         systemd)
-            if ! grep -q '^\[Unit\]' "$dest"; then
-                err "systemd 单元文件格式异常"
+            if ! grep -q '^\[Unit\]' "$tmp"; then
+                err "systemd 单元文件格式异常，已保留原文件"
+                rm -f -- "$tmp"
                 return 1
             fi
-            chmod 644 "$dest"
+            chmod 644 "$tmp"
             ;;
         openrc)
-            if ! grep -q '^#!' "$dest"; then
-                err "OpenRC 服务文件格式异常"
+            if ! grep -q '^#!' "$tmp"; then
+                err "OpenRC 服务文件格式异常，已保留原文件"
+                rm -f -- "$tmp"
                 return 1
             fi
-            chmod 755 "$dest"
+            chmod 755 "$tmp"
             ;;
     esac
+
+    if ! mv -f -- "$tmp" "$dest"; then
+        err "写入 ${dest} 失败（原文件保持不变）"
+        rm -f -- "$tmp"
+        return 1
+    fi
 
     service_enable || warn "设置开机自启失败"
 }
@@ -978,7 +1036,7 @@ install_webui() {
     local -a dirs=()
 
     info "开始下载管理面板..."
-    download_file "$WEBUI_URL" "$zip" "管理面板" || return 1
+    download_file "$WEBUI_URL" "$zip" "管理面板" probe_asset || return 1
 
     rm -rf -- "$tmpdir"
     if ! unzip -oq "$zip" -d "$tmpdir"; then
@@ -1318,6 +1376,12 @@ apply_config() { # $1=备份路径
 # 面板鉴权：远程配置不含 secret，而 external-controller 默认监听 0.0.0.0:9090，
 # 不加密钥等于把控制 API 无鉴权暴露到公网，因此是否启用由用户决定。
 ask_secret() {
+    # 非交互（管道安装）时无法询问，默认启用密钥，避免面板无鉴权暴露
+    if ! is_interactive; then
+        SECRET_ENABLED=1
+        info "非交互环境，面板密钥默认启用"
+        return 0
+    fi
     if confirm "是否为面板启用密钥鉴权？(Y/n):" "y"; then
         SECRET_ENABLED=1
     else
@@ -1333,29 +1397,38 @@ warn_secret_disabled() {
     warn "  建议用防火墙限制来源，或改用 SSH 隧道访问。"
 }
 
-# 注入面板密钥：已有非空 secret 时保留用户设置，重复执行不会重复插入
-ensure_controller_secret() { # $1=配置文件，输出最终密钥
-    local f="$1" cur new tmp q
-    q=$'\x27'
-
-    cur=$(awk -v q="$q" '
+# 读取配置中的面板密钥，仅在非空时输出
+read_controller_secret() { # $1=配置文件
+    local q=$'\x27'
+    awk -v q="$q" '
         /^secret:[[:space:]]*/ {
             v = $0
             sub(/^secret:[[:space:]]*/, "", v)
             gsub("[[:space:]\"" q "]", "", v)
-            print v
+            if (v != "") print v
             exit
         }
-    ' "$f" 2>/dev/null || true)
+    ' "$1" 2>/dev/null || true
+}
 
+# 注入面板密钥：已有非空 secret 时保留用户设置，重复执行不会重复插入
+# $2=需要沿用旧密钥时传入（如重装保留订阅），避免用户已保存的密钥失效
+ensure_controller_secret() { # $1=配置文件 $2=沿用旧密钥（可选），输出最终密钥
+    local f="$1" reuse="${2:-}" cur new tmp q
+    q=$'\x27'
+
+    cur=$(read_controller_secret "$f")
     if [[ -n "$cur" ]]; then
         controller_secret="$cur"
         printf '%s' "$cur"
         return 0
     fi
 
-    new=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 24 || true)
-    [[ -n "$new" ]] || new="mihomo$(date +%s)$$"
+    new="$reuse"
+    if [[ -z "$new" ]]; then
+        new=$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 24 || true)
+        [[ -n "$new" ]] || new="mihomo$(date +%s)$$"
+    fi
 
     # 必须整体读入后再决定插入位置：secret 可能出现在 external-controller 之前，
     # 单趟流式处理会先命中 controller 分支而漏掉占位空值，导致出现重复 secret 键。
@@ -1404,34 +1477,65 @@ ensure_controller_secret() { # $1=配置文件，输出最终密钥
     printf '%s' "$new"
 }
 
-# 从配置读取面板地址，拼成可访问的 URL
+# 从配置读取面板监听地址，拼成可访问的 URL
+# 监听 0.0.0.0 / :: 表示所有网卡，对外应显示本机 IPv4，而不是 0.0.0.0
 controller_url() {
-    local addr
-    addr=$(awk -F': *' '
+    local addr host port
+
+    [[ -n "$ipv4" ]] || detect_network_info
+
+    addr=$(awk '
         /^[[:space:]]*external-controller:/ {
-            gsub(/["'"'"']/, "", $2)
-            print $2
+            sub(/^[[:space:]]*external-controller:[[:space:]]*/, "")
+            gsub(/["'"'"']/, "")
+            sub(/[[:space:]]+$/, "")
+            print
             exit
         }
     ' "$CONFIG_FILE" 2>/dev/null || true)
-    if [[ -z "$addr" ]]; then
-        printf 'http://%s:9090/ui' "${ipv4:-127.0.0.1}"
-        return 0
+
+    port="9090"
+    host="$addr"
+    if [[ "$addr" == \[*\]:* ]]; then
+        host="${addr#\[}"
+        host="${host%%\]*}"
+        port="${addr##*:}"
+    elif [[ "$addr" == *:* ]]; then
+        host="${addr%%:*}"
+        port="${addr##*:}"
     fi
-    case "$addr" in
-        0.0.0.0:*) printf 'http://%s:%s/ui' "${ipv4:-127.0.0.1}" "${addr##*:}" ;;
-        *:*)       printf 'http://%s/ui' "$addr" ;;
-        *)         printf 'http://%s:9090/ui' "$addr" ;;
+
+    case "$host" in
+        ""|0.0.0.0|"::") host="${ipv4:-127.0.0.1}" ;;
     esac
+
+    printf 'http://%s:%s/ui' "$host" "$port"
 }
 
-# 交互收集机场订阅并写入配置文件
+# 抽取现有配置的 proxy-providers 段体（不含段头行），供重装时保留订阅。
+# 只取段体：inject_providers 的标记分支会自行补 proxy-providers: 段头，
+# 这里若带上段头会与它形成重复键，导致 YAML 解析失败。
+extract_providers() { # $1=配置文件；无该段时输出为空
+    awk '
+        /^proxy-providers:[[:space:]]*$/ { f = 1; next }
+        f && /^[^[:space:]#]/            { exit }
+        f                               { print }
+    ' "$1"
+}
+
+# 交互收集机场订阅并写入配置文件；重装时保留现有订阅，不再要求重新输入
 config_mihomo() {
-    local bak idx=1 ans block="" block_file base merged
+    local bak idx=1 ans block="" block_file base merged keep=0 old_secret=""
+
     ask_secret
 
     bak=$(backup_config) || die "配置备份失败，已中止"
     [[ -n "$bak" ]] && ok "原配置已备份：${bak}"
+
+    # 覆盖安装时保留现有机场订阅，避免重装一次就要重输全部链接
+    if [[ -f "$CONFIG_FILE" ]]; then
+        keep=$(count_providers "$CONFIG_FILE")
+    fi
 
     info "开始下载默认配置文件..."
     base=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
@@ -1446,17 +1550,28 @@ config_mihomo() {
         return 1
     fi
 
-    while true; do
-        block+=$(read_subscription "$idx")
-        block+=$'\n'
-        idx=$((idx + 1))
-        read_input ans "${yellow}是否继续添加订阅？回车继续，输入 n/N 结束: ${reset}"
-        [[ "$ans" =~ ^[nN]$ ]] && break
-    done
-
     block_file=$(mktemp "${ROOT_DIR}/.block.XXXXXX")
     TMP_FILES+=("$block_file")
-    printf '%s' "$block" >"$block_file"
+
+    if (( keep > 0 )); then
+        if ! extract_providers "$CONFIG_FILE" >"$block_file" || [[ ! -s "$block_file" ]]; then
+            err "抽取现有订阅失败（现有配置未改动）"
+            return 1
+        fi
+        ok "已保留 ${keep} 个机场订阅"
+        # 旧密钥一并沿用：extract_providers 只抽订阅段，secret 不在其中，
+        # 不单独带过去的话每次重装都会重新生成，用户已保存的密钥随之失效
+        old_secret=$(read_controller_secret "$CONFIG_FILE")
+    else
+        while true; do
+            block+=$(read_subscription "$idx")
+            block+=$'\n'
+            idx=$((idx + 1))
+            read_input ans "${yellow}是否继续添加订阅？回车继续，输入 n/N 结束: ${reset}"
+            [[ "$ans" =~ ^[nN]$ ]] && break
+        done
+        printf '%s' "$block" >"$block_file"
+    fi
 
     merged=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
     TMP_FILES+=("$merged")
@@ -1468,7 +1583,7 @@ config_mihomo() {
     # 面板密钥必须在校验前注入，避免把非法配置写进正式文件；
     # 未启用时不得调用注入函数，否则它会把空 secret 占位填上值
     if (( SECRET_ENABLED )); then
-        ensure_controller_secret "$merged" >/dev/null
+        ensure_controller_secret "$merged" "$old_secret" >/dev/null
     else
         controller_secret=""
     fi
@@ -1503,11 +1618,16 @@ config_mihomo() {
 # 跳过订阅时仍要落地一份可用配置：
 # 否则 $CONFIG_FILE 从未创建，服务无法启动，"systemctl restart mihomo" 必然失败。
 install_default_config_only() {
-    local base bak
+    local base bak old_secret=""
     ask_secret
 
     bak=$(backup_config) || { err "配置备份失败，已中止"; return 1; }
     [[ -n "$bak" ]] && ok "原配置已备份：${bak}"
+
+    # 沿用旧密钥：此路径不保留订阅，但密钥没有必要每次重装都变
+    if [[ -f "$CONFIG_FILE" ]]; then
+        old_secret=$(read_controller_secret "$CONFIG_FILE")
+    fi
 
     info "正在下载默认配置文件..."
     base=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
@@ -1523,7 +1643,7 @@ install_default_config_only() {
 
     # 未启用密钥时不得调用注入函数，否则它会把空 secret 占位填上值
     if (( SECRET_ENABLED )); then
-        ensure_controller_secret "$base" >/dev/null
+        ensure_controller_secret "$base" "$old_secret" >/dev/null
     else
         controller_secret=""
     fi
@@ -1572,11 +1692,15 @@ prepare_dirs() {
     if [[ -d "$ROOT_DIR" ]]; then
         warn "检测到已存在的安装目录：${ROOT_DIR}"
         local bak ans=""
-        read_input ans "${yellow}继续将覆盖安装（程序文件被替换，配置会先备份），是否继续？(y/N): ${reset}"
-        case "$ans" in
-            [Yy]*) ;;
-            *) info "已取消安装"; exit 0 ;;
-        esac
+        if ! is_interactive; then
+            info "非交互环境，继续覆盖安装（现有机场订阅将保留）"
+        else
+            read_input ans "${yellow}继续将覆盖安装（订阅将保留，配置会先备份），是否继续？(y/N): ${reset}"
+            case "$ans" in
+                [Yy]*) ;;
+                *) info "已取消安装"; exit 0 ;;
+            esac
+        fi
 
         bak=$(backup_config) || die "配置备份失败，已中止安装"
         [[ -n "$bak" ]] && ok "原配置已备份：${bak}"
@@ -1625,24 +1749,33 @@ install_mihomo() {
     install_manager || die "管理脚本安装失败"
 
     step "写入配置"
-    printf '%s\n' "  ${green}y${reset}  下载默认配置并添加机场订阅"
-    printf '%s\n' "  ${green}n${reset}  仅安装默认配置，稍后再添加订阅"
+    if (( $(count_providers "$CONFIG_FILE" 2>/dev/null || printf '0') > 0 )); then
+        info "检测到已有机场订阅，将保留并刷新默认配置"
+        config_mihomo || die "配置写入失败，请检查日志 ${LOG_FILE}"
+    else
+        printf '%s\n' "  ${green}y${reset}  下载默认配置并添加机场订阅"
+        printf '%s\n' "  ${green}n${reset}  仅安装默认配置，稍后再添加订阅"
 
-    local ans="y"
-    read_input ans "  请选择 [y/n，默认 y]: "
-    ans=${ans:-y}
-    case "$ans" in
-        [Yy]*)
-            config_mihomo || die "配置写入失败，请检查日志 ${LOG_FILE}"
-            ;;
-        *)
-            warn "已跳过订阅配置，仅安装默认配置"
-            if ! install_default_config_only; then
-                warn "默认配置安装失败，服务可能无法启动"
-                info "请手动准备配置放到 ${CONFIG_FILE} 后执行：systemctl restart mihomo"
-            fi
-            ;;
-    esac
+        local ans="y"
+        if is_interactive; then
+            read_input ans "  请选择 [y/n，默认 y]: "
+        else
+            info "非交互环境，默认下载默认配置并添加订阅"
+        fi
+        ans=${ans:-y}
+        case "$ans" in
+            [Yy]*)
+                config_mihomo || die "配置写入失败，请检查日志 ${LOG_FILE}"
+                ;;
+            *)
+                warn "已跳过订阅配置，仅安装默认配置"
+                if ! install_default_config_only; then
+                    warn "默认配置安装失败，服务可能无法启动"
+                    info "请手动准备配置放到 ${CONFIG_FILE} 后执行：systemctl restart mihomo"
+                fi
+                ;;
+        esac
+    fi
 
     printf '\n'
     hr
@@ -1715,7 +1848,7 @@ parse_args() {
 choose_channel() {
     [[ -n "$channel" ]] && return 0
 
-    if [[ ! -t 0 ]]; then
+    if ! is_interactive; then
         channel="stable"
         return 0
     fi

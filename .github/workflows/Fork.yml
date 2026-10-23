@@ -1,6 +1,6 @@
 # ---------- 拉取上游 mihomo 规则 ----------
 # desc   : 定时拉取上游 mihomo 规则文件，提交并推送
-# date   : 2026-10-22 20:54:16
+# date   : 2026-10-23 10:29:00
 
 name: 拉取上游 mihomo 规则
 
@@ -35,8 +35,10 @@ env:
 # ---------- 任务 ----------
 jobs:
   git-mihomo:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    # 36 个文件、并发 8，单文件 curl max-time 90s + retry 3 最坏约 5 分钟，
+    # 5 轮约 25 分钟，留足余量避免 job 被强杀后通知步骤拿不到 env
+    timeout-minutes: 30
 
     steps:
       - name: 检出上游仓库
