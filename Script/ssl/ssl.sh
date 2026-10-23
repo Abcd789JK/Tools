@@ -1,63 +1,94 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# 脚本名称 : ssl.sh
-# 功能描述 : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请脚本 (DNS-01 验证)
-#           适用于未开放 80/443 端口的家庭服务器, 支持通配符证书
-# 作者     : ChatGPT
-# 版本     : 1.1.0
-# 更新日期 : 2026-10-20
-# ==============================================================================
+# ---------- ssl.sh ----------
+# desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
+# date   : 2026-10-23 21:33:58
+# author : ChatGPT
+# ver    : 1.3.1
+#
+# 适用于未开放 80/443 端口的家庭服务器，支持通配符证书。
+# 支持 Debian/Ubuntu、Fedora/RHEL/CentOS、Arch、Alpine、openSUSE 等主流发行版，需 root 运行。
 
-# ------------------------------ Bash 运行守卫 ------------------------------
-# dash 等 shell 不支持 pipefail / [[ ]] / =~ 等语法, 直接拒绝并提示
+# 必须用 bash 运行：dash 等 shell 不支持 pipefail / [[ ]] / =~ 等语法
 if [ -z "${BASH_VERSION:-}" ]; then
-    printf '%b' '\033[31m[错误] 请使用 bash 运行本脚本: bash ssl.sh\033[0m\n' >&2
+    printf '%s\n' $'\033[31m[错误] 请使用 bash 运行本脚本: bash ssl.sh\033[0m' >&2
     exit 1
 fi
 
-# ------------------------------------------------------------------------------
-# 安全选项:
-#   -e            命令执行失败即退出
-#   -u            引用未定义变量即退出
-#   -o pipefail   管道中任意命令失败即视为整条管道失败
-# ------------------------------------------------------------------------------
+# ---------- 安全选项 ----------
+# -e 命令失败即退出；-u 引用未定义变量即退出；pipefail 管道任一命令失败即整体失败
 set -euo pipefail
 
-# ------------------------------ 配置区 ------------------------------
-SCRIPT_VERSION="1.1.0"                 # 脚本版本
-ACME_BIN="/root/.acme.sh/acme.sh"      # acme.sh 可执行文件路径
-SSL_DIR="/root/ssl"                    # 证书输出目录
-DEFAULT_CA="letsencrypt"               # 默认证书颁发机构
+# ---------- 常量 ----------
+SCRIPT_VERSION="1.3.1"            # 脚本版本
+readonly ACME_BIN="/root/.acme.sh/acme.sh" # acme.sh 可执行文件路径
+readonly SSL_DIR="/root/ssl"               # 证书输出目录
+readonly DEFAULT_CA="letsencrypt"          # 默认证书颁发机构
+readonly HR="----------------------------------------"
+readonly HR_EQ="========================================"
 
-# ------------------------------ 颜色定义 ------------------------------
-readonly RED="\033[31m"    # 红色   - 错误
-readonly GREEN="\033[32m"  # 绿色   - 信息/成功
-readonly YELLOW="\033[33m" # 黄色   - 警告
-readonly CYAN="\033[36m"   # 青色   - 标题/结果
-readonly RESET="\033[0m"   # 重置颜色
+# ---------- 颜色 ----------
+# 颜色规范（与 mihomo 脚本保持一致）：边框 blue / 标题 cyan / 成功 green /
+# 警告 yellow / 错误 red / 普通文字默认色。非终端输出（管道、重定向）时自动禁用，
+# 避免日志文件里混入转义符。
+if [[ -t 1 ]]; then
+    readonly red=$'\033[31m'
+    readonly green=$'\033[32m'
+    readonly yellow=$'\033[33m'
+    readonly blue=$'\033[34m'
+    readonly cyan=$'\033[36m'
+    readonly reset=$'\033[0m'
+else
+    readonly red='' green='' yellow='' blue='' cyan='' reset=''
+fi
 
-# ------------------------------ 日志函数 ------------------------------
-# 统一日志输出: info 信息 / warn 警告 / error 错误(输出到 stderr)
-info()  { printf '%b' "${GREEN}[信息] $*${RESET}\n"; }
-warn()  { printf '%b' "${YELLOW}[警告] $*${RESET}\n"; }
-error() { printf '%b' "${RED}[错误] $*${RESET}\n" >&2; }
+# ---------- 全局状态 ----------
+domain=""            # 要申请证书的域名，由 get_cloudflare_info 填写
+cf_token=""          # Cloudflare API Token
+cf_account_id=""     # Cloudflare Account ID
+distro="unknown"     # 发行版 ID，由 detect_distro 填写
+pkg_mgr=""           # 包管理器：apt / dnf / pacman / apk / zypper / none
+TMP_FILES=()         # 临时文件清单，退出时由 cleanup 统一清理
 
-# 脚本异常退出时报告出错行号, 便于排查
-err_report() {
-    error "脚本在第 ${1} 行执行失败, 请检查上方错误信息。"
+# ---------- 清理 ----------
+# 脚本退出时清理临时文件（正常退出与异常退出都会触发）
+cleanup() {
+    (( ${#TMP_FILES[@]} )) || return 0
+    rm -f -- "${TMP_FILES[@]}"
+}
+trap cleanup EXIT
+
+# ---------- 日志 ----------
+# 统一日志输出：info 信息 / warn 警告 / error 错误（warn 与 error 走 stderr，与 mihomo 一致）
+info()  { printf '%s\n' "${green}[信息] $*${reset}"; }
+warn()  { printf '%s\n' "${yellow}[警告] $*${reset}" >&2; }
+error() { printf '%s\n' "${red}[错误] $*${reset}" >&2; }
+die()   { error "$*"; exit 1; }
+
+# 打印 40 字符分隔线
+hr()   { printf '%s\n' "${blue}${HR}${reset}"; }
+hreq() { printf '%s\n' "${blue}${HR_EQ}${reset}"; }
+
+# 脚本异常退出时报告出错行号，便于排查
+err_report() { # $1=出错行号
+    error "脚本在第 $1 行执行失败，请检查上方错误信息。"
 }
 trap 'err_report ${LINENO}' ERR
 
-# ------------------------------ 欢迎信息 ------------------------------
+# ---------- 欢迎信息 ----------
+# 打印脚本横幅：名称、版本与适用场景
 print_banner() {
-    printf '%b' "${CYAN}############################################${RESET}\n"
-    printf '%b' "${GREEN}欢迎使用 Cloudflare DNS 证书申请脚本 v${SCRIPT_VERSION}${RESET}\n"
-    printf '%b' "${GREEN}仅支持 DNS-01 验证方式, 适用于未开放 80/443 端口的家庭服务器${RESET}\n"
-    printf '%b' "${CYAN}############################################${RESET}\n"
+    hreq
+    printf '%s\n' "${cyan}  Cloudflare DNS 证书申请脚本  v${SCRIPT_VERSION}${reset}"
+    printf '%s\n' "  仅支持 DNS-01 验证，适用于未开放 80/443 端口的家庭服务器"
+    hreq
 }
 
-# ------------------------------ 环境检查 ------------------------------
-# 检查 root 权限
+# ---------- 通用 ----------
+# 判断命令是否存在
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+# ---------- 环境检查 ----------
+# 校验 root 权限，非 root 直接退出
 check_root() {
     if [[ "$(id -u)" -ne 0 ]]; then
         error "请以 root 用户运行此脚本!"
@@ -65,34 +96,140 @@ check_root() {
     fi
 }
 
-# 检查系统类型 (仅支持 Debian/Ubuntu 等 apt 系发行版)
-check_os() {
-    if ! command -v apt-get >/dev/null 2>&1; then
-        error "未检测到 apt-get, 本脚本仅支持 Debian/Ubuntu 等 apt 系发行版。"
+# ---------- 系统检测 ----------
+# 识别发行版与包管理器，覆盖主流发行版：
+#   Debian / Ubuntu 及其衍生版（Mint、Kali、Armbian 等）→ apt
+#   Fedora / RHEL / CentOS / Rocky / AlmaLinux            → dnf（无 dnf 时退回 yum）
+#   Arch / Manjaro / EndeavourOS                           → pacman
+#   Alpine                                                 → apk
+#   openSUSE / SLES                                        → zypper
+# 未识别时不中断：跳过自动装依赖，改为校验工具是否齐全
+detect_distro() {
+    if [[ ! -r /etc/os-release ]]; then
+        die "无法识别系统类型：缺少 /etc/os-release"
+    fi
+    # shellcheck disable=SC1091
+    . /etc/os-release
+
+    distro="${ID:-unknown}"
+    pkg_mgr=""
+    local cand
+    # ID_LIKE 可能含多个值（如 "rhel centos fedora"），逐个尝试
+    for cand in ${ID:-} ${ID_LIKE:-}; do
+        case "$cand" in
+            debian|ubuntu)      pkg_mgr="apt" ;;
+            fedora)             pkg_mgr="dnf" ;;
+            arch)               pkg_mgr="pacman" ;;
+            alpine)             pkg_mgr="apk" ;;
+            opensuse*|suse|sles) pkg_mgr="zypper" ;;
+            *) continue ;;
+        esac
+        break
+    done
+
+    if [[ -z "$pkg_mgr" ]]; then
+        pkg_mgr="none"
+        warn "未识别的发行版：${distro}，将跳过依赖自动安装"
+        warn "请自行确认已安装：socat、curl、git"
+    fi
+    info "系统：${distro}    包管理器：${pkg_mgr}"
+}
+
+# 安装软件包：按包管理器分流
+pkg_install() {
+    case "$pkg_mgr" in
+        apt)    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@" ;;
+        dnf)
+            if command_exists dnf; then
+                dnf install -y -q "$@"
+            else
+                yum install -y -q "$@"
+            fi
+            ;;
+        pacman) pacman -S --noconfirm --needed "$@" ;;
+        apk)    apk add --no-cache "$@" ;;
+        zypper) zypper --non-interactive install "$@" ;;
+        *) return 1 ;;
+    esac
+}
+
+# 刷新软件包索引
+pkg_refresh() {
+    case "$pkg_mgr" in
+        apt)    DEBIAN_FRONTEND=noninteractive apt-get update -qq ;;
+        dnf)    if command_exists dnf; then dnf makecache -q; else yum makecache -q; fi ;;
+        pacman) pacman -Sy --noconfirm ;;
+        apk)    apk update ;;
+        zypper) zypper --non-interactive refresh ;;
+        *) return 1 ;;
+    esac
+}
+
+# 安装运行依赖（socat / curl / git）
+# git 是 acme.sh 默认安装方式（克隆仓库）的前提，见 install_acme 的说明
+install_dependencies() {
+    local -a miss=()
+    local t
+
+    # 先看缺什么：全部就绪就整个跳过包管理器。
+    # 否则每次重跑都要刷新索引，软件源临时不可用时会把脚本打断，
+    # 而实际上一个包都不用装。
+    for t in socat curl git; do
+        command_exists "$t" || miss+=("$t")
+    done
+    (( ${#miss[@]} )) || { info "运行依赖已就绪"; return 0; }
+
+    if [[ "$pkg_mgr" == "none" ]]; then
+        error "缺少依赖：${miss[*]}，当前发行版无法自动安装，请手动安装后重试。"
         exit 1
     fi
+
+    info "正在安装缺失的依赖 (${miss[*]})..."
+    pkg_refresh || warn "刷新软件源失败，继续尝试安装"
+    pkg_install "${miss[@]}" || warn "部分依赖安装失败，继续校验"
+
+    # 装完再确认一次，安装静默失败时明确报错，而不是带着缺失的工具往下走
+    miss=()
+    for t in socat curl git; do
+        command_exists "$t" || miss+=("$t")
+    done
+    if (( ${#miss[@]} )); then
+        error "依赖未安装完整：${miss[*]}，请手动安装后重试。"
+        exit 1
+    fi
+    info "运行依赖已就绪"
 }
 
-# 安装依赖 (socat/curl)
-install_dependencies() {
-    info "正在更新软件包索引并安装依赖 (socat, curl)..."
-    apt-get update -y
-    apt-get install -y socat curl
-}
-
-# 安装或升级 acme.sh
+# 安装或升级 acme.sh，并把默认颁发机构设为 Let's Encrypt
 install_acme() {
+    local tmp
     if [[ ! -x "$ACME_BIN" ]]; then
-        info "未检测到 acme.sh, 开始安装..."
-        curl -sS https://get.acme.sh | sh -s -- --install-online
+        info "未检测到 acme.sh，开始安装..."
+        # 必须先落盘再执行，不能写成 `curl ... | sh -s ...`：管道形式下 `--` 在
+        # bash 与 dash 中行为不一致——bash 靠它终止选项解析，dash 却把它当位置
+        # 参数传进去，安装器二次转发时与 --install-online 拼成 ----install-online，
+        # 报 "Unknown parameter" 后安装失败。
+        # 也不传 --install-online：默认的 git 克隆安装是官方主推方式，不需要任何
+        # 参数，从根上避开传参问题（git 已在 install_dependencies 中装好）。
+        tmp=$(mktemp /tmp/acme-install.XXXXXX)
+        TMP_FILES+=("$tmp")
+        if ! curl -fsSL -o "$tmp" https://get.acme.sh || [[ ! -s "$tmp" ]]; then
+            error "acme.sh 安装脚本下载失败，请检查网络。"
+            exit 1
+        fi
+        sh "$tmp"
     else
-        info "检测到 acme.sh, 正在升级至最新版本..."
-        "$ACME_BIN" --upgrade
+        info "检测到 acme.sh，尝试升级至最新版本..."
+        # 升级失败不阻断流程：本机已有可用版本，签证书并不依赖最新版。
+        # 若让 set -e 在这里中断，网络抖动时明明有可用 acme.sh 却签不了证书。
+        if ! "$ACME_BIN" --upgrade; then
+            warn "acme.sh 升级失败（可能网络不通），继续使用当前版本"
+        fi
     fi
 
-    # 安装失败时明确报错, 避免带着错误的路径继续往下执行
+    # 安装失败时明确报错，避免带着错误的路径继续往下执行
     if [[ ! -x "$ACME_BIN" ]]; then
-        error "acme.sh 安装失败, 请检查网络或参照 https://github.com/acmesh-official/acme.sh 手动安装。"
+        error "acme.sh 安装失败，请检查网络或参照 https://github.com/acmesh-official/acme.sh 手动安装。"
         exit 1
     fi
 
@@ -100,24 +237,29 @@ install_acme() {
     info "默认颁发机构已设置为 Let's Encrypt"
 }
 
-# ------------------------------ 用户输入 ------------------------------
+# ---------- 用户输入 ----------
+# 交互收集 Cloudflare API Token、Account ID 与域名，并导出 acme.sh 所需环境变量
 get_cloudflare_info() {
-    printf '%b' "${GREEN}请输入 Cloudflare API Token (输入内容不显示): ${RESET}"
+    local re
+    # 裸域名格式：example.com / a.example.com，不接受通配符与协议前缀
+    re='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$'
+
+    printf '%s' "${green}请输入 Cloudflare API Token (输入内容不显示): ${reset}"
     read -rs cf_token
     printf '\n'
-    printf '%b' "${GREEN}请输入 Cloudflare Account ID: ${RESET}"
+    printf '%s' "${green}请输入 Cloudflare Account ID: ${reset}"
     read -r cf_account_id
-    printf '%b' "${GREEN}请输入要申请证书的域名 (如 example.com): ${RESET}"
+    printf '%s' "${green}请输入要申请证书的域名 (如 example.com): ${reset}"
     read -r domain
 
-    # 输入校验: 三项均不能为空
+    # 输入校验：三项均不能为空
     if [[ -z "$cf_token" || -z "$cf_account_id" || -z "$domain" ]]; then
         error "API Token、Account ID 与域名均不能为空。"
         exit 1
     fi
-    # 输入校验: 域名格式 (仅接受裸域名, 如 example.com 或 a.example.com)
-    if [[ ! "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]]; then
-        error "域名格式不正确: ${domain} (请输入裸域名, 示例: example.com)"
+    # 输入校验：域名格式
+    if [[ ! "$domain" =~ $re ]]; then
+        error "域名格式不正确: ${domain} (请输入裸域名，示例: example.com)"
         exit 1
     fi
 
@@ -126,11 +268,12 @@ get_cloudflare_info() {
     export CF_Account_ID="$cf_account_id"
 }
 
-# ------------------------------ 证书申请 ------------------------------
+# ---------- 证书申请 ----------
+# 申请证书并安装到 SSL_DIR，同时注册续期时的自动复制
 issue_cert() {
     local -a d_args=()
 
-    # 二级域名: 申请主域名 + 通配符域名; 三级及以上域名: 仅申请该域名
+    # 二级域名：申请主域名 + 通配符域名；三级及以上域名：仅申请该域名
     if [[ "$domain" == *.*.* ]]; then
         d_args+=("-d" "$domain")
     else
@@ -139,32 +282,33 @@ issue_cert() {
 
     mkdir -p "$SSL_DIR"
 
-    info "正在申请证书 (DNS-01 验证, 请稍候)..."
+    info "正在申请证书 (DNS-01 验证，请稍候)..."
     "$ACME_BIN" --issue --dns dns_cf "${d_args[@]}"
 
-    info "证书签发成功, 正在安装到 ${SSL_DIR} ..."
-    # 使用 --install-cert 注册续期时的自动复制, 续期后文件会自动更新
+    info "证书签发成功，正在安装到 ${SSL_DIR} ..."
+    # 使用 --install-cert 注册续期时的自动复制，续期后文件会自动更新
     "$ACME_BIN" --install-cert -d "$domain" \
         --key-file "$SSL_DIR/$domain.key" \
         --fullchain-file "$SSL_DIR/$domain.crt"
 
-    # 收紧权限: 目录 700, 私钥 600
+    # 收紧权限：目录 700，私钥 600
     chmod 700 "$SSL_DIR"
     chmod 600 "$SSL_DIR/$domain.key"
 
-    printf '%b' "${CYAN}--------------------------------------------${RESET}\n"
+    hr
     info "证书安装完成!"
-    printf '%b' "${CYAN}私钥: $SSL_DIR/$domain.key${RESET}\n"
-    printf '%b' "${CYAN}证书: $SSL_DIR/$domain.crt${RESET}\n"
-    warn "acme.sh 已自动注册续期任务, 证书到期前将自动续期并同步以上文件, 无需额外操作。"
-    printf '%b' "${CYAN}--------------------------------------------${RESET}\n"
+    printf '%s\n' "${cyan}私钥: $SSL_DIR/$domain.key${reset}"
+    printf '%s\n' "${cyan}证书: $SSL_DIR/$domain.crt${reset}"
+    warn "acme.sh 已自动注册续期任务，证书到期前将自动续期并同步以上文件，无需额外操作。"
+    hr
 }
 
-# ------------------------------ 主流程 ------------------------------
+# ---------- 主流程 ----------
+# 脚本入口：横幅 → 环境检查 → 装依赖 → 装 acme.sh → 收集输入 → 申请证书
 main() {
     print_banner
     check_root
-    check_os
+    detect_distro
     install_dependencies
     install_acme
     get_cloudflare_info

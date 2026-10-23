@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-23 17:40:23
+# date   : 2026-10-23 21:33:58
 # author : ChatGPT
-# ver    : 1.7.4
-# sync   : 与 mihomo.sh 共用 57 个同名函数，改动需同步两份
+# ver    : 1.7.5
+# sync   : 与 mihomo.sh 共用 61 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
 # 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
@@ -25,7 +25,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.7.4"
+SCRIPT_VERSION="1.7.5"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -139,7 +139,7 @@ step() {
 print_header() {
     printf '\n'
     printf '%s\n' "${blue}${HR_EQ}${reset}"
-    printf '%s\n' "${cyan}  mihomo 一键安装脚本  v${sh_ver}${reset}"
+    printf '%s\n' "${cyan}  mihomo 一键安装脚本  v${SCRIPT_VERSION}${reset}"
     kv "安装目录" "$ROOT_DIR"
     kv "日志文件" "$LOG_FILE"
     printf '%s\n' "${blue}${HR_EQ}${reset}"
@@ -157,7 +157,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 # ---------- 通用 ----------
-have() { command -v "$1" >/dev/null 2>&1; }
+command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 # 是否处于交互终端：curl | bash 等管道场景下为假，
 # 各交互点据此取默认值，避免 read 遇 EOF 直接退出
@@ -260,9 +260,10 @@ detect_distro() {
 
 # init 系统识别：systemd 优先，其次 OpenRC；都识别不到时降级处理
 detect_init() {
-    if [[ -d /run/systemd/system ]] || { have systemctl && [[ -d /etc/systemd/system ]]; }; then
+    if [[ -d /run/systemd/system ]] \
+        || { command_exists systemctl && [[ -d /etc/systemd/system ]]; }; then
         init_sys="systemd"
-    elif have rc-service && have rc-update; then
+    elif command_exists rc-service && command_exists rc-update; then
         init_sys="openrc"
     else
         init_sys="unknown"
@@ -270,23 +271,17 @@ detect_init() {
     fi
 }
 
-# 仅刷新软件源索引，不做全系统升级
-pkg_refresh() {
-    case "$pkg_mgr" in
-        apt)    DEBIAN_FRONTEND=noninteractive apt-get update -qq ;;
-        dnf)    if have dnf; then dnf makecache -q; else yum makecache -q; fi ;;
-        pacman) pacman -Sy --noconfirm ;;
-        apk)    apk update ;;
-        zypper) zypper --non-interactive refresh ;;
-        *) return 1 ;;
-    esac
-}
-
 # 按包管理器完整定义安装参数，避免尾部拼接 -qq
 pkg_install() {
     case "$pkg_mgr" in
         apt)    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@" ;;
-        dnf)    if have dnf; then dnf install -y -q "$@"; else yum install -y -q "$@"; fi ;;
+        dnf)
+            if command_exists dnf; then
+                dnf install -y -q "$@"
+            else
+                yum install -y -q "$@"
+            fi
+            ;;
         pacman) pacman -S --noconfirm --needed "$@" ;;
         apk)    apk add --no-cache "$@" ;;
         zypper) zypper --non-interactive install "$@" ;;
@@ -315,7 +310,7 @@ probe_asset() {
 # 下载器守卫：curl 与 wget 至少要有其一，否则后续下载全部无法进行。
 # 用户能把脚本取回来就说明有其中一个，缺哪个按包管理器提示。
 require_downloader() {
-    if have curl || have wget; then
+    if command_exists curl || command_exists wget; then
         return 0
     fi
     local hint=""
@@ -353,7 +348,7 @@ install_dependencies() {
 
     # 下载器已由 require_downloader 保证有其一，这里只校验其余实际用到的命令
     for t in unzip gzip jq; do
-        have "$t" || miss+=("$t")
+        command_exists "$t" || miss+=("$t")
     done
     if (( ${#miss[@]} )); then
         warn "缺少必要工具：${miss[*]}，请手动安装后重试"
@@ -371,7 +366,7 @@ install_dependencies() {
 
 # 取回内容写到标准输出：$1=URL $2=连接超时 $3=总超时
 http_get() {
-    if have curl; then
+    if command_exists curl; then
         curl -fsSL --connect-timeout "$2" --max-time "$3" "$1" 2>/dev/null
     else
         wget -qO- --timeout="$3" -t 1 "$1" 2>/dev/null
@@ -380,7 +375,7 @@ http_get() {
 
 # 下载到文件：$1=URL $2=输出文件 $3=总超时
 http_download() {
-    if have curl; then
+    if command_exists curl; then
         curl -fL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time "$3" \
             -sS -o "$2" "$1"
     else
@@ -391,7 +386,7 @@ http_download() {
 # 探测可达性：完整请求但丢弃响应体。
 # 不用 HEAD，是因为部分服务器不支持 HEAD 会直接返回错误，反而误判为不可达。
 http_probe() { # $1=URL $2=总超时
-    if have curl; then
+    if command_exists curl; then
         curl -fsS -o /dev/null --connect-timeout 3 --max-time "$2" "$1" 2>/dev/null
     else
         wget -q -O /dev/null --timeout="$2" -t 1 "$1" 2>/dev/null
@@ -400,7 +395,7 @@ http_probe() { # $1=URL $2=总超时
 
 # HEAD 探测：只取状态码、不取响应体，用于大资产的存在性判断
 http_head() { # $1=URL $2=总超时
-    if have curl; then
+    if command_exists curl; then
         local code
         code=$(curl -sSL -I -o /dev/null -w '%{http_code}' \
                    --connect-timeout 5 --max-time "$2" "$1" 2>/dev/null || true)
@@ -415,7 +410,7 @@ http_range_size() { # $1=URL $2=字节数 $3=总超时
     local tmp n last
     last=$(( $2 - 1 ))
     tmp=$(mktemp 2>/dev/null) || { printf '0'; return 0; }
-    if have curl; then
+    if command_exists curl; then
         curl -fsSL --connect-timeout 4 --max-time "$3" --range "0-${last}" \
             -o "$tmp" "$1" 2>/dev/null || true
     else
@@ -430,7 +425,7 @@ http_range_size() { # $1=URL $2=字节数 $3=总超时
 # 读取重定向目标地址：正式版版本号的兜底获取方式
 # wget 的响应头行首有两个空格，且重定时会附 " [following]" 后缀，都要剥掉
 http_redirect() { # $1=URL $2=总超时
-    if have curl; then
+    if command_exists curl; then
         curl -sSI -o /dev/null -w '%{redirect_url}' \
             --connect-timeout 8 --max-time "$2" "$1" 2>/dev/null || true
     else
@@ -504,7 +499,7 @@ resolve_url() { # $1=url $2=探测函数
 # 改用 1 秒限时代理：取到的字节数即约等于 KB/s。
 measure_speed() { # $1=url
     local url="$1" res got
-    if have curl; then
+    if command_exists curl; then
         res=$(curl -fsSL --connect-timeout 4 --max-time 4 --range 0-1048575 \
                   -o /dev/null -w '%{size_download} %{time_total}' "$url" 2>/dev/null || true)
         [[ -n "$res" ]] || { printf '0'; return 0; }
@@ -716,7 +711,7 @@ check_ip_forward() {
     fi
 
     # 配置中的 tun.auto-redirect 依赖 nftables，缺失时启动会直接报错
-    if ! have nft || ! nft list ruleset >/dev/null 2>&1; then
+    if ! command_exists nft || ! nft list ruleset >/dev/null 2>&1; then
         warn "未检测到可用的 nftables，若启动失败请将配置中的 tun.auto-redirect 改为 false"
     fi
 }
@@ -912,11 +907,11 @@ verify_binary() {
 verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd64-compatible-v1.19.32.gz）
     local file="$1" name="$2" sums_url sums expect actual tool=""
 
-    if have sha256sum; then
+    if command_exists sha256sum; then
         tool="sha256sum"
-    elif have shasum; then
+    elif command_exists shasum; then
         tool="shasum"
-    elif have openssl; then
+    elif command_exists openssl; then
         tool="openssl"
     else
         warn "未找到 SHA256 校验工具，跳过完整性校验"
@@ -1577,7 +1572,7 @@ ensure_controller_secret() { # $1=配置文件 $2=沿用旧密钥（可选），
 
 # 从配置读取面板监听地址，拼成可访问的 URL
 # 监听 0.0.0.0 / :: 表示所有网卡，对外应显示本机 IPv4，而不是 0.0.0.0
-controller_url() {
+panel_url() {
     local addr host port
 
     [[ -n "$ipv4" ]] || detect_network_info
@@ -1702,7 +1697,7 @@ config_mihomo() {
     hr
     ok "配置完成：${CONFIG_FILE}"
     ok "mihomo 已启动并设置为开机自启"
-    kv "面板地址" "${green}$(controller_url)${reset}"
+    kv "面板地址" "${green}$(panel_url)${reset}"
     if [[ -n "$controller_secret" ]]; then
         kv "面板密钥" "${green}${controller_secret}${reset}"
         printf '%s\n' "  ${yellow}面板已开启鉴权，首次访问需填写该密钥${reset}"
@@ -1773,7 +1768,7 @@ install_default_config_only() {
     printf '\n'
     hr
     ok "已使用默认配置启动（尚未添加机场订阅）"
-    kv "面板地址" "${green}$(controller_url)${reset}"
+    kv "面板地址" "${green}$(panel_url)${reset}"
     if [[ -n "$controller_secret" ]]; then
         kv "面板密钥" "${green}${controller_secret}${reset}"
     else
@@ -1878,7 +1873,7 @@ install_mihomo() {
     ok "安装完成"
     kv "安装目录" "$ROOT_DIR"
     kv "日志文件" "$LOG_FILE"
-    kv "面板地址" "${green}$(controller_url)${reset}"
+    kv "面板地址" "${green}$(panel_url)${reset}"
     if [[ -n "$controller_secret" ]]; then
         kv "面板密钥" "${green}${controller_secret}${reset}"
     else
@@ -1899,7 +1894,7 @@ install_mihomo() {
 # 输出命令行帮助
 usage() {
     cat <<EOF
-mihomo 一键安装脚本 v${sh_ver}
+mihomo 一键安装脚本 v${SCRIPT_VERSION}
 
 安装方式（任选其一，curl 与 wget 都可以，有其中一个即可）:
 
@@ -1947,7 +1942,7 @@ parse_args() {
     while (( $# )); do
         case "$1" in
             -h|--help)    usage; exit 0 ;;
-            -v|--version) printf 'install.sh v%s\n' "$sh_ver"; exit 0 ;;
+            -v|--version) printf 'install.sh v%s\n' "$SCRIPT_VERSION"; exit 0 ;;
             --channel)
                 [[ -n "${2:-}" ]] || die "--channel 缺少参数（stable / alpha）"
                 channel="$2"
