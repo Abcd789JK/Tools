@@ -1,10 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ---------- mihomo 一键管理脚本 ----------
 # desc   : 管理 & 面板
-# date   : 2026-10-21 21:18:21
-# author : ChatGPT DeepSeek
-# ver    : 1.4.1
-# sync   : 与 install.sh 共用 35 个同名函数，改动需同步两份
+# date   : 2026-10-23 08:15:11
+# author : ChatGPT
+# ver    : 1.5.0
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
 # 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
@@ -30,7 +29,7 @@ readonly HR="----------------------------------------"
 readonly HR_EQ="========================================"
 
 # ---------- 常量 ----------
-sh_ver="1.4.1"
+sh_ver="1.5.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -71,6 +70,7 @@ ipv6=""
 use_cdn=false
 url_prefix=""
 controller_secret=""   # 面板密钥，重置配置时重新生成
+SECRET_ENABLED=1       # 是否启用面板密钥：1=启用 0=禁用（由 ask_secret 决定）
 TMP_FILES=()
 
 # ---------- 日志 ----------
@@ -831,9 +831,36 @@ logs_mihomo() {
 }
 
 # ---------- 配置公共 ----------
-# 面板鉴权：远程配置不含 secret，而 external-controller 监听 0.0.0.0:9090，
-# 等于把控制 API 无鉴权暴露到公网。重置配置后重新生成并注入；
-# 已有非空 secret 时保留用户设置，重复执行不会重复插入。
+# 面板鉴权：远程配置不含 secret，而 external-controller 默认监听 0.0.0.0:9090，
+# 不加密钥等于把控制 API 无鉴权暴露到公网，因此是否启用由用户决定。
+ask_secret() {
+    if confirm "是否为面板启用密钥鉴权？(Y/n):" "y"; then
+        SECRET_ENABLED=1
+    else
+        SECRET_ENABLED=0
+        warn_secret_disabled
+    fi
+}
+
+# 未启用密钥时的统一警告，安装、重置、禁用三处共用
+warn_secret_disabled() {
+    warn "⚠ 面板未启用密钥：external-controller 监听 0.0.0.0:9090，"
+    warn "  任何能访问该端口的人都可以修改你的配置。"
+    warn "  建议用防火墙限制来源，或改用 SSH 隧道访问。"
+}
+
+# 移除配置中的 secret 行，用于禁用与重新生成
+strip_controller_secret() { # $1=配置文件
+    local f="$1" tmp
+    [[ -f "$f" ]] || return 1
+    tmp=$(mktemp "${ROOT_DIR}/.secret.XXXXXX")
+    TMP_FILES+=("$tmp")
+    awk '!/^secret:/' "$f" >"$tmp"
+    mv -f -- "$tmp" "$f"
+    controller_secret=""
+}
+
+# 注入面板密钥：已有非空 secret 时保留用户设置，重复执行不会重复插入
 ensure_controller_secret() { # $1=配置文件，输出最终密钥
     local f="$1" cur new tmp q
     q=$'\x27'
@@ -1516,6 +1543,7 @@ reset_config() {
         warn "已取消重置"
         return 0
     fi
+    ask_secret
 
     local bak idx=1 ans block="" block_file tmp merged
     bak=$(backup_config) || return 1
@@ -1560,8 +1588,13 @@ reset_config() {
         return 1
     fi
 
-    # 面板密钥必须在校验前注入，避免把非法配置写进正式文件
-    ensure_controller_secret "$merged" >/dev/null
+    # 面板密钥必须在校验前注入，避免把非法配置写进正式文件；
+    # 未启用时不得调用注入函数，否则它会把空 secret 占位填上值
+    if (( SECRET_ENABLED )); then
+        ensure_controller_secret "$merged" >/dev/null
+    else
+        controller_secret=""
+    fi
 
     if ! config_test "$merged"; then
         err "写入订阅后配置校验失败，已中止（现有配置未改动）"
@@ -1576,9 +1609,421 @@ reset_config() {
     printf '%s\n' "${green}面板地址：$(panel_url)${reset}"
     if [[ -n "$controller_secret" ]]; then
         printf '%s\n' "${green}面板密钥：${controller_secret}${reset}"
+    else
+        printf '%s\n' "${yellow}面板密钥：未启用（面板无鉴权）${reset}"
     fi
     printf '%s\n' "${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
     printf '%s\n' "${blue}${HR_EQ}${reset}"
+}
+
+# ---------- 面板密钥 ----------
+# 非交互执行：启用 / 禁用 / 重新生成，全部走 commit_config 以复用校验与失败回滚
+secret_set() { # $1=on|off|reset
+    check_installation || return 1
+    local action="$1" tmp bak
+    tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
+    TMP_FILES+=("$tmp")
+    cp -f -- "$CONFIG_FILE" "$tmp"
+
+    case "$action" in
+        on|reset)
+            strip_controller_secret "$tmp"
+            ensure_controller_secret "$tmp" >/dev/null
+            bak=$(backup_config) || return 1
+            commit_config "$tmp" "$bak" "面板密钥" || return 1
+            ok "面板密钥：${controller_secret}"
+            ;;
+        off)
+            strip_controller_secret "$tmp"
+            bak=$(backup_config) || return 1
+            commit_config "$tmp" "$bak" "禁用面板密钥" || return 1
+            warn_secret_disabled
+            ;;
+        *)
+            err "未知操作：${action}（可选 on / off / reset）"
+            return 1
+            ;;
+    esac
+}
+
+# 面板密钥子命令入口：无参数进交互菜单
+secret_cmd() { # $1=on|off|reset（可选）
+    case "${1:-}" in
+        on|off|reset) secret_set "$1" ;;
+        "")           manage_secret ;;
+        *)            err "未知参数：$1（可选 on / off / reset）"; return 1 ;;
+    esac
+}
+
+# 交互式管理面板密钥
+manage_secret() {
+    check_installation || return 1
+    local cur choice=""
+    cur=$(awk '
+        /^secret:[[:space:]]*/ {
+            v = $0
+            sub(/^secret:[[:space:]]*/, "", v)
+            gsub(/[[:space:]"]/, "", v)
+            print v
+            exit
+        }
+    ' "$CONFIG_FILE" 2>/dev/null || true)
+
+    printf '\n%s\n' "${HR_EQ}"
+    if [[ -n "$cur" ]]; then
+        printf '面板密钥: %s已启用%s  %s\n' "$green" "$reset" "$cur"
+    else
+        printf '面板密钥: %s未启用%s（面板无鉴权）\n' "$yellow" "$reset"
+    fi
+    printf '面板地址: %s\n' "$(panel_url)"
+    printf '%s\n' "${HR}"
+    printf '%s\n' "${green}1${reset}. 启用并生成新密钥"
+    printf '%s\n' "${green}2${reset}. 禁用（移除密钥）"
+    printf '%s\n' "${green}3${reset}. 重新生成密钥"
+    printf '%s\n' "${HR}"
+
+    read_input choice "${yellow}请输入选项 (1/2/3): ${reset}"
+    case "$choice" in
+        1) secret_set on ;;
+        2) secret_set off ;;
+        3) secret_set reset ;;
+        *) warn "无效选项"; return 1 ;;
+    esac
+}
+
+# ---------- 配置升级 ----------
+# 合并新版默认配置与本地配置，规则如下：
+#   - 保留本地：proxy-providers（订阅）、端口、面板、TUN、IPv6、手写节点
+#   - 用新版覆盖：rules / rule-providers / rule-anchor / proxy-groups / sniffer / profile 等
+#   - dns 按子键合并：nameserver 类保留本地，fake-ip-filter 取并集
+#   - rule-anchor 与 rule-providers 是锚点耦合组，必须整组同源替换
+# $1=新版配置 $2=本地配置 $3=输出文件
+merge_config() {
+    awk '
+        # 合并 mihomo 配置：以新版默认配置为基底，保留用户的订阅与关键自定义项。
+        # 用法：awk -f merge.awk 新版配置 本地配置 > 输出
+
+        function trimblk(s,   a, n, i, r) {
+            n = split(s, a, "\n")
+            while (n > 0 && a[n] ~ /^[[:space:]]*$/) n--
+            r = ""
+            for (i = 1; i <= n; i++) r = r a[i] "\n"
+            return r
+        }
+
+        BEGIN {
+            split("proxy-providers mixed-port socks-port port allow-lan", k1, " ")
+            split("external-controller secret external-ui external-ui-url", k2, " ")
+            split("tun ipv6 proxies", k3, " ")
+            for (i in k1) KEEP[k1[i]] = 1
+            for (i in k2) KEEP[k2[i]] = 1
+            for (i in k3) KEEP[k3[i]] = 1
+
+            split("nameserver default-nameserver fallback fallback-filter", kd, " ")
+            for (i in kd) KEEP_DNS[kd[i]] = 1
+
+            # 本地独有的键插到哪个键之后，保证 secret 紧邻 external-controller
+            AFTER["secret"] = "external-controller"
+        }
+
+        FNR == 1 { fn++ }
+
+        {
+            sub(/\r$/, "")
+            if (fn == 1) n[++nc] = $0
+            else         l[++lc] = $0
+        }
+
+        END {
+            # ---------- 切分新版：顶层键 → 块 ----------
+            cur = ""; pend = ""; nk = 0; prevblank = 0
+            for (i = 1; i <= nc; i++) {
+                line = n[i]
+                if (line ~ /^[^[:space:]#]/) {
+                    key = line; sub(/:.*/, "", key)
+                    # 键前若有注释块，空行归属以注释块起点为准
+                    blank_before = (pend == "" ? prevblank : pendblank)
+                    if (cur == "") nhead = pend
+                    else           nblk[cur] = trimblk(nblk[cur])
+                    cur = key; pend = ""
+                    if (!(key in nseen)) {
+                        nseen[key] = 1
+                        norder[++nk] = key
+                        npre[key] = blank_before
+                    }
+                    nblk[key] = line "\n"
+                } else if (line ~ /^#/) {
+                    if (pend == "") pendblank = prevblank
+                    pend = pend line "\n"
+                } else if (cur != "") {
+                    nblk[cur] = nblk[cur] pend line "\n"; pend = ""
+                } else {
+                    nhead = nhead line "\n"
+                }
+                prevblank = (line ~ /^[[:space:]]*$/)
+            }
+            if (cur != "") nblk[cur] = trimblk(nblk[cur])
+
+            # ---------- 切分本地 ----------
+            cur = ""; pend = ""; lk = 0
+            for (i = 1; i <= lc; i++) {
+                line = l[i]
+                if (line ~ /^[^[:space:]#]/) {
+                    key = line; sub(/:.*/, "", key)
+                    if (cur != "") lblk[cur] = trimblk(lblk[cur])
+                    cur = key; pend = ""
+                    if (!(key in lseen)) { lseen[key] = 1; lorder[++lk] = key }
+                    lblk[key] = line "\n"
+                } else if (line ~ /^#/) {
+                    pend = pend line "\n"
+                } else if (cur != "") {
+                    lblk[cur] = lblk[cur] pend line "\n"; pend = ""
+                }
+            }
+            if (cur != "") lblk[cur] = trimblk(lblk[cur])
+
+            # ---------- dns 子块切分（2 空格缩进的子键） ----------
+            if (("dns" in nblk) && ("dns" in lblk)) {
+                ndn = split(nblk["dns"], na, "\n"); ndcur = ""; ndk = 0
+                for (i = 2; i <= ndn; i++) {
+                    line = na[i]
+                    if (line ~ /^  [A-Za-z0-9_-]+:/) {
+                        sk = line; sub(/:.*/, "", sk); sub(/^ +/, "", sk)
+                        ndcur = sk
+                        if (!(sk in ndseen)) { ndseen[sk] = 1; ndorder[++ndk] = sk }
+                        ndns[sk] = line "\n"
+                    } else if (ndcur != "") {
+                        ndns[ndcur] = ndns[ndcur] line "\n"
+                    }
+                }
+                ldn = split(lblk["dns"], la, "\n"); ldcur = ""; ldk = 0
+                for (i = 2; i <= ldn; i++) {
+                    line = la[i]
+                    if (line ~ /^  [A-Za-z0-9_-]+:/) {
+                        sk = line; sub(/:.*/, "", sk); sub(/^ +/, "", sk)
+                        ldcur = sk
+                        if (!(sk in ldseen)) { ldseen[sk] = 1; ldorder[++ldk] = sk }
+                        ldns[sk] = line "\n"
+                    } else if (ldcur != "") {
+                        ldns[ldcur] = ldns[ldcur] line "\n"
+                    }
+                }
+            }
+
+            # ---------- 输出 ----------
+            started = 0; outsep = 0
+
+            if (nhead != "") { printf "%s", nhead; started = 1 }
+
+            # 订阅段固定放在最前，与既有布局一致
+            if ("proxy-providers" in lblk) {
+                printf "%s", trimblk(lblk["proxy-providers"])
+                print ""
+                started = 1; outsep = 1
+            }
+
+            for (j = 1; j <= nk; j++) {
+                key = norder[j]
+                if (key == "proxy-providers") continue
+
+                if (npre[key] && started && !outsep) { print ""; outsep = 1 }
+
+                if (key == "dns" && ("dns" in lblk) && ndk > 0) {
+                    print "dns:"
+                    for (m = 1; m <= ndk; m++) {
+                        sk = ndorder[m]
+                        if (sk == "fake-ip-filter") {
+                            nf = 0; delete item_seen
+                            split(ndns[sk], fa, "\n")
+                            for (t = 1; t <= length(fa); t++) {
+                                if (fa[t] ~ /^    - /) {
+                                    it = fa[t]; sub(/^    - /, "", it)
+                                    if (!(it in item_seen)) {
+                                        item_seen[it] = 1
+                                        items[++nf] = it
+                                    }
+                                }
+                            }
+                            if (sk in ldns) {
+                                split(ldns[sk], fb, "\n")
+                                for (t = 1; t <= length(fb); t++) {
+                                    if (fb[t] ~ /^    - /) {
+                                        it = fb[t]; sub(/^    - /, "", it)
+                                        if (!(it in item_seen)) {
+                                            item_seen[it] = 1
+                                            items[++nf] = it
+                                        }
+                                    }
+                                }
+                            }
+                            print "  fake-ip-filter:"
+                            for (t = 1; t <= nf; t++) print "    - " items[t]
+                            continue
+                        }
+                        if ((sk in KEEP_DNS) && (sk in ldns)) { printf "%s", ldns[sk]; continue }
+                        if (sk == "proxy-server-nameserver" && (sk in ldns)) {
+                            printf "%s", ldns[sk]; continue
+                        }
+                        printf "%s", ndns[sk]
+                    }
+                    for (sk in ldns) {
+                        if (sk in ndseen) continue
+                        if ((sk in KEEP_DNS) || sk == "proxy-server-nameserver") \
+                            printf "%s", ldns[sk]
+                    }
+                    started = 1; outsep = 0
+                    continue
+                }
+
+                if ((key in KEEP) && (key in lblk)) {
+                    printf "%s", trimblk(lblk[key])
+                } else {
+                    printf "%s", trimblk(nblk[key])
+                }
+                started = 1; outsep = 0
+
+                # 本地独有的关联键插到锚点键之后
+                for (j2 = 1; j2 <= lk; j2++) {
+                    lk2 = lorder[j2]
+                    if (lk2 in nseen || lk2 == "proxy-providers") continue
+                    if (!(lk2 in KEEP)) continue
+                    if (!(lk2 in AFTER) || AFTER[lk2] != key) continue
+                    printf "%s", trimblk(lblk[lk2])
+                    handled[lk2] = 1
+                }
+            }
+
+            # 其余本地独有且属于保留清单的键
+            for (j = 1; j <= lk; j++) {
+                key = lorder[j]
+                if (key == "proxy-providers" || (key in nseen) || (key in handled)) continue
+                if (key in KEEP) {
+                    print ""
+                    printf "%s", trimblk(lblk[key])
+                }
+            }
+        }
+    ' "$1" "$2" >"$3"
+}
+
+# 打印合并前后的差异摘要：顶层新增键 + dns 子键级变化
+# 统计配置中 dns.fake-ip-filter 的条目数
+count_fake_ip_filter() { # $1=配置文件
+    awk '/^  fake-ip-filter:/{f=1;next} f&&/^    - /{c++} f&&!/^    /{f=0} END{print c+0}' "$1"
+}
+
+print_config_diff_summary() { # $1=旧配置 $2=新配置
+    local added dns_new="" n old_f new_f
+
+    added=$(comm -13 \
+        <(grep -E '^[a-z][a-z0-9-]*:' "$1" | sed 's/:.*//' | sort -u) \
+        <(grep -E '^[a-z][a-z0-9-]*:' "$2" | sed 's/:.*//' | sort -u) | tr '\n' ' ')
+
+    if grep -q '^  proxy-server-nameserver:' "$2" \
+        && ! grep -q '^  proxy-server-nameserver:' "$1"; then
+        dns_new+="dns.proxy-server-nameserver "
+    fi
+    old_f=$(count_fake_ip_filter "$1")
+    new_f=$(count_fake_ip_filter "$2")
+    if (( new_f > old_f )); then
+        dns_new+="dns.fake-ip-filter(+$((new_f - old_f))) "
+    fi
+
+    n=$(count_providers "$2")
+    printf '\n'
+    printf '%s\n' "${blue}${HR}${reset}"
+    if [[ -n "${added}${dns_new}" ]]; then
+        printf '%s\n' "  ${cyan}新增${reset}  ${added}${dns_new}"
+    fi
+    printf '%s\n' "  ${cyan}更新${reset}  rules  rule-providers  rule-anchor  proxy-groups"
+    printf '%s\n' "          sniffer  profile  find-process-mode  dns"
+    printf '%s\n' "  ${cyan}保留${reset}  proxy-providers（${n} 个订阅） mixed-port allow-lan"
+    printf '%s\n' "          external-controller secret tun ipv6 proxies"
+    printf '%s\n' "${blue}${HR}${reset}"
+}
+
+# 升级默认配置：拉取新版默认配置，与本地合并后应用（保留订阅与关键自定义项）
+config_upgrade() {
+    check_installation || return 1
+    local bak tmp merged old_count new_count ans=""
+
+    if ! confirm "将拉取新版默认配置并与当前配置合并（自动备份），确认？(y/N):" "n"; then
+        warn "已取消"
+        return 0
+    fi
+
+    check_network
+    tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
+    TMP_FILES+=("$tmp")
+    info "正在下载新版默认配置..."
+    if ! download_file "$CONFIG_URL" "$tmp" "默认配置"; then
+        err "下载失败，现有配置未改动"
+        return 1
+    fi
+    if [[ ! -s "$tmp" ]]; then
+        err "下载内容为空，现有配置未改动"
+        return 1
+    fi
+    normalize_config "$tmp" || { err "配置规范化失败，现有配置未改动"; return 1; }
+
+    # 先校验上游配置本身，不通过就中止，避免把坏配置合进来
+    if ! config_test "$tmp"; then
+        err "上游默认配置未通过校验，已中止（现有配置未改动）"
+        return 1
+    fi
+
+    merged=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
+    TMP_FILES+=("$merged")
+    info "正在合并配置..."
+    if ! merge_config "$tmp" "$CONFIG_FILE" "$merged"; then
+        err "合并失败，现有配置未改动"
+        return 1
+    fi
+
+    # 结构断言：订阅必须原样保留
+    old_count=$(count_providers "$CONFIG_FILE")
+    new_count=$(count_providers "$merged")
+    if [[ "$new_count" -ne "$old_count" ]]; then
+        err "合并后订阅数量异常（${old_count} → ${new_count}），已中止"
+        return 1
+    fi
+    if [[ "$old_count" -gt 0 ]] && ! grep -q '^proxy-providers:' "$merged"; then
+        err "合并后缺少 proxy-providers 段，已中止"
+        return 1
+    fi
+
+    # 密钥沿用本地设置：合并已保留本地 secret，此处不重新注入
+    if ! config_test "$merged"; then
+        err "合并后的配置未通过校验，已中止（现有配置未改动）"
+        return 1
+    fi
+
+    print_config_diff_summary "$CONFIG_FILE" "$merged"
+
+    while true; do
+        read_input ans "${yellow}回车应用 / d 查看完整差异 / n 取消: ${reset}"
+        ans=${ans:-y}
+        case "$ans" in
+            [Dd])
+                diff -u "$CONFIG_FILE" "$merged" || true
+                ;;
+            [Nn])
+                warn "已取消，现有配置未改动"
+                return 0
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    bak=$(backup_config) || return 1
+    commit_config "$merged" "$bak" "升级配置" || return 1
+
+    # 落一份新版默认配置基线，供将来做三方合并
+    if cp -f -- "$tmp" "${ROOT_DIR}/default.yaml" 2>/dev/null; then
+        ok "新版默认配置已保存为基线：${ROOT_DIR}/default.yaml"
+    fi
 }
 
 # ---------- 配置菜单 ----------
@@ -1594,15 +2039,19 @@ config_mihomo() {
     printf '%s\n' "${green}2${reset}. 修改机场订阅"
     printf '%s\n' "${green}3${reset}. 删除机场订阅"
     printf '%s\n' "${green}4${reset}. 重置配置文件"
+    printf '%s\n' "${green}5${reset}. 升级默认配置（保留订阅）"
+    printf '%s\n' "${green}6${reset}. 面板密钥（启用/禁用/更换）"
     printf '%s\n' "${HR}"
 
     local choice=""
     read_input choice "${yellow}输入选项数字: ${reset}"
     case "$choice" in
-        1) add_provider    ;;
-        2) modify_provider ;;
-        3) delete_provider ;;
-        4) reset_config    ;;
+        1) add_provider     ;;
+        2) modify_provider  ;;
+        3) delete_provider  ;;
+        4) reset_config     ;;
+        5) config_upgrade   ;;
+        6) manage_secret    ;;
         *) warn "无效选项" ;;
     esac
 }
@@ -1756,6 +2205,15 @@ download_and_install() { # $1=alpha|stable
     if ! verify_binary "${ROOT_DIR}/${base}"; then
         rm -f -- "${ROOT_DIR}/${base}"
         return 1
+    fi
+
+    # 新内核必须能解析现有配置；若现有配置本身已不合法，则不阻断升级
+    if [[ -f "$CONFIG_FILE" ]] && "$BIN_FILE" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
+        if ! "${ROOT_DIR}/${base}" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
+            err "新内核无法解析现有配置，已中止升级（当前版本未改动）"
+            rm -f -- "${ROOT_DIR}/${base}"
+            return 1
+        fi
     fi
 
     # 停服务 → 备份 → 替换 → 启动 → 失败回滚
@@ -1982,7 +2440,7 @@ menu() {
         clear 2>/dev/null || true
         printf '%s\n' "${HR_EQ}"
         printf '%s\n' "${green}欢迎使用 mihomo 一键脚本${reset}"
-        printf '%s\n' "${green}作者: ${yellow}ChatGPT DeepSeek${reset}"
+        printf '%s\n' "${green}作者: ${yellow}ChatGPT JK789${reset}"
         printf '%s\n' "${red}使用说明:"
         printf '%s\n' "    1. 更换订阅可以保存原有机场订阅"
         printf '%s\n' "    2. 需要通过脚本添加机场订阅${reset}"
@@ -2018,8 +2476,8 @@ menu() {
             7)  service_action enable   || true ;;
             8)  service_action disable  || true ;;
             9)  switch_version          || true ;;
-            10) config_mihomo           || true ;;
-            11) logs_mihomo             || true ;;
+            10|20) config_mihomo        || true ;;
+            11|30) logs_mihomo          || true ;;
             12) update_shell            || true ;;
             0|q|Q|exit) exit 0 ;;
             *)  warn "无效选项，请重新选择"; continue ;;
@@ -2045,6 +2503,8 @@ mihomo 一键管理脚本 v${sh_ver}
   disable             取消开机自启
   logs                实时查看日志
   config              配置管理（交互）
+  config-upgrade      升级默认配置（保留订阅）
+  secret [on|off|reset]  面板密钥：启用 / 禁用 / 重新生成
   update              更新 mihomo 内核
   switch              切换正式版 / 测试版
   install             安装 / 重装
@@ -2080,6 +2540,8 @@ main() {
         disable)                service_action disable ;;
         logs)                   logs_mihomo ;;
         config)                 config_mihomo ;;
+        config-upgrade)         config_upgrade ;;
+        secret)                 secret_cmd "${2:-}" ;;
         update)                 update_mihomo ;;
         switch)                 switch_version ;;
         install)                install_mihomo ;;

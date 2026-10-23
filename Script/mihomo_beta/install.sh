@@ -1,10 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-21 21:18:21
-# author : ChatGPT DeepSeek
-# ver    : 1.6.1
-# sync   : 与 mihomo.sh 共用 35 个同名函数，改动需同步两份
+# date   : 2026-10-23 08:15:11
+# author : ChatGPT
+# ver    : 1.7.0
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
 # 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
@@ -25,7 +24,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.6.1"
+sh_ver="1.7.0"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -68,6 +67,7 @@ ipv6=""
 use_cdn=false
 url_prefix=""          # 空 = 直连；非空 = 已验证可用的镜像前缀
 controller_secret=""   # 面板密钥，安装时本地生成并写入配置
+SECRET_ENABLED=1       # 是否启用面板密钥：1=启用 0=禁用（由 ask_secret 决定）
 TMP_FILES=()
 
 # ---------- 日志 ----------
@@ -149,6 +149,14 @@ read_input() { # $1=变量名 $2=提示语
         exit 130
     fi
     printf -v "$__var" '%s' "$__val"
+}
+
+# 是/否确认，默认值由 $2 决定（y 或 n）
+confirm() { # $1=提示语 $2=默认值
+    local prompt="$1" def="${2:-n}" ans=""
+    read_input ans "${yellow}${prompt}${reset} "
+    ans=${ans:-$def}
+    [[ "$ans" =~ ^[Yy] ]]
 }
 
 # YAML 双引号值转义
@@ -908,6 +916,16 @@ download_mihomo_binary() {
         rm -f -- "${ROOT_DIR}/${base}"
         return 1
     fi
+
+    # 覆盖安装时，新内核必须能解析现有配置；首次安装无 config.yaml，条件自然跳过
+    if [[ -f "$CONFIG_FILE" ]] && "$BIN_FILE" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
+        if ! "${ROOT_DIR}/${base}" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
+            err "新内核无法解析现有配置，已中止安装（当前版本未改动）"
+            rm -f -- "${ROOT_DIR}/${base}"
+            return 1
+        fi
+    fi
+
     install_binary "${ROOT_DIR}/${base}"
     ok "mihomo 二进制已就绪"
 }
@@ -1297,9 +1315,25 @@ apply_config() { # $1=备份路径
     ok "配置已生效，服务运行中"
 }
 
-# 面板鉴权：远程配置不含 secret，而 external-controller 监听 0.0.0.0:9090，
-# 等于把控制 API 无鉴权暴露到公网。安装时本地生成随机密钥注入配置；
-# 已有非空 secret 时保留用户设置，重复执行不会重复插入。
+# 面板鉴权：远程配置不含 secret，而 external-controller 默认监听 0.0.0.0:9090，
+# 不加密钥等于把控制 API 无鉴权暴露到公网，因此是否启用由用户决定。
+ask_secret() {
+    if confirm "是否为面板启用密钥鉴权？(Y/n):" "y"; then
+        SECRET_ENABLED=1
+    else
+        SECRET_ENABLED=0
+        warn_secret_disabled
+    fi
+}
+
+# 未启用密钥时的统一警告，与 mihomo.sh 保持一致
+warn_secret_disabled() {
+    warn "⚠ 面板未启用密钥：external-controller 监听 0.0.0.0:9090，"
+    warn "  任何能访问该端口的人都可以修改你的配置。"
+    warn "  建议用防火墙限制来源，或改用 SSH 隧道访问。"
+}
+
+# 注入面板密钥：已有非空 secret 时保留用户设置，重复执行不会重复插入
 ensure_controller_secret() { # $1=配置文件，输出最终密钥
     local f="$1" cur new tmp q
     q=$'\x27'
@@ -1394,6 +1428,8 @@ controller_url() {
 # 交互收集机场订阅并写入配置文件
 config_mihomo() {
     local bak idx=1 ans block="" block_file base merged
+    ask_secret
+
     bak=$(backup_config) || die "配置备份失败，已中止"
     [[ -n "$bak" ]] && ok "原配置已备份：${bak}"
 
@@ -1429,8 +1465,13 @@ config_mihomo() {
         return 1
     fi
 
-    # 面板密钥必须在校验前注入，避免把非法配置写进正式文件
-    ensure_controller_secret "$merged" >/dev/null
+    # 面板密钥必须在校验前注入，避免把非法配置写进正式文件；
+    # 未启用时不得调用注入函数，否则它会把空 secret 占位填上值
+    if (( SECRET_ENABLED )); then
+        ensure_controller_secret "$merged" >/dev/null
+    else
+        controller_secret=""
+    fi
 
     # 写入订阅后再校验一次，仍不通过则完全不落地
     if ! config_test "$merged"; then
@@ -1452,6 +1493,8 @@ config_mihomo() {
     if [[ -n "$controller_secret" ]]; then
         printf '%s\n' "  ${green}面板密钥${reset}  ${controller_secret}"
         printf '%s\n' "  ${yellow}面板已开启鉴权，首次访问需填写该密钥${reset}"
+    else
+        printf '%s\n' "  ${yellow}面板密钥  未启用（面板无鉴权）${reset}"
     fi
     printf '%s\n' "  ${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
     hr
@@ -1461,6 +1504,8 @@ config_mihomo() {
 # 否则 $CONFIG_FILE 从未创建，服务无法启动，"systemctl restart mihomo" 必然失败。
 install_default_config_only() {
     local base bak
+    ask_secret
+
     bak=$(backup_config) || { err "配置备份失败，已中止"; return 1; }
     [[ -n "$bak" ]] && ok "原配置已备份：${bak}"
 
@@ -1476,7 +1521,12 @@ install_default_config_only() {
         return 1
     fi
 
-    ensure_controller_secret "$base" >/dev/null
+    # 未启用密钥时不得调用注入函数，否则它会把空 secret 占位填上值
+    if (( SECRET_ENABLED )); then
+        ensure_controller_secret "$base" >/dev/null
+    else
+        controller_secret=""
+    fi
 
     if ! config_test "$base"; then
         err "默认配置未通过 mihomo 校验"
@@ -1508,6 +1558,8 @@ install_default_config_only() {
     printf '%s\n' "  ${green}面板地址${reset}  $(controller_url)"
     if [[ -n "$controller_secret" ]]; then
         printf '%s\n' "  ${green}面板密钥${reset}  ${controller_secret}"
+    else
+        printf '%s\n' "  ${yellow}面板密钥  未启用（面板无鉴权）${reset}"
     fi
     printf '%s\n' "  ${blue}下一步${reset}    执行 ${green}mihomo${reset} → 配置管理 → 添加机场订阅"
     hr
@@ -1529,9 +1581,9 @@ prepare_dirs() {
         bak=$(backup_config) || die "配置备份失败，已中止安装"
         [[ -n "$bak" ]] && ok "原配置已备份：${bak}"
 
-        service_stop
-        rm -f -- "$BIN_FILE" "${ROOT_DIR}"/*.gz "${ROOT_DIR}"/gh-pages.zip
-        rm -rf -- "${ROOT_DIR}/ui"
+        # 不在此处停服务、删二进制：下载与校验全部在旧内核运行时完成，
+        # 真正的替换由 install_binary 负责（自带备份与失败回滚）。
+        # 否则下载失败会把机器留在"无内核"状态。
     fi
     mkdir -p "$ROOT_DIR"
     cd "$ROOT_DIR" || die "无法进入 ${ROOT_DIR}"
