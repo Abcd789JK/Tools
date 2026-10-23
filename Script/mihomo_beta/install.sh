@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-23 10:29:00
+# date   : 2026-10-23 17:40:23
 # author : ChatGPT
-# ver    : 1.7.2
-# sync   : 与 mihomo.sh 共用 49 个同名函数，改动需同步两份
+# ver    : 1.7.4
+# sync   : 与 mihomo.sh 共用 57 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
 # 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
@@ -25,7 +25,7 @@ else
 fi
 
 # ---------- 常量 ----------
-sh_ver="1.7.2"
+sh_ver="1.7.4"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -107,27 +107,42 @@ die()  { err "$*"; err "详细日志：${LOG_FILE}"; exit 1; }
 
 # ---------- 输出格式 ----------
 # 统一交互规范：首尾信息块 + 40 字符分隔线 + 带序号的步骤标题。
+# 颜色规范（两个脚本保持一致，新增输出必须遵守）：
+#   边框与分隔线（HR / HR_EQ）  blue
+#   标题、步骤序号、标签         cyan
+#   成功状态、菜单与选项序号     green
+#   一般信息、交互提示语         cyan
+#   警告                        yellow
+#   错误                        red
+#   普通说明文字                默认色（不着色）
 readonly HR="----------------------------------------"
-STEP_TOTAL=11
+readonly HR_EQ="========================================"
+STEP_TOTAL=10
 STEP_CUR=0
 
 # 打印 40 字符分隔线
 hr() { printf '%s\n' "${blue}${HR}${reset}"; }
 
+# 打印"标签: 值"行：标签统一青色，值按语义着色（成功绿/警告黄/错误红/默认色）
+kv() { printf '  %s%s%s  %s\n' "$cyan" "$1" "$reset" "$2"; }
+
+# 打印子命令说明行：命令绿色，说明默认色，命令列左对齐
+cmd_row() { printf '    %s%-15s%s%s\n' "$green" "$1" "$reset" "$2"; }
+
 # 打印带序号的步骤标题，序号自动递增
 step() {
     STEP_CUR=$((STEP_CUR + 1))
-    printf '\n%s\n' "${blue}[${STEP_CUR}/${STEP_TOTAL}]${reset} ${cyan}$*${reset}"
+    printf '\n%s\n' "${cyan}[${STEP_CUR}/${STEP_TOTAL}] $*${reset}"
 }
 
 # 打印安装信息头（脚本名、版本、目录、日志路径）
 print_header() {
     printf '\n'
-    printf '%s\n' "${blue}========================================${reset}"
-    printf '%s\n' "${cyan}  mihomo 一键安装脚本${reset}  ${blue}v${sh_ver}${reset}"
-    printf '%s\n' "${blue}  安装目录  ${ROOT_DIR}${reset}"
-    printf '%s\n' "${blue}  日志文件  ${LOG_FILE}${reset}"
-    printf '%s\n' "${blue}========================================${reset}"
+    printf '%s\n' "${blue}${HR_EQ}${reset}"
+    printf '%s\n' "${cyan}  mihomo 一键安装脚本  v${sh_ver}${reset}"
+    kv "安装目录" "$ROOT_DIR"
+    kv "日志文件" "$LOG_FILE"
+    printf '%s\n' "${blue}${HR_EQ}${reset}"
 }
 
 # ---------- 清理 ----------
@@ -181,7 +196,7 @@ read_input() { # $1=变量名 $2=提示语
 # 是/否确认，默认值由 $2 决定（y 或 n）
 confirm() { # $1=提示语 $2=默认值
     local prompt="$1" def="${2:-n}" ans=""
-    read_input ans "${yellow}${prompt}${reset} "
+    read_input ans "${cyan}${prompt}${reset} "
     ans=${ans:-$def}
     [[ "$ans" =~ ^[Yy] ]]
 }
@@ -237,7 +252,7 @@ detect_distro() {
     if [[ -z "$pkg_mgr" ]]; then
         pkg_mgr="none"
         warn "未识别的发行版：${distro}，将跳过依赖自动安装"
-        warn "请自行确认已安装：curl wget unzip gzip jq iproute2"
+        warn "请自行确认已安装：curl 或 wget、unzip、gzip、jq、iproute2"
     fi
 
     detect_init
@@ -287,39 +302,40 @@ pkg_iproute_name() {
     esac
 }
 
-# 探测资产是否存在：优先用 HEAD 取状态码。
+# 探测资产是否存在：先 HEAD 取状态码，不把 20MB+ 的响应体拉下来。
 # 不用 --range 打头，是因为部分镜像/CDN 忽略 Range 而直接返回整包，
 # 20MB+ 的响应会在 --max-time 内超时，反而把存在的资产误判为不存在。
 probe_asset() {
-    local url="$1" code
-    code=$(curl -sSL -I -o /dev/null -w '%{http_code}' \
-               --connect-timeout 5 --max-time 12 "$url" 2>/dev/null || true)
-    if [[ "$code" == "200" || "$code" == "206" ]]; then
-        return 0
-    fi
+    local url="$1"
+    http_head "$url" 12 && return 0
     # 部分镜像不支持 HEAD，退回范围请求兜底
-    curl -fsSL -o /dev/null --connect-timeout 5 --max-time 15 --range 0-0 "$url" 2>/dev/null
+    [[ "$(http_range_size "$url" 1 15)" != "0" ]]
 }
 
-# 引导阶段先确保 curl/wget 存在，否则后续网络探测无法进行
-ensure_bootstrap_tools() {
-    local missing=()
-    have curl || missing+=(curl)
-    have wget || missing+=(wget)
-    if (( ${#missing[@]} == 0 )); then
+# 下载器守卫：curl 与 wget 至少要有其一，否则后续下载全部无法进行。
+# 用户能把脚本取回来就说明有其中一个，缺哪个按包管理器提示。
+require_downloader() {
+    if have curl || have wget; then
         return 0
     fi
-    info "缺少基础工具：${missing[*]}，正在安装..."
-    pkg_refresh || warn "刷新软件源失败，继续尝试安装"
-    if ! pkg_install "${missing[@]}"; then
-        die "基础工具安装失败，请手动安装 ${missing[*]} 后重试"
+    local hint=""
+    case "${pkg_mgr:-}" in
+        apt)    hint="apt-get install -y curl（或 wget）" ;;
+        dnf)    hint="dnf install -y curl（或 wget）" ;;
+        pacman) hint="pacman -S curl（或 wget）" ;;
+        apk)    hint="apk add curl（或 wget）" ;;
+        zypper) hint="zypper install -y curl（或 wget）" ;;
+    esac
+    if [[ -n "$hint" ]]; then
+        die "未检测到 curl / wget，本脚本的下载功能依赖其中之一，请先执行：${hint}"
     fi
-    have curl || die "curl 安装失败，无法继续"
+    die "未检测到 curl / wget，本脚本的下载功能依赖其中之一，请先安装后重试"
 }
 
-# 安装运行依赖，按实际需要裁剪（不含 yq/git/nano）
+# 安装运行依赖，按实际需要裁剪（curl/wget 由 require_downloader 保证有其一，
+# 都不自动安装；也不含 yq/git/nano）
 install_dependencies() {
-    local core=(curl wget unzip gzip jq ca-certificates iptables)
+    local core=(unzip gzip jq ca-certificates iptables)
     local miss=() t
 
     if [[ "$pkg_mgr" == "none" ]]; then
@@ -335,17 +351,99 @@ install_dependencies() {
         fi
     fi
 
-    for t in curl wget unzip gzip jq; do
+    # 下载器已由 require_downloader 保证有其一，这里只校验其余实际用到的命令
+    for t in unzip gzip jq; do
         have "$t" || miss+=("$t")
     done
     if (( ${#miss[@]} )); then
         warn "缺少必要工具：${miss[*]}，请手动安装后重试"
+    else
+        ok "运行依赖已就绪"
+    fi
+}
+
+# ---------- HTTP 入口 ----------
+# 有 curl 用 curl，没有则退回 wget：两种工具的参数差异在本层屏蔽，
+# 上层只描述"要什么"，不关心"用什么"。
+# curl / wget 都不自动安装——用户能把脚本取回来，说明至少有一个；
+# 两个都没有时由 require_downloader 提前中止并给出安装命令。
+# 有 curl 时走 curl 分支，保留原有的重试与超时策略。
+
+# 取回内容写到标准输出：$1=URL $2=连接超时 $3=总超时
+http_get() {
+    if have curl; then
+        curl -fsSL --connect-timeout "$2" --max-time "$3" "$1" 2>/dev/null
+    else
+        wget -qO- --timeout="$3" -t 1 "$1" 2>/dev/null
+    fi
+}
+
+# 下载到文件：$1=URL $2=输出文件 $3=总超时
+http_download() {
+    if have curl; then
+        curl -fL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time "$3" \
+            -sS -o "$2" "$1"
+    else
+        wget -q --tries=3 --timeout="$3" -O "$2" "$1"
+    fi
+}
+
+# 探测可达性：完整请求但丢弃响应体。
+# 不用 HEAD，是因为部分服务器不支持 HEAD 会直接返回错误，反而误判为不可达。
+http_probe() { # $1=URL $2=总超时
+    if have curl; then
+        curl -fsS -o /dev/null --connect-timeout 3 --max-time "$2" "$1" 2>/dev/null
+    else
+        wget -q -O /dev/null --timeout="$2" -t 1 "$1" 2>/dev/null
+    fi
+}
+
+# HEAD 探测：只取状态码、不取响应体，用于大资产的存在性判断
+http_head() { # $1=URL $2=总超时
+    if have curl; then
+        local code
+        code=$(curl -sSL -I -o /dev/null -w '%{http_code}' \
+                   --connect-timeout 5 --max-time "$2" "$1" 2>/dev/null || true)
+        [[ "$code" == "200" || "$code" == "206" ]]
+    else
+        wget -q --spider --timeout="$2" -t 1 "$1" 2>/dev/null
+    fi
+}
+
+# 取前 N 字节并报告实际大小：用于测速，以及大资产存在性的兜底判断
+http_range_size() { # $1=URL $2=字节数 $3=总超时
+    local tmp n last
+    last=$(( $2 - 1 ))
+    tmp=$(mktemp 2>/dev/null) || { printf '0'; return 0; }
+    if have curl; then
+        curl -fsSL --connect-timeout 4 --max-time "$3" --range "0-${last}" \
+            -o "$tmp" "$1" 2>/dev/null || true
+    else
+        wget -q --timeout="$3" -t 1 --header="Range: bytes=0-${last}" \
+            -O "$tmp" "$1" 2>/dev/null || true
+    fi
+    n=$(wc -c <"$tmp" 2>/dev/null) || n=0
+    rm -f -- "$tmp"
+    printf '%s' "${n// /}"
+}
+
+# 读取重定向目标地址：正式版版本号的兜底获取方式
+# wget 的响应头行首有两个空格，且重定时会附 " [following]" 后缀，都要剥掉
+http_redirect() { # $1=URL $2=总超时
+    if have curl; then
+        curl -sSI -o /dev/null -w '%{redirect_url}' \
+            --connect-timeout 8 --max-time "$2" "$1" 2>/dev/null || true
+    else
+        local loc
+        loc=$(wget --max-redirect=0 --server-response --spider "$1" 2>&1 \
+                | sed -n 's/^[[:space:]]*[Ll]ocation: *//p' | tr -d '\r' || true)
+        printf '%s' "${loc%%[[:space:]]*}"
     fi
 }
 
 # ---------- 网络探测 ----------
 probe_url() {
-    curl -fsS -o /dev/null --connect-timeout 3 --max-time 8 "$1" 2>/dev/null
+    http_probe "$1" 8
 }
 
 # 探测直连是否可用，据此决定优先走直连还是镜像
@@ -402,16 +500,21 @@ resolve_url() { # $1=url $2=探测函数
 }
 
 # 实测下载速度（KB/s），返回 0 表示不可用
-# 用 --range 限取 1MB、--max-time 4 兜底，避免为测速拉完整文件
+# curl 分支用 --range 限取 1MB 并直接读取传输耗时；wget 不汇报耗时，
+# 改用 1 秒限时代理：取到的字节数即约等于 KB/s。
 measure_speed() { # $1=url
-    local url="$1" res size time
-    res=$(curl -fsSL --connect-timeout 4 --max-time 4 --range 0-1048575 \
-              -o /dev/null -w '%{size_download} %{time_total}' "$url" 2>/dev/null || true)
-    [[ -n "$res" ]] || { printf '0'; return 0; }
-    size=${res%% *}
-    time=${res##* }
-    awk -v s="${size:-0}" -v t="${time:-0}" \
-        'BEGIN { if (t + 0 <= 0) { print 0; exit } printf "%d", (s + 0) / 1024 / t }'
+    local url="$1" res got
+    if have curl; then
+        res=$(curl -fsSL --connect-timeout 4 --max-time 4 --range 0-1048575 \
+                  -o /dev/null -w '%{size_download} %{time_total}' "$url" 2>/dev/null || true)
+        [[ -n "$res" ]] || { printf '0'; return 0; }
+        awk -v s="${res%% *}" -v t="${res##* }" \
+            'BEGIN { if (t + 0 <= 0) { print 0; exit } printf "%d", (s + 0) / 1024 / t }'
+        return 0
+    fi
+    got=$(http_range_size "$url" 1048576 1)
+    [[ "$got" =~ ^[0-9]+$ ]] || got=0
+    printf '%d' "$(( got / 1024 ))"
 }
 
 # 按实测速度选源：直连够快就走直连，否则与镜像比速度取最快
@@ -457,10 +560,7 @@ pick_fastest_source() { # $1=样本 URL（建议传真实待下载文件）
 # 单次下载尝试，成功且非空才算通过
 fetch_to() { # $1=url $2=输出文件
     local url="$1" out="$2"
-    if ! curl -fL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 900 \
-              -sS -o "$out" "$url"; then
-        return 1
-    fi
+    http_download "$url" "$out" 900 || return 1
     [[ -s "$out" ]]
 }
 
@@ -592,7 +692,7 @@ check_ip_forward() {
         key="${pair%%=*}"
         val="${pair##*=}"
         if [[ "$(sysctl_get "$key")" == "$val" ]]; then
-            warn "${key} 已开启，跳过运行时设置"
+            info "${key} 已开启"
         elif ! sysctl -w "${key}=${val}" >/dev/null 2>&1; then
             warn "设置 ${key} 失败（系统可能不支持 IPv6），已跳过"
             continue
@@ -712,7 +812,7 @@ fetch_alpha_version() { # --fail + 格式校验
     if ! resolved=$(resolve_url "$MIHOMO_VERSION_URL"); then
         return 1
     fi
-    v=$(curl -fsSL --connect-timeout 10 --max-time 30 "$resolved") || return 1
+    v=$(http_get "$resolved" 10 30) || return 1
     v=$(printf '%s' "$v" | tr -d '[:space:]')
     if ! valid_version "$v"; then
         err "获取到的版本号格式异常：${v:-<空>}"
@@ -728,7 +828,7 @@ fetch_alpha_version() { # --fail + 格式校验
 fetch_latest_version() { # 校验 null 与空值
     local v raw resolved tag m
     if resolved=$(resolve_url "$MIHOMO_API" 2>/dev/null); then
-        raw=$(curl -fsSL --connect-timeout 10 --max-time 30 "$resolved" 2>/dev/null || true)
+        raw=$(http_get "$resolved" 10 30 2>/dev/null || true)
         v=$(printf '%s' "$raw" | jq -r '.tag_name // empty' 2>/dev/null || true)
         v=${v#v}
         if [[ -n "$v" && "$v" != "null" ]] && valid_version "$v"; then
@@ -738,14 +838,10 @@ fetch_latest_version() { # 校验 null 与空值
     fi
 
     info "API 不可用，改用 releases/latest 重定向获取版本号..."
-    tag=$(curl -sSI -o /dev/null -w '%{redirect_url}' \
-              --connect-timeout 8 --max-time 20 \
-              "https://github.com/MetaCubeX/mihomo/releases/latest" 2>/dev/null || true)
+    tag=$(http_redirect "https://github.com/MetaCubeX/mihomo/releases/latest" 20)
     if [[ -z "$tag" ]]; then
         for m in "${MIRRORS[@]}"; do
-            tag=$(curl -sSI -o /dev/null -w '%{redirect_url}' \
-                      --connect-timeout 8 --max-time 20 \
-                      "${m}/https://github.com/MetaCubeX/mihomo/releases/latest" 2>/dev/null || true)
+            tag=$(http_redirect "${m}/https://github.com/MetaCubeX/mihomo/releases/latest" 20)
             [[ -n "$tag" ]] && break
         done
     fi
@@ -833,11 +929,11 @@ verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd6
         sums_url="${MIHOMO_RELEASE}/v${version}/checksums.txt"
     fi
 
-    sums=$(curl -fsSL --connect-timeout 8 --max-time 30 "$sums_url" 2>/dev/null || true)
+    sums=$(http_get "$sums_url" 8 30 2>/dev/null || true)
     if [[ -z "$sums" ]]; then
         local resolved
         if resolved=$(resolve_url "$sums_url" 2>/dev/null); then
-            sums=$(curl -fsSL --connect-timeout 8 --max-time 30 "$resolved" 2>/dev/null || true)
+            sums=$(http_get "$resolved" 8 30 2>/dev/null || true)
         fi
     fi
     if [[ -z "$sums" ]]; then
@@ -1026,6 +1122,7 @@ install_service() {
         return 1
     fi
 
+    ok "系统服务已安装：${dest}"
     service_enable || warn "设置开机自启失败"
 }
 
@@ -1121,7 +1218,7 @@ count_providers() { # $1=文件，缺省为当前配置
 read_subscription() { # $1=序号
     local idx="$1" url name
     while true; do
-        read_input url "${green}请输入第 ${idx} 个机场的订阅链接: ${reset}"
+        read_input url "${cyan}请输入第 ${idx} 个机场的订阅链接: ${reset}"
         if [[ -z "$url" ]]; then
             warn "订阅链接不能为空"
             continue
@@ -1132,7 +1229,7 @@ read_subscription() { # $1=序号
         fi
         break
     done
-    read_input name "${blue}请输入机场名称（留空使用默认名）: ${reset}"
+    read_input name "${cyan}请输入机场名称（留空使用默认名）: ${reset}"
     [[ -z "$name" ]] && name="机场${idx}"
 
     printf '  provider_%02d:\n' "$idx"
@@ -1303,7 +1400,7 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
                 sub(/\r$/, ""); print
             }
         ' "$src" >"$dst"
-        warn "配置中缺少 proxy-providers 段，已按 # 机场配置 标记补全"
+        # 默认配置本就没有 proxy-providers 段，走标记分支是正常路径，不提示
     else
         awk -v bf="$block_file" '
             { sub(/\r$/, ""); print }
@@ -1390,9 +1487,10 @@ ask_secret() {
     fi
 }
 
-# 未启用密钥时的统一警告，与 mihomo.sh 保持一致
+# 未启用密钥时的统一警告，安装、重置、禁用三处共用
 warn_secret_disabled() {
-    warn "⚠ 面板未启用密钥：external-controller 监听 0.0.0.0:9090，"
+    local host="${ipv4:-127.0.0.1}"
+    warn "⚠ 面板未启用密钥：http://${host}:9090/ui 任何人可访问"
     warn "  任何能访问该端口的人都可以修改你的配置。"
     warn "  建议用防火墙限制来源，或改用 SSH 隧道访问。"
 }
@@ -1567,7 +1665,7 @@ config_mihomo() {
             block+=$(read_subscription "$idx")
             block+=$'\n'
             idx=$((idx + 1))
-            read_input ans "${yellow}是否继续添加订阅？回车继续，输入 n/N 结束: ${reset}"
+            read_input ans "${cyan}是否继续添加订阅？回车继续，输入 n/N 结束: ${reset}"
             [[ "$ans" =~ ^[nN]$ ]] && break
         done
         printf '%s' "$block" >"$block_file"
@@ -1604,12 +1702,12 @@ config_mihomo() {
     hr
     ok "配置完成：${CONFIG_FILE}"
     ok "mihomo 已启动并设置为开机自启"
-    printf '%s\n' "  ${green}面板地址${reset}  $(controller_url)"
+    kv "面板地址" "${green}$(controller_url)${reset}"
     if [[ -n "$controller_secret" ]]; then
-        printf '%s\n' "  ${green}面板密钥${reset}  ${controller_secret}"
+        kv "面板密钥" "${green}${controller_secret}${reset}"
         printf '%s\n' "  ${yellow}面板已开启鉴权，首次访问需填写该密钥${reset}"
     else
-        printf '%s\n' "  ${yellow}面板密钥  未启用（面板无鉴权）${reset}"
+        kv "面板密钥" "${yellow}未启用（面板无鉴权）${reset}"
     fi
     printf '%s\n' "  ${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
     hr
@@ -1675,13 +1773,13 @@ install_default_config_only() {
     printf '\n'
     hr
     ok "已使用默认配置启动（尚未添加机场订阅）"
-    printf '%s\n' "  ${green}面板地址${reset}  $(controller_url)"
+    kv "面板地址" "${green}$(controller_url)${reset}"
     if [[ -n "$controller_secret" ]]; then
-        printf '%s\n' "  ${green}面板密钥${reset}  ${controller_secret}"
+        kv "面板密钥" "${green}${controller_secret}${reset}"
     else
-        printf '%s\n' "  ${yellow}面板密钥  未启用（面板无鉴权）${reset}"
+        kv "面板密钥" "${yellow}未启用（面板无鉴权）${reset}"
     fi
-    printf '%s\n' "  ${blue}下一步${reset}    执行 ${green}mihomo${reset} → 配置管理 → 添加机场订阅"
+    kv "下一步" "执行 ${green}mihomo${reset} → 配置管理 → 添加机场订阅"
     hr
     return 0
 }
@@ -1695,7 +1793,7 @@ prepare_dirs() {
         if ! is_interactive; then
             info "非交互环境，继续覆盖安装（现有机场订阅将保留）"
         else
-            read_input ans "${yellow}继续将覆盖安装（订阅将保留，配置会先备份），是否继续？(y/N): ${reset}"
+            read_input ans "${cyan}继续将覆盖安装（订阅将保留，配置会先备份），是否继续？(y/N): ${reset}"
             case "$ans" in
                 [Yy]*) ;;
                 *) info "已取消安装"; exit 0 ;;
@@ -1717,10 +1815,8 @@ prepare_dirs() {
 install_mihomo() {
     step "检测系统环境"
     detect_distro
-    ok "系统：${distro}    包管理器：${pkg_mgr}    init：${init_sys}"
-
-    step "安装基础工具"
-    ensure_bootstrap_tools
+    require_downloader
+    ok "系统: ${distro}    包管理器: ${pkg_mgr}    init: ${init_sys}"
 
     step "检测网络连通性"
     check_network
@@ -1780,9 +1876,23 @@ install_mihomo() {
     printf '\n'
     hr
     ok "安装完成"
-    printf '%s\n' "  ${blue}安装目录${reset}  ${ROOT_DIR}"
-    printf '%s\n' "  ${blue}日志文件${reset}  ${LOG_FILE}"
-    printf '%s\n' "  ${blue}管理菜单${reset}  输入 ${green}mihomo${reset}"
+    kv "安装目录" "$ROOT_DIR"
+    kv "日志文件" "$LOG_FILE"
+    kv "面板地址" "${green}$(controller_url)${reset}"
+    if [[ -n "$controller_secret" ]]; then
+        kv "面板密钥" "${green}${controller_secret}${reset}"
+    else
+        kv "面板密钥" "${yellow}未启用（面板无鉴权）${reset}"
+    fi
+    hr
+    printf '%s\n' "${cyan}  常用命令${reset}"
+    cmd_row "mihomo"          "进入交互菜单"
+    cmd_row "mihomo status"   "查看运行状态与面板地址"
+    cmd_row "mihomo config"   "配置管理（机场订阅 / 面板密钥）"
+    cmd_row "mihomo update"   "更新 mihomo 内核"
+    cmd_row "mihomo switch"   "切换正式版 / 测试版"
+    cmd_row "mihomo logs"     "查看实时日志"
+    cmd_row "mihomo help"     "查看全部命令"
     hr
 }
 
@@ -1790,6 +1900,23 @@ install_mihomo() {
 usage() {
     cat <<EOF
 mihomo 一键安装脚本 v${sh_ver}
+
+安装方式（任选其一，curl 与 wget 都可以，有其中一个即可）:
+
+  curl:
+    curl -fsSL -o install.sh ${REPO_RAW}/Script/mihomo_beta/install.sh
+    bash install.sh
+
+  wget:
+    wget -qO install.sh ${REPO_RAW}/Script/mihomo_beta/install.sh
+    bash install.sh
+
+  国内网络慢可换 jsDelivr CDN:
+    curl -fsSL -o install.sh https://cdn.jsdelivr.net/gh/Abcd789JK/Tools@main/Script/mihomo_beta/install.sh
+    bash install.sh
+
+  也可以直接管道执行（非交互，全部取默认值）:
+    curl -fsSL ${REPO_RAW}/Script/mihomo_beta/install.sh | bash
 
 用法: bash install.sh [选项]
 
