@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-24 10:34:12
+# date   : 2026-10-24 10:42:29
 # author : ChatGPT
 # ver    : 1.7.7
 # sync   : 与 mihomo.sh 共用 61 个同名函数，改动需同步两份
@@ -948,21 +948,15 @@ verify_binary() {
     fi
 }
 
-# 从 GitHub Release API 取资产的官方 SHA256（asset.digest，形如 "sha256:..."）。
-# 上游并未发布 checksums.txt，这是当前唯一权威的校验值来源，且与二进制同源。
+# 从 GitHub Release API 取正式版资产的官方 SHA256（asset.digest，形如 "sha256:..."）。
+# 上游正式版并未发布 checksums.txt，这是当前唯一权威的校验值来源，且与二进制同源。
+# 仅用于正式版；测试版仍走 Prerelease-Alpha/checksums.txt。
 # 输出小写十六进制摘要；jq 缺失、API 不可达、字段为空时输出空串。
 fetch_asset_digest() { # $1=资产名（如 mihomo-linux-amd64-compatible-v1.19.33.gz）
-    local name="$1" tag url resolved raw d
+    local name="$1" resolved raw d
     command_exists jq || return 0
 
-    if [[ "$channel" == "alpha" ]]; then
-        tag="Prerelease-Alpha"
-    else
-        tag="v${version}"
-    fi
-    url="${MIHOMO_API_TAGS}/${tag}"
-
-    resolved=$(resolve_url "$url" 2>/dev/null) || return 0
+    resolved=$(resolve_url "${MIHOMO_API_TAGS}/v${version}" 2>/dev/null) || return 0
     raw=$(http_get "$resolved" 10 30 2>/dev/null || true)
     [[ -n "$raw" ]] || return 0
 
@@ -973,7 +967,9 @@ fetch_asset_digest() { # $1=资产名（如 mihomo-linux-amd64-compatible-v1.19.
     printf '%s' "${d,,}"
 }
 
-# 完整性校验：优先用上游 checksums.txt，取不到时回落到 API 的 asset digest。
+# 完整性校验：两个版本通道各有各的权威来源，互不影响。
+#   正式版 → GitHub API 的 asset.digest（上游未发布 checksums.txt）
+#   测试版 → Prerelease-Alpha/checksums.txt（沿用原方案）
 # 两者都不可用时降级为告警而不阻断安装，避免镜像/限流导致装不上。
 verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd64-compatible-v1.19.32.gz）
     local file="$1" name="$2" sums_url="" sums="" expect="" actual="" tool=""
@@ -990,45 +986,39 @@ verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd6
     fi
 
     if [[ "$channel" == "alpha" ]]; then
+        # 测试版：上游 Prerelease-Alpha 提供 checksums.txt，沿用原方案，不做改动
         sums_url="${MIHOMO_RELEASE}/Prerelease-Alpha/checksums.txt"
+        sums=$(http_get "$sums_url" 8 30 2>/dev/null || true)
+        if [[ -z "$sums" ]]; then
+            local resolved
+            if resolved=$(resolve_url "$sums_url" 2>/dev/null); then
+                sums=$(http_get "$resolved" 8 30 2>/dev/null || true)
+            fi
+        fi
+        # 兼容常见格式：<hash>  <file>、<hash> *<file>、<hash>  ./<file>；
+        # 并去掉行尾 CR（上游校验文件可能是 CRLF，否则 $NF 会带上 \r 导致匹配失败）
+        if [[ -n "$sums" ]]; then
+            expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
+                {
+                    sub(/\r$/, "")
+                    f = $NF
+                    sub(/^\*/, "", f)
+                    sub(/^\.\//, "", f)
+                    if (f == n) { print tolower($1); exit }
+                }
+            ')
+        fi
+        if [[ -z "$expect" ]]; then
+            warn "无法获取 checksums.txt，跳过完整性校验"
+            return 0
+        fi
     else
-        sums_url="${MIHOMO_RELEASE}/v${version}/checksums.txt"
-    fi
-
-    sums=$(http_get "$sums_url" 8 30 2>/dev/null || true)
-    if [[ -z "$sums" ]]; then
-        local resolved
-        if resolved=$(resolve_url "$sums_url" 2>/dev/null); then
-            sums=$(http_get "$resolved" 8 30 2>/dev/null || true)
-        fi
-    fi
-
-    # 兼容常见格式：<hash>  <file>、<hash> *<file>、<hash>  ./<file>；
-    # 并去掉行尾 CR（上游校验文件可能是 CRLF，否则 $NF 会带上 \r 导致匹配失败）
-    if [[ -n "$sums" ]]; then
-        expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
-            {
-                sub(/\r$/, "")
-                f = $NF
-                sub(/^\*/, "", f)
-                sub(/^\.\//, "", f)
-                if (f == n) { print tolower($1); exit }
-            }
-        ')
-    fi
-
-    # 上游未发布 checksums.txt（或其中没有该资产）时，回落到 GitHub Release API
-    # 的 asset.digest——与二进制同源，是当前唯一权威的校验值来源
-    if [[ -z "$expect" ]]; then
+        # 正式版：上游不发布 checksums.txt，直接用 GitHub API 的 asset digest
         expect=$(fetch_asset_digest "$name" 2>/dev/null || true)
-        if [[ -n "$expect" ]]; then
-            info "checksums.txt 不可用，改用 GitHub API 的 asset digest 校验"
+        if [[ -z "$expect" ]]; then
+            warn "无法获取官方校验值（GitHub API 的 asset digest 不可用），已跳过 SHA256 校验"
+            return 0
         fi
-    fi
-
-    if [[ -z "$expect" ]]; then
-        warn "无法获取官方校验值（checksums.txt 与 API digest 均不可用），已跳过 SHA256 校验"
-        return 0
     fi
 
     case "$tool" in

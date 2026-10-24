@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键管理脚本 ----------
 # desc   : 管理 & 面板
-# date   : 2026-10-24 10:34:12
+# date   : 2026-10-24 10:42:29
 # author : ChatGPT
 # ver    : 1.5.6
 # sync   : 与 install.sh 共用 61 个同名函数，改动需同步两份
