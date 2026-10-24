@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键管理脚本 ----------
 # desc   : 管理 & 面板
-# date   : 2026-10-23 21:33:58
+# date   : 2026-10-24 10:14:31
 # author : ChatGPT
 # ver    : 1.5.5
 # sync   : 与 install.sh 共用 61 个同名函数，改动需同步两份
@@ -1804,7 +1804,8 @@ secret_set() { # $1=on|off|reset
             ensure_controller_secret "$tmp" >/dev/null
             bak=$(backup_config) || return 1
             commit_config "$tmp" "$bak" "面板密钥" || return 1
-            ok "面板密钥：${controller_secret}"
+            # 密钥只上屏、不落盘：kv 是纯 printf，ok 会经 log 写入 /var/log/mihomo.log
+            kv "面板密钥" "${green}${controller_secret}${reset}"
             ;;
         off)
             strip_controller_secret "$tmp"
@@ -1899,7 +1900,7 @@ install_mihomo() {
     local old="${ROOT_DIR}.old" tmp
     if [[ -d "$ROOT_DIR" ]]; then
         warn "检测到已存在的安装：${ROOT_DIR}"
-        if ! confirm "重新安装将重建程序目录（原目录暂存为 ${old}），确认？(y/N):" "n"; then
+        if ! confirm "重新安装将重建程序目录（原目录暂存为 ${old}，安装成功后仍保留，需你确认后手动删除），确认？(y/N):" "n"; then
             warn "已取消安装"
             return 0
         fi
@@ -1907,7 +1908,15 @@ install_mihomo() {
         # 服务单元文件不在此处删除：若后续下载或校验安装脚本失败，
         # 提前删除会让机器重启后彻底失去自启；由 install.sh 覆盖写入即可。
         service_do stop >/dev/null 2>&1 || true
-        rm -rf -- "$old"
+        # 上次重装保留的旧目录不静默删除：里面可能有用户尚未取回的订阅
+        if [[ -d "$old" ]]; then
+            warn "检测到上次保留的旧安装目录：${old}"
+            if ! confirm "删除该目录以继续？(y/N):" "n"; then
+                err "已取消：请先取回 ${old}/config.yaml 或手动删除后重试"
+                return 1
+            fi
+            rm -rf -- "$old" || { err "无法删除 ${old}，已取消"; return 1; }
+        fi
         if ! mv -f -- "$ROOT_DIR" "$old"; then
             err "无法暂存旧安装目录，已取消"
             return 1
@@ -1931,8 +1940,12 @@ install_mihomo() {
     fi
 
     if bash "$tmp"; then
-        rm -rf -- "$old"
         rm -f -- "$tmp"
+        # 旧目录保留：其中的 config.yaml 可能含用户尚未取回的订阅，交由用户确认后删除
+        if [[ -d "$old" ]]; then
+            info "旧安装目录已保留：${old}"
+            info "确认新版本运行正常后，可手动删除：rm -rf -- ${old}"
+        fi
         # 管理脚本可能已被覆盖，重新加载以避免继续执行旧文件残留
         if [[ -x "$SHELL_FILE" ]]; then
             ok "安装完成，重新加载管理脚本..."
@@ -2223,7 +2236,7 @@ uninstall_mihomo() {
     if [[ -n "$ROOT_DIR" && "$ROOT_DIR" != "/" ]]; then
         rm -rf -- "$ROOT_DIR" || failures=$((failures + 1))
     fi
-    # 安装失败时暂存的旧目录，不清会永久残留
+    # 重装时暂存的旧目录（成功安装后也会保留，可能含用户旧配置），随卸载一并清除
     if [[ -d "$old" ]]; then
         rm -rf -- "$old" || failures=$((failures + 1))
         info "已移除暂存目录：${old}"
@@ -2290,6 +2303,8 @@ update_shell() {
     ok "更新完成，当前版本：${newver}"
     info "3 秒后重新加载新脚本..."
     sleep 3
+    # exec 替换进程镜像，不会再执行 EXIT trap，TMP_FILES 里的 $tmp 必须在这里删掉
+    rm -f -- "$tmp" 2>/dev/null || true
     exec "$SHELL_FILE"
 }
 

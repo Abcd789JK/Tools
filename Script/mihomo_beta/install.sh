@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-23 21:33:58
+# date   : 2026-10-24 10:14:31
 # author : ChatGPT
-# ver    : 1.7.5
+# ver    : 1.7.6
 # sync   : 与 mihomo.sh 共用 61 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -25,7 +25,7 @@ else
 fi
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.7.5"
+SCRIPT_VERSION="1.7.6"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -70,6 +70,7 @@ url_prefix=""          # 空 = 直连；非空 = 已验证可用的镜像前缀
 controller_secret=""   # 面板密钥，安装时本地生成并写入配置
 SECRET_ENABLED=1       # 是否启用面板密钥：1=启用 0=禁用（由 ask_secret 决定）
 TMP_FILES=()
+SELF_INSTALLER=""      # 本次运行的安装脚本绝对路径，由 resolve_self_path 在 cd 之前填充
 
 # ---------- 日志 ----------
 # 日志：2>/dev/null 必须写在 >> 之前，否则重定向失败的错误会漏到终端
@@ -162,6 +163,50 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 # 是否处于交互终端：curl | bash 等管道场景下为假，
 # 各交互点据此取默认值，避免 read 遇 EOF 直接退出
 is_interactive() { [[ -t 0 ]]; }
+
+# 把 $0 绝对化并缓存到 SELF_INSTALLER。
+# 必须在任何 cd 之前调用：prepare_dirs 会 cd 到 ROOT_DIR，之后相对路径 $0 就失效了
+resolve_self_path() {
+    local p="${0:-}" dir
+    [[ -n "$p" && "$p" != -* ]] || return 0
+    dir=$(cd -- "$(dirname -- "$p")" 2>/dev/null && pwd -P) || return 0
+    [[ -n "$dir" ]] || return 0
+    SELF_INSTALLER="${dir}/$(basename -- "$p")"
+}
+
+# 安装成功后删除本次运行的安装脚本。
+# 任一守卫不满足就跳过——宁可保留也不误删（尤其不能删掉仓库源码或调用者的脚本）
+remove_installer() {
+    local self="$SELF_INSTALLER" name
+    [[ -n "$self" ]] || return 0
+
+    # 必须是普通文件：排除 /dev/fd/63（bash <(...)）、目录、软链
+    [[ -f "$self" && ! -L "$self" ]] || return 0
+
+    # 排除被 source / bash -c 调用时 $0 指向 shell 本身的情况
+    name=$(basename -- "$self")
+    case "$name" in
+        bash|sh|dash|-bash) return 0 ;;
+    esac
+
+    # 内容指纹自证：确认这个文件确实是本安装脚本
+    grep -q 'mihomo 一键安装脚本' "$self" 2>/dev/null || return 0
+    grep -q '^SCRIPT_VERSION=' "$self" 2>/dev/null || return 0
+
+    # 源码目录保护：同目录存在 mihomo.sh 说明是仓库检出，删了会丢源文件
+    if [[ -f "$(dirname -- "$self")/mihomo.sh" ]]; then
+        info "检测到源码目录，保留 ${name}"
+        return 0
+    fi
+
+    # 删除失败不影响安装结果：只提示，不 die、不污染退出码
+    if rm -f -- "$self" 2>/dev/null; then
+        info "已删除安装脚本：${self}"
+    else
+        warn "安装脚本未能自动删除（权限或只读文件系统），可手动执行：rm -f ${self}"
+    fi
+    return 0
+}
 
 # 原子替换文件：先写同目录临时文件再 mv，避免截断正在运行的脚本
 atomic_install() { # $1=源 $2=目标 $3=权限
@@ -1889,6 +1934,10 @@ install_mihomo() {
     cmd_row "mihomo logs"     "查看实时日志"
     cmd_row "mihomo help"     "查看全部命令"
     hr
+
+    # 只在成功横幅打印完之后删除自身：失败路径要保留脚本以便重试，
+    # 且不能靠退出码判定——取消安装 / --help / Ctrl+D 也都是 exit 0
+    remove_installer
 }
 
 # 输出命令行帮助
@@ -1913,6 +1962,8 @@ mihomo 一键安装脚本 v${SCRIPT_VERSION}
   也可以直接管道执行（非交互，全部取默认值）:
     curl -fsSL ${REPO_RAW}/Script/mihomo_beta/install.sh | bash
 
+  安装成功后会删除本次运行的 install.sh（源码目录内运行、或管道执行时不会删）。
+
 用法: bash install.sh [选项]
 
 选项:
@@ -1923,6 +1974,7 @@ mihomo 一键安装脚本 v${SCRIPT_VERSION}
 
 说明:
   不指定 --channel 时会在安装前询问，默认正式版。
+  安装成功后自动删除本次运行的 install.sh，避免残留；安装失败时保留以便重试。
   支持 apt / dnf(yum) / pacman / apk / zypper 系发行版：
     Debian、Ubuntu 及其衍生版（Mint、Kali、Armbian 等）
     Fedora、RHEL、CentOS、Rocky、AlmaLinux、Amazon Linux
@@ -1995,6 +2047,7 @@ choose_channel() {
 # 脚本入口
 main() {
     parse_args "$@"
+    resolve_self_path     # 必须在任何 cd 之前解析 $0，供安装成功后自删除使用
     require_root          # 全局守卫：除帮助与版本外，一律要求 root
     print_header
     choose_channel        # 未指定 --channel 时交互询问，默认正式版

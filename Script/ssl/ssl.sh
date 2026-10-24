@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ---------- ssl.sh ----------
 # desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
-# date   : 2026-10-23 21:33:58
+# date   : 2026-10-24 10:14:31
 # author : ChatGPT
-# ver    : 1.3.1
+# ver    : 1.3.2
 #
 # 适用于未开放 80/443 端口的家庭服务器，支持通配符证书。
 # 支持 Debian/Ubuntu、Fedora/RHEL/CentOS、Arch、Alpine、openSUSE 等主流发行版，需 root 运行。
@@ -15,11 +15,15 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 
 # ---------- 安全选项 ----------
-# -e 命令失败即退出；-u 引用未定义变量即退出；pipefail 管道任一命令失败即整体失败
-set -euo pipefail
+# -e 命令失败即退出；-u 引用未定义变量即退出；pipefail 管道任一命令失败即整体失败；
+# -E 让 ERR trap 继承进函数与子 shell，否则 err_report 永远不会触发
+set -Eeuo pipefail
+
+# 私钥必须在创建瞬间就是 600：--install-cert 落盘后再 chmod 存在 644 的窗口期
+umask 077
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.3.1"            # 脚本版本
+SCRIPT_VERSION="1.3.2"            # 脚本版本
 readonly ACME_BIN="/root/.acme.sh/acme.sh" # acme.sh 可执行文件路径
 readonly SSL_DIR="/root/ssl"               # 证书输出目录
 readonly DEFAULT_CA="letsencrypt"          # 默认证书颁发机构
@@ -244,13 +248,16 @@ get_cloudflare_info() {
     # 裸域名格式：example.com / a.example.com，不接受通配符与协议前缀
     re='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$'
 
+    # 非交互环境（管道 / cron / </dev/null）下 read 必然 EOF；提前给出可执行的提示
+    [[ -t 0 ]] || die "本脚本需要交互式终端输入，请直接运行：bash $0"
+
     printf '%s' "${green}请输入 Cloudflare API Token (输入内容不显示): ${reset}"
-    read -rs cf_token
+    read -rs cf_token || { printf '\n'; die "读取 API Token 失败（输入被中断）"; }
     printf '\n'
     printf '%s' "${green}请输入 Cloudflare Account ID: ${reset}"
-    read -r cf_account_id
+    read -r cf_account_id || die "读取 Account ID 失败（输入被中断）"
     printf '%s' "${green}请输入要申请证书的域名 (如 example.com): ${reset}"
-    read -r domain
+    read -r domain || die "读取域名失败（输入被中断）"
 
     # 输入校验：三项均不能为空
     if [[ -z "$cf_token" || -z "$cf_account_id" || -z "$domain" ]]; then
@@ -272,15 +279,29 @@ get_cloudflare_info() {
 # 申请证书并安装到 SSL_DIR，同时注册续期时的自动复制
 issue_cert() {
     local -a d_args=()
+    local wildcard=0 ans=""
 
-    # 二级域名：申请主域名 + 通配符域名；三级及以上域名：仅申请该域名
+    # 域名分级：仅凭点的个数无法区分 sub.example.com（子域）与 example.co.uk（可注册域），
+    # 后者同样该签通配符。两级域名沿用原行为直接签通配符；三级及以上不再猜测，改为询问。
     if [[ "$domain" == *.*.* ]]; then
-        d_args+=("-d" "$domain")
+        printf '%s' "${green}是否为 ${domain} 一并申请通配符证书 *.${domain}？(y/N): ${reset}"
+        read -r ans || die "读取输入失败（输入被中断）"
+        if [[ "$ans" =~ ^[yY] ]]; then
+            wildcard=1
+        fi
     else
-        d_args+=("-d" "$domain" "-d" "*.$domain")
+        wildcard=1
     fi
 
-    mkdir -p "$SSL_DIR"
+    if (( wildcard )); then
+        d_args+=("-d" "$domain" "-d" "*.${domain}")
+    else
+        d_args+=("-d" "$domain")
+    fi
+
+    # 目录先收紧到 700：umask 只对新建目录生效，已存在的目录需显式 chmod
+    mkdir -p -- "$SSL_DIR"
+    chmod 700 -- "$SSL_DIR"
 
     info "正在申请证书 (DNS-01 验证，请稍候)..."
     "$ACME_BIN" --issue --dns dns_cf "${d_args[@]}"
