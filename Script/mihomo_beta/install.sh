@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-24 10:42:29
+# date   : 2026-10-24 11:01:48
 # author : ChatGPT
-# ver    : 1.7.7
+# ver    : 1.5.7
 # sync   : 与 mihomo.sh 共用 61 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -25,7 +25,7 @@ else
 fi
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.7.7"
+SCRIPT_VERSION="1.5.7"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"

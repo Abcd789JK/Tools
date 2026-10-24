@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ---------- ssl.sh ----------
 # desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
-# date   : 2026-10-24 10:14:31
+# date   : 2026-10-24 11:01:48
 # author : ChatGPT
 # ver    : 1.3.2
 #

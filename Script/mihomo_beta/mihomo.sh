@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键管理脚本 ----------
 # desc   : 管理 & 面板
-# date   : 2026-10-24 10:42:29
+# date   : 2026-10-24 11:01:48
 # author : ChatGPT
-# ver    : 1.5.6
+# ver    : 1.5.7
 # sync   : 与 install.sh 共用 61 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -41,7 +41,7 @@ readonly HR_EQ="========================================"
 kv() { printf '  %s%s%s  %s\n' "$cyan" "$1" "$reset" "$2"; }
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.5.6"
+SCRIPT_VERSION="1.5.7"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -2233,8 +2233,12 @@ uninstall_mihomo() {
     rm -f -- "$LOGCLEAN_SERVICE" "$LOGCLEAN_TIMER" "$LOGCLEAN_PERIODIC" || true
     rm -f -- "$SERVICE_SYSTEMD" || failures=$((failures + 1))
     rm -f -- "$SERVICE_OPENRC" || failures=$((failures + 1))
-    if [[ -n "$ROOT_DIR" && "$ROOT_DIR" != "/" ]]; then
+    # 防误删护栏：只删除至少两层的绝对路径。ROOT_DIR 目前是常量 /root/mihomo，
+    # 若将来改为可配置，这道判断能挡住 /、/root、/usr 这类顶层目录
+    if [[ "$ROOT_DIR" == /*/* ]]; then
         rm -rf -- "$ROOT_DIR" || failures=$((failures + 1))
+    else
+        err "拒绝删除危险路径：${ROOT_DIR}"
     fi
     # 重装时暂存的旧目录（成功安装后也会保留，可能含用户旧配置），随卸载一并清除
     if [[ -d "$old" ]]; then
