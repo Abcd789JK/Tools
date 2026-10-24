@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键管理脚本 ----------
 # desc   : 管理 & 面板
-# date   : 2026-10-24 10:14:31
+# date   : 2026-10-24 10:34:12
 # author : ChatGPT
-# ver    : 1.5.5
+# ver    : 1.5.6
 # sync   : 与 install.sh 共用 61 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -41,7 +41,7 @@ readonly HR_EQ="========================================"
 kv() { printf '  %s%s%s  %s\n' "$cyan" "$1" "$reset" "$2"; }
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.5.5"
+SCRIPT_VERSION="1.5.6"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -863,8 +863,8 @@ show_status() {
         chan=$(channel_name "$(detect_channel "$software_version")")
         kv "版本通道" "${green}${chan}${reset}"
     fi
-    kv "本机 IPv4" "${green}${ipv4}${reset}"
-    kv "本机 IPv6" "${green}${ipv6:-无}${reset}"
+    kv "本机IPv4" "${green}${ipv4}${reset}"
+    kv "本机IPv6" "${green}${ipv6:-无}${reset}"
     if [[ -f "$CONFIG_FILE" ]]; then
         kv "面板地址" "${green}$(panel_url)${reset}"
     else

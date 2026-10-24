@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ---------- mihomo 一键安装脚本 ----------
 # desc   : 安装 & 配置
-# date   : 2026-10-24 10:14:31
+# date   : 2026-10-24 10:34:12
 # author : ChatGPT
-# ver    : 1.7.6
+# ver    : 1.7.7
 # sync   : 与 mihomo.sh 共用 61 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
@@ -25,7 +25,7 @@ else
 fi
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.7.6"
+SCRIPT_VERSION="1.7.7"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -41,6 +41,7 @@ readonly REPO_RAW="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/
 readonly MIHOMO_RELEASE="https://github.com/MetaCubeX/mihomo/releases/download"
 readonly MIHOMO_VERSION_URL="${MIHOMO_RELEASE}/Prerelease-Alpha/version.txt"
 readonly MIHOMO_API="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+readonly MIHOMO_API_TAGS="https://api.github.com/repos/MetaCubeX/mihomo/releases/tags"
 readonly CONFIG_URL="${REPO_RAW}/Config/mihomo.yaml"
 readonly SERVICE_URL_SYSTEMD="${REPO_RAW}/Service/mihomo.service"
 readonly SERVICE_URL_OPENRC="${REPO_RAW}/Service/mihomo.openrc"
@@ -947,10 +948,35 @@ verify_binary() {
     fi
 }
 
-# 完整性校验：上游 Release 附带 checksums.txt，可用 SHA256 比对，防御镜像投毒。
-# 镜像常不缓存该文件，取不到时降级为告警而不阻断安装，避免误伤。
+# 从 GitHub Release API 取资产的官方 SHA256（asset.digest，形如 "sha256:..."）。
+# 上游并未发布 checksums.txt，这是当前唯一权威的校验值来源，且与二进制同源。
+# 输出小写十六进制摘要；jq 缺失、API 不可达、字段为空时输出空串。
+fetch_asset_digest() { # $1=资产名（如 mihomo-linux-amd64-compatible-v1.19.33.gz）
+    local name="$1" tag url resolved raw d
+    command_exists jq || return 0
+
+    if [[ "$channel" == "alpha" ]]; then
+        tag="Prerelease-Alpha"
+    else
+        tag="v${version}"
+    fi
+    url="${MIHOMO_API_TAGS}/${tag}"
+
+    resolved=$(resolve_url "$url" 2>/dev/null) || return 0
+    raw=$(http_get "$resolved" 10 30 2>/dev/null || true)
+    [[ -n "$raw" ]] || return 0
+
+    d=$(printf '%s' "$raw" | jq -r --arg n "$name" \
+        '.assets[]? | select(.name == $n) | .digest // empty' 2>/dev/null | head -n1 || true)
+    d="${d#sha256:}"
+    [[ "$d" =~ ^[0-9a-fA-F]{64}$ ]] || return 0
+    printf '%s' "${d,,}"
+}
+
+# 完整性校验：优先用上游 checksums.txt，取不到时回落到 API 的 asset digest。
+# 两者都不可用时降级为告警而不阻断安装，避免镜像/限流导致装不上。
 verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd64-compatible-v1.19.32.gz）
-    local file="$1" name="$2" sums_url sums expect actual tool=""
+    local file="$1" name="$2" sums_url="" sums="" expect="" actual="" tool=""
 
     if command_exists sha256sum; then
         tool="sha256sum"
@@ -976,24 +1002,32 @@ verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd6
             sums=$(http_get "$resolved" 8 30 2>/dev/null || true)
         fi
     fi
-    if [[ -z "$sums" ]]; then
-        warn "无法获取 checksums.txt，跳过完整性校验"
-        return 0
-    fi
 
     # 兼容常见格式：<hash>  <file>、<hash> *<file>、<hash>  ./<file>；
     # 并去掉行尾 CR（上游校验文件可能是 CRLF，否则 $NF 会带上 \r 导致匹配失败）
-    expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
-        {
-            sub(/\r$/, "")
-            f = $NF
-            sub(/^\*/, "", f)
-            sub(/^\.\//, "", f)
-            if (f == n) { print tolower($1); exit }
-        }
-    ')
+    if [[ -n "$sums" ]]; then
+        expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
+            {
+                sub(/\r$/, "")
+                f = $NF
+                sub(/^\*/, "", f)
+                sub(/^\.\//, "", f)
+                if (f == n) { print tolower($1); exit }
+            }
+        ')
+    fi
+
+    # 上游未发布 checksums.txt（或其中没有该资产）时，回落到 GitHub Release API
+    # 的 asset.digest——与二进制同源，是当前唯一权威的校验值来源
     if [[ -z "$expect" ]]; then
-        warn "校验文件中未包含 ${name}，跳过完整性校验"
+        expect=$(fetch_asset_digest "$name" 2>/dev/null || true)
+        if [[ -n "$expect" ]]; then
+            info "checksums.txt 不可用，改用 GitHub API 的 asset digest 校验"
+        fi
+    fi
+
+    if [[ -z "$expect" ]]; then
+        warn "无法获取官方校验值（checksums.txt 与 API digest 均不可用），已跳过 SHA256 校验"
         return 0
     fi
 
