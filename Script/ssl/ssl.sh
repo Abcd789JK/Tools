@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# ---------- ssl.sh ----------
+
+# ----------------------------------------
+# name   : ssl.sh
 # desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
-# date   : 2026-10-24 11:01:48
+# date   : 2026-10-26 18:51:26
 # author : ChatGPT
-# ver    : 1.3.2
-#
+# ver    : 0.2.3
+# ----------------------------------------
+
 # 适用于未开放 80/443 端口的家庭服务器，支持通配符证书。
 # 支持 Debian/Ubuntu、Fedora/RHEL/CentOS、Arch、Alpine、openSUSE 等主流发行版，需 root 运行。
 
 # 必须用 bash 运行：dash 等 shell 不支持 pipefail / [[ ]] / =~ 等语法
 if [ -z "${BASH_VERSION:-}" ]; then
-    printf '%s\n' $'\033[31m[错误] 请使用 bash 运行本脚本: bash ssl.sh\033[0m' >&2
+    # 此时颜色变量尚未初始化，按 tty 判断临时取色，避免重定向到文件时混入转义符
+    _c=""; _r=""
+    [[ -t 2 ]] && { _c=$'\033[31m'; _r=$'\033[0m'; }
+    printf '%s\n' "${_c}[错误] 请使用 bash 运行本脚本: bash ssl.sh${_r}" >&2
     exit 1
 fi
 
@@ -23,7 +29,7 @@ set -Eeuo pipefail
 umask 077
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.3.2"            # 脚本版本
+SCRIPT_VERSION="0.2.3"            # 脚本版本
 readonly ACME_BIN="/root/.acme.sh/acme.sh" # acme.sh 可执行文件路径
 readonly SSL_DIR="/root/ssl"               # 证书输出目录
 readonly DEFAULT_CA="letsencrypt"          # 默认证书颁发机构
@@ -31,18 +37,48 @@ readonly HR="----------------------------------------"
 readonly HR_EQ="========================================"
 
 # ---------- 颜色 ----------
-# 颜色规范（与 mihomo 脚本保持一致）：边框 blue / 标题 cyan / 成功 green /
-# 警告 yellow / 错误 red / 普通文字默认色。非终端输出（管道、重定向）时自动禁用，
-# 避免日志文件里混入转义符。
-if [[ -t 1 ]]; then
-    readonly red=$'\033[31m'
-    readonly green=$'\033[32m'
-    readonly yellow=$'\033[33m'
-    readonly blue=$'\033[34m'
-    readonly cyan=$'\033[36m'
-    readonly reset=$'\033[0m'
+# 颜色在初始化阶段一次性确定，避免对只读变量重复赋值。
+# 仅在对应输出流连接到终端且 NO_COLOR 为空时启用；颜色只辅助表达状态，
+# 不替代文字标签，机器可读输出与日志文件不会混入转义符。
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    readonly COLOR_RESET=$'\033[0m'
+    readonly COLOR_BLACK=$'\033[0;30m'
+    readonly COLOR_RED=$'\033[0;31m'
+    readonly COLOR_GREEN=$'\033[0;32m'
+    readonly COLOR_YELLOW=$'\033[0;33m'
+    readonly COLOR_BLUE=$'\033[0;34m'
+    readonly COLOR_MAGENTA=$'\033[0;35m'
+    readonly COLOR_CYAN=$'\033[0;36m'
+    readonly COLOR_WHITE=$'\033[0;37m'
+    readonly COLOR_BOLD=$'\033[1m'
 else
-    readonly red='' green='' yellow='' blue='' cyan='' reset=''
+    readonly COLOR_RESET=''
+    readonly COLOR_BLACK=''
+    readonly COLOR_RED=''
+    readonly COLOR_GREEN=''
+    readonly COLOR_YELLOW=''
+    readonly COLOR_BLUE=''
+    readonly COLOR_MAGENTA=''
+    readonly COLOR_CYAN=''
+    readonly COLOR_WHITE=''
+    readonly COLOR_BOLD=''
+fi
+
+# 语义颜色：只表达状态，不改变具体色值
+readonly COLOR_ERROR="$COLOR_RED"
+readonly COLOR_SUCCESS="$COLOR_GREEN"
+readonly COLOR_WARNING="$COLOR_YELLOW"
+readonly COLOR_INFO="$COLOR_CYAN"
+
+# 标准错误单独判断：stderr 重定向到日志时不着色
+if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
+    readonly STDERR_COLOR_ERROR=$'\033[0;31m'
+    readonly STDERR_COLOR_WARNING=$'\033[0;33m'
+    readonly STDERR_COLOR_RESET=$'\033[0m'
+else
+    readonly STDERR_COLOR_ERROR=''
+    readonly STDERR_COLOR_WARNING=''
+    readonly STDERR_COLOR_RESET=''
 fi
 
 # ---------- 全局状态 ----------
@@ -51,26 +87,30 @@ cf_token=""          # Cloudflare API Token
 cf_account_id=""     # Cloudflare Account ID
 distro="unknown"     # 发行版 ID，由 detect_distro 填写
 pkg_mgr=""           # 包管理器：apt / dnf / pacman / apk / zypper / none
-TMP_FILES=()         # 临时文件清单，退出时由 cleanup 统一清理
+tmp_files=()         # 临时文件清单，退出时由 cleanup 统一清理
 
 # ---------- 清理 ----------
 # 脚本退出时清理临时文件（正常退出与异常退出都会触发）
 cleanup() {
-    (( ${#TMP_FILES[@]} )) || return 0
-    rm -f -- "${TMP_FILES[@]}"
+    (( ${#tmp_files[@]} )) || return 0
+    rm -f -- "${tmp_files[@]}"
 }
 trap cleanup EXIT
 
 # ---------- 日志 ----------
 # 统一日志输出：info 信息 / warn 警告 / error 错误（warn 与 error 走 stderr，与 mihomo 一致）
-info()  { printf '%s\n' "${green}[信息] $*${reset}"; }
-warn()  { printf '%s\n' "${yellow}[警告] $*${reset}" >&2; }
-error() { printf '%s\n' "${red}[错误] $*${reset}" >&2; }
+info()  { printf '%s\n' "${COLOR_GREEN}[信息] $*${COLOR_RESET}"; }
+# 输出警告日志（标准错误）
+warn()  { printf '%s\n' "${STDERR_COLOR_WARNING}[警告] $*${STDERR_COLOR_RESET}" >&2; }
+# 输出错误日志（标准错误）
+error() { printf '%s\n' "${STDERR_COLOR_ERROR}[错误] $*${STDERR_COLOR_RESET}" >&2; }
+# 输出错误并退出脚本
 die()   { error "$*"; exit 1; }
 
-# 打印 40 字符分隔线
-hr()   { printf '%s\n' "${blue}${HR}${reset}"; }
-hreq() { printf '%s\n' "${blue}${HR_EQ}${reset}"; }
+# 打印分隔线：hr 单线 / hreq 双线
+hr()   { printf '%s\n' "${COLOR_BLUE}${HR}${COLOR_RESET}"; }
+# 打印等号分隔线
+hreq() { printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"; }
 
 # 脚本异常退出时报告出错行号，便于排查
 err_report() { # $1=出错行号
@@ -82,9 +122,38 @@ trap 'err_report ${LINENO}' ERR
 # 打印脚本横幅：名称、版本与适用场景
 print_banner() {
     hreq
-    printf '%s\n' "${cyan}  Cloudflare DNS 证书申请脚本  v${SCRIPT_VERSION}${reset}"
+    printf '%s\n' "${COLOR_CYAN}  Cloudflare DNS 证书申请脚本  v${SCRIPT_VERSION}${COLOR_RESET}"
     printf '%s\n' "  仅支持 DNS-01 验证，适用于未开放 80/443 端口的家庭服务器"
     hreq
+}
+
+# ---------- 用法 ----------
+# 打印帮助。--help / --version 必须在 check_root 之前处理，
+# 否则非 root 用户连用法都看不到就被权限检查挡掉。
+usage() {
+    cat <<EOF
+用法：bash $(basename -- "$0") [选项]
+
+选项：
+  -v, --version    显示版本
+  -h, --help       显示本帮助
+
+说明：本脚本为全交互式流程，无其他命令行参数；执行后会依次完成
+      环境检查 → 安装依赖 → 安装 acme.sh → 收集 Cloudflare 凭据 → 申请证书。
+      证书输出到 ${SSL_DIR}，由 acme.sh 自动续期。需 root 运行。
+EOF
+}
+
+# 解析命令行参数
+parse_args() {
+    while (( $# > 0 )); do
+        case "$1" in
+            -v|--version) printf '%s\n' "ssl.sh v${SCRIPT_VERSION}"; exit 0 ;;
+            -h|--help)    usage; exit 0 ;;
+            *)            die "未知参数：$1（--help 查看用法）" ;;
+        esac
+        shift
+    done
 }
 
 # ---------- 通用 ----------
@@ -142,7 +211,8 @@ detect_distro() {
 # 安装软件包：按包管理器分流
 pkg_install() {
     case "$pkg_mgr" in
-        apt)    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@" ;;
+        apt)
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@" ;;
         dnf)
             if command_exists dnf; then
                 dnf install -y -q "$@"
@@ -216,7 +286,7 @@ install_acme() {
         # 也不传 --install-online：默认的 git 克隆安装是官方主推方式，不需要任何
         # 参数，从根上避开传参问题（git 已在 install_dependencies 中装好）。
         tmp=$(mktemp /tmp/acme-install.XXXXXX)
-        TMP_FILES+=("$tmp")
+        tmp_files+=("$tmp")
         if ! curl -fsSL -o "$tmp" https://get.acme.sh || [[ ! -s "$tmp" ]]; then
             error "acme.sh 安装脚本下载失败，请检查网络。"
             exit 1
@@ -251,12 +321,12 @@ get_cloudflare_info() {
     # 非交互环境（管道 / cron / </dev/null）下 read 必然 EOF；提前给出可执行的提示
     [[ -t 0 ]] || die "本脚本需要交互式终端输入，请直接运行：bash $0"
 
-    printf '%s' "${green}请输入 Cloudflare API Token (输入内容不显示): ${reset}"
+    printf '%s' "${COLOR_GREEN}请输入 Cloudflare API Token (输入内容不显示): ${COLOR_RESET}"
     read -rs cf_token || { printf '\n'; die "读取 API Token 失败（输入被中断）"; }
     printf '\n'
-    printf '%s' "${green}请输入 Cloudflare Account ID: ${reset}"
+    printf '%s' "${COLOR_GREEN}请输入 Cloudflare Account ID: ${COLOR_RESET}"
     read -r cf_account_id || die "读取 Account ID 失败（输入被中断）"
-    printf '%s' "${green}请输入要申请证书的域名 (如 example.com): ${reset}"
+    printf '%s' "${COLOR_GREEN}请输入要申请证书的域名 (如 example.com): ${COLOR_RESET}"
     read -r domain || die "读取域名失败（输入被中断）"
 
     # 输入校验：三项均不能为空
@@ -284,7 +354,7 @@ issue_cert() {
     # 域名分级：仅凭点的个数无法区分 sub.example.com（子域）与 example.co.uk（可注册域），
     # 后者同样该签通配符。两级域名沿用原行为直接签通配符；三级及以上不再猜测，改为询问。
     if [[ "$domain" == *.*.* ]]; then
-        printf '%s' "${green}是否为 ${domain} 一并申请通配符证书 *.${domain}？(y/N): ${reset}"
+        printf '%s' "${COLOR_GREEN}是否为 ${domain} 一并申请通配符证书 *.${domain}？(y/N): ${COLOR_RESET}"
         read -r ans || die "读取输入失败（输入被中断）"
         if [[ "$ans" =~ ^[yY] ]]; then
             wildcard=1
@@ -318,15 +388,16 @@ issue_cert() {
 
     hr
     info "证书安装完成!"
-    printf '%s\n' "${cyan}私钥: $SSL_DIR/$domain.key${reset}"
-    printf '%s\n' "${cyan}证书: $SSL_DIR/$domain.crt${reset}"
+    printf '%s\n' "${COLOR_CYAN}私钥: $SSL_DIR/$domain.key${COLOR_RESET}"
+    printf '%s\n' "${COLOR_CYAN}证书: $SSL_DIR/$domain.crt${COLOR_RESET}"
     warn "acme.sh 已自动注册续期任务，证书到期前将自动续期并同步以上文件，无需额外操作。"
     hr
 }
 
 # ---------- 主流程 ----------
-# 脚本入口：横幅 → 环境检查 → 装依赖 → 装 acme.sh → 收集输入 → 申请证书
+# 脚本入口：参数解析 → 横幅 → 环境检查 → 装依赖 → 装 acme.sh → 收集输入 → 申请证书
 main() {
+    parse_args "$@"
     print_banner
     check_root
     detect_distro
