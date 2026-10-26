@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# ---------- mihomo 一键管理脚本 ----------
+
+# ----------------------------------------
+# name   : mihomo.sh
 # desc   : 管理 & 面板
-# date   : 2026-10-24 11:01:48
+# date   : 2026-10-26 18:49:15
 # author : ChatGPT
-# ver    : 1.5.7
-# sync   : 与 install.sh 共用 61 个同名函数，改动需同步两份
+# ver    : 1.7.5
+# ----------------------------------------
+
+# 与 install.sh 共用 65 个同名函数，改动需同步两份
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
 # 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
 if [ -z "${BASH_VERSION:-}" ]; then
-    echo "错误：请使用 bash 运行本脚本" >&2
+    printf '%s\n' "错误：请使用 bash 运行本脚本" >&2
     exit 1
 fi
 
@@ -17,11 +21,48 @@ set -euo pipefail
 umask 077
 
 # ---------- 颜色 ----------
-if [[ -t 1 ]]; then
-    red=$'\033[31m'; green=$'\033[32m'; yellow=$'\033[33m'
-    blue=$'\033[34m'; cyan=$'\033[36m'; reset=$'\033[0m'
+# 颜色在初始化阶段一次性确定，避免对只读变量重复赋值。
+# 仅在对应输出流连接到终端且 NO_COLOR 为空时启用；颜色只辅助表达状态，
+# 不替代文字标签，机器可读输出与日志文件不会混入转义符。
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    readonly COLOR_RESET=$'\033[0m'
+    readonly COLOR_BLACK=$'\033[0;30m'
+    readonly COLOR_RED=$'\033[0;31m'
+    readonly COLOR_GREEN=$'\033[0;32m'
+    readonly COLOR_YELLOW=$'\033[0;33m'
+    readonly COLOR_BLUE=$'\033[0;34m'
+    readonly COLOR_MAGENTA=$'\033[0;35m'
+    readonly COLOR_CYAN=$'\033[0;36m'
+    readonly COLOR_WHITE=$'\033[0;37m'
+    readonly COLOR_BOLD=$'\033[1m'
 else
-    red=''; green=''; yellow=''; blue=''; cyan=''; reset=''
+    readonly COLOR_RESET=''
+    readonly COLOR_BLACK=''
+    readonly COLOR_RED=''
+    readonly COLOR_GREEN=''
+    readonly COLOR_YELLOW=''
+    readonly COLOR_BLUE=''
+    readonly COLOR_MAGENTA=''
+    readonly COLOR_CYAN=''
+    readonly COLOR_WHITE=''
+    readonly COLOR_BOLD=''
+fi
+
+# 语义颜色：只表达状态，不改变具体色值
+readonly COLOR_ERROR="$COLOR_RED"
+readonly COLOR_SUCCESS="$COLOR_GREEN"
+readonly COLOR_WARNING="$COLOR_YELLOW"
+readonly COLOR_INFO="$COLOR_CYAN"
+
+# 标准错误单独判断：stderr 重定向到日志时不着色
+if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
+    readonly STDERR_COLOR_ERROR=$'\033[0;31m'
+    readonly STDERR_COLOR_WARNING=$'\033[0;33m'
+    readonly STDERR_COLOR_RESET=$'\033[0m'
+else
+    readonly STDERR_COLOR_ERROR=''
+    readonly STDERR_COLOR_WARNING=''
+    readonly STDERR_COLOR_RESET=''
 fi
 
 # ---------- 输出格式 ----------
@@ -37,11 +78,16 @@ fi
 readonly HR="----------------------------------------"
 readonly HR_EQ="========================================"
 
+# 打印分隔线：hr 单线 / hreq 双线
+hr()   { printf '%s\n' "${COLOR_BLUE}${HR}${COLOR_RESET}"; }
+# 打印等号分隔线
+hreq() { printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"; }
+
 # 打印"标签: 值"行：标签统一青色，值按语义着色（成功绿/警告黄/错误红/默认色）
-kv() { printf '  %s%s%s  %s\n' "$cyan" "$1" "$reset" "$2"; }
+kv() { printf '  %s%s%s  %s\n' "$COLOR_CYAN" "$1" "$COLOR_RESET" "$2"; }
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.5.7"
+SCRIPT_VERSION="1.7.5"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -62,9 +108,11 @@ readonly REPO_RAW="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/
 readonly MIHOMO_RELEASE="https://github.com/MetaCubeX/mihomo/releases/download"
 readonly MIHOMO_VERSION_URL="${MIHOMO_RELEASE}/Prerelease-Alpha/version.txt"
 readonly MIHOMO_API="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+readonly MIHOMO_API_TAGS="https://api.github.com/repos/MetaCubeX/mihomo/releases/tags"
 readonly CONFIG_URL="${REPO_RAW}/Config/mihomo.yaml"
 readonly SHELL_URL="${REPO_RAW}/Script/mihomo_beta/mihomo.sh"
 readonly INSTALL_URL="${REPO_RAW}/Script/mihomo_beta/install.sh"
+readonly WEBUI_URL="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
 
 readonly MIRRORS=("https://gh-proxy.com" "https://github.boki.moe")
 # 探测顺序以 GitHub 自身可达性为准，Google 仅作通用连通性兜底
@@ -88,7 +136,10 @@ use_cdn=false
 url_prefix=""
 controller_secret=""   # 面板密钥，重置配置时重新生成
 SECRET_ENABLED=1       # 是否启用面板密钥：1=启用 0=禁用（由 ask_secret 决定）
-TMP_FILES=()
+provider_total=0       # select_provider 统计到的订阅总数
+provider_num=""        # select_provider 选中的订阅编号
+provider_target=""     # select_provider 选中的 provider 键名（如 provider_02:）
+tmp_files=()
 
 # ---------- 日志 ----------
 # 日志：2>/dev/null 必须写在 >> 之前，否则重定向失败的错误会漏到终端
@@ -113,21 +164,30 @@ log_trim() { # $1=日志文件；返回 0=已截断 1=未超限或文件不存�
     return 0
 }
 
+# ---------- 日志 ----------
+# 统一日志输出：info/ok/warn/err 同时落盘，die 只报错不落盘。
+# 落盘前先限重，避免长期运行后日志无限增长
 log() {
     log_trim "$LOG_FILE" || true
     printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" 2>/dev/null \
         >>"$LOG_FILE" 2>/dev/null || true
 }
-info() { printf '%s\n' "${cyan}$*${reset}"; log "INFO  $*"; }
-ok()   { printf '%s\n' "${green}$*${reset}"; log "OK    $*"; }
-warn() { printf '%s\n' "${yellow}$*${reset}" >&2; log "WARN  $*"; }
-err()  { printf '%s\n' "${red}$*${reset}" >&2; log "ERROR $*"; }
+# 输出普通信息日志
+info() { printf '%s\n' "${COLOR_INFO}$*${COLOR_RESET}"; log "INFO  $*"; }
+# 输出成功日志
+ok()   { printf '%s\n' "${COLOR_SUCCESS}$*${COLOR_RESET}"; log "OK    $*"; }
+# 输出警告日志（标准错误）
+warn() { printf '%s\n' "${STDERR_COLOR_WARNING}$*${STDERR_COLOR_RESET}" >&2; log "WARN  $*"; }
+# 输出错误日志（标准错误）
+err()  { printf '%s\n' "${STDERR_COLOR_ERROR}$*${STDERR_COLOR_RESET}" >&2; log "ERROR $*"; }
+# 输出错误并退出脚本
 die()  { err "$*"; exit 1; }
 
 # ---------- 清理 ----------
+# 清理脚本运行期间登记的临时文件
 cleanup() {
     local f
-    for f in "${TMP_FILES[@]:-}"; do
+    for f in "${tmp_files[@]:-}"; do
         [[ -n "$f" && -e "$f" ]] && rm -rf -- "$f"
     done
     return 0   # 显式返回 0，避免 EXIT trap 污染脚本退出码
@@ -136,6 +196,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 # ---------- 通用 ----------
+# 检查指定命令是否可用
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 # 是否处于交互终端：curl | bash 等管道场景下为假，
@@ -183,9 +244,10 @@ sanitize_yaml() {
     printf '%s' "$v"
 }
 
+# 交互确认：回车或 y/Y 为是，其余为否
 confirm() { # $1=提示语 $2=默认值
     local prompt="$1" def="${2:-n}" ans=""
-    read_input ans "${cyan}${prompt}${reset} "
+    read_input ans "${COLOR_CYAN}${prompt}${COLOR_RESET} "
     ans=${ans:-$def}
     [[ "$ans" =~ ^[Yy] ]]
 }
@@ -250,6 +312,7 @@ detect_init() {
 }
 
 # ---------- 服务后端 ----------
+# 按 init 系统执行 start / stop / restart
 service_do() { # $1=start|stop|restart
     case "$init_sys" in
         systemd)
@@ -268,6 +331,7 @@ service_do() { # $1=start|stop|restart
     esac
 }
 
+# 按 init 系统设置或取消开机自启
 service_enable_toggle() { # $1=enable|disable
     case "$init_sys" in
         systemd)
@@ -337,7 +401,8 @@ service_is_enabled() {
 # 有 curl 用 curl，没有则退回 wget：两种工具的参数差异在本层屏蔽，
 # 上层只描述"要什么"，不关心"用什么"。
 # curl / wget 都不自动安装——用户能把脚本取回来，说明至少有一个；
-# 两个都没有时由 require_downloader 提前中止并给出安装命令。
+# 两个都缺失时本层不会主动安装，只会在下载环节失败（管理脚本不承担装依赖的职责，
+# 依赖由 install.sh 负责）。
 # 有 curl 时走 curl 分支，保留原有的重试与超时策略。
 
 # 取回内容写到标准输出：$1=URL $2=连接超时 $3=总超时
@@ -413,6 +478,7 @@ http_redirect() { # $1=URL $2=总超时
 }
 
 # ---------- 网络探测 ----------
+# 探测地址是否可达（小文件用）
 probe_url() {
     http_probe "$1" 8
 }
@@ -541,7 +607,7 @@ download_file() { # $1=url $2=目标路径 $3=描述 $4=探测函数
     local url="$1" dest="$2" desc="${3:-文件}" probe="${4:-probe_url}" resolved m
 
     # 登记 .part，中断时由 cleanup 一并清理，避免残留半截文件
-    TMP_FILES+=("${dest}.part")
+    tmp_files+=("${dest}.part")
 
     if ! resolved=$(resolve_url "$url" "$probe"); then
         err "${desc}地址解析失败：${url}"
@@ -628,6 +694,7 @@ detect_channel() { # $1=版本号
     esac
 }
 
+# 版本通道 → 中文名
 channel_name() { # $1=通道 → 中文名
     [[ "$1" == "alpha" ]] && printf '测试版' || printf '正式版'
 }
@@ -695,10 +762,31 @@ verify_binary() {
     fi
 }
 
-# 完整性校验：上游 Release 附带 checksums.txt，可用 SHA256 比对，防御镜像投毒。
-# 镜像常不缓存该文件，取不到时降级为告警而不阻断安装，避免误伤。
+# 从 GitHub Release API 取正式版资产的官方 SHA256（asset.digest，形如 "sha256:..."）。
+# 上游正式版并未发布 checksums.txt，这是当前唯一权威的校验值来源，且与二进制同源。
+# 仅用于正式版；测试版仍走 Prerelease-Alpha/checksums.txt。
+# 输出小写十六进制摘要；jq 缺失、API 不可达、字段为空时输出空串。
+fetch_asset_digest() { # $1=资产名（如 mihomo-linux-amd64-compatible-v1.19.33.gz）
+    local name="$1" resolved raw d
+    command_exists jq || return 0
+
+    resolved=$(resolve_url "${MIHOMO_API_TAGS}/v${version}" 2>/dev/null) || return 0
+    raw=$(http_get "$resolved" 10 30 2>/dev/null || true)
+    [[ -n "$raw" ]] || return 0
+
+    d=$(printf '%s' "$raw" | jq -r --arg n "$name" \
+        '.assets[]? | select(.name == $n) | .digest // empty' 2>/dev/null | head -n1 || true)
+    d="${d#sha256:}"
+    [[ "$d" =~ ^[0-9a-fA-F]{64}$ ]] || return 0
+    printf '%s' "${d,,}"
+}
+
+# 完整性校验：两个版本通道各有各的权威来源，互不影响。
+#   正式版 → GitHub API 的 asset.digest（上游未发布 checksums.txt）
+#   测试版 → Prerelease-Alpha/checksums.txt（沿用原方案）
+# 两者都不可用时降级为告警而不阻断安装，避免镜像/限流导致装不上。
 verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd64-compatible-v1.19.32.gz）
-    local file="$1" name="$2" sums_url sums expect actual tool=""
+    local file="$1" name="$2" sums_url="" sums="" expect="" actual="" tool=""
 
     if command_exists sha256sum; then
         tool="sha256sum"
@@ -712,37 +800,39 @@ verify_checksum() { # $1=本地文件 $2=资产文件名（如 mihomo-linux-amd6
     fi
 
     if [[ "$channel" == "alpha" ]]; then
+        # 测试版：上游 Prerelease-Alpha 提供 checksums.txt，沿用原方案，不做改动
         sums_url="${MIHOMO_RELEASE}/Prerelease-Alpha/checksums.txt"
-    else
-        sums_url="${MIHOMO_RELEASE}/v${version}/checksums.txt"
-    fi
-
-    sums=$(http_get "$sums_url" 8 30 2>/dev/null || true)
-    if [[ -z "$sums" ]]; then
-        local resolved
-        if resolved=$(resolve_url "$sums_url" 2>/dev/null); then
-            sums=$(http_get "$resolved" 8 30 2>/dev/null || true)
+        sums=$(http_get "$sums_url" 8 30 2>/dev/null || true)
+        if [[ -z "$sums" ]]; then
+            local resolved
+            if resolved=$(resolve_url "$sums_url" 2>/dev/null); then
+                sums=$(http_get "$resolved" 8 30 2>/dev/null || true)
+            fi
         fi
-    fi
-    if [[ -z "$sums" ]]; then
-        warn "无法获取 checksums.txt，跳过完整性校验"
-        return 0
-    fi
-
-    # 兼容常见格式：<hash>  <file>、<hash> *<file>、<hash>  ./<file>；
-    # 并去掉行尾 CR（上游校验文件可能是 CRLF，否则 $NF 会带上 \r 导致匹配失败）
-    expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
-        {
-            sub(/\r$/, "")
-            f = $NF
-            sub(/^\*/, "", f)
-            sub(/^\.\//, "", f)
-            if (f == n) { print tolower($1); exit }
-        }
-    ')
-    if [[ -z "$expect" ]]; then
-        warn "校验文件中未包含 ${name}，跳过完整性校验"
-        return 0
+        # 兼容常见格式：<hash>  <file>、<hash> *<file>、<hash>  ./<file>；
+        # 并去掉行尾 CR（上游校验文件可能是 CRLF，否则 $NF 会带上 \r 导致匹配失败）
+        if [[ -n "$sums" ]]; then
+            expect=$(printf '%s\n' "$sums" | awk -v n="$name" '
+                {
+                    sub(/\r$/, "")
+                    f = $NF
+                    sub(/^\*/, "", f)
+                    sub(/^\.\//, "", f)
+                    if (f == n) { print tolower($1); exit }
+                }
+            ')
+        fi
+        if [[ -z "$expect" ]]; then
+            warn "无法获取 checksums.txt，跳过完整性校验"
+            return 0
+        fi
+    else
+        # 正式版：上游不发布 checksums.txt，直接用 GitHub API 的 asset digest
+        expect=$(fetch_asset_digest "$name" 2>/dev/null || true)
+        if [[ -z "$expect" ]]; then
+            warn "无法获取官方校验值（GitHub API 的 asset digest 不可用），已跳过 SHA256 校验"
+            return 0
+        fi
     fi
 
     case "$tool" in
@@ -798,6 +888,7 @@ detect_network_info() {
 }
 
 # ---------- 安装检查 ----------
+# 校验 mihomo 是否已安装
 check_installation() {
     if [[ ! -f "$BIN_FILE" ]]; then
         err "未检测到 mihomo，请先执行安装"
@@ -807,6 +898,7 @@ check_installation() {
 }
 
 # ---------- 状态 ----------
+# 打印安装、运行、自启与版本等状态面板
 show_status() {
     local install_status run_status auto_start software_version update_time script_path
     detect_network_info
@@ -829,21 +921,21 @@ show_status() {
     [[ -n "$update_time" ]] || update_time="未知"
 
     if [[ ! -f "$BIN_FILE" ]]; then
-        install_status="${red}未安装${reset}"
-        run_status="${red}未运行${reset}"
-        auto_start="${red}未设置${reset}"
-        software_version="${red}未安装${reset}"
+        install_status="${COLOR_RED}未安装${COLOR_RESET}"
+        run_status="${COLOR_RED}未运行${COLOR_RESET}"
+        auto_start="${COLOR_RED}未设置${COLOR_RESET}"
+        software_version="${COLOR_RED}未安装${COLOR_RESET}"
     else
-        install_status="${green}已安装${reset}"
+        install_status="${COLOR_GREEN}已安装${COLOR_RESET}"
         if service_is_active; then
-            run_status="${green}已运行${reset}"
+            run_status="${COLOR_GREEN}已运行${COLOR_RESET}"
         else
-            run_status="${red}未运行${reset}"
+            run_status="${COLOR_RED}未运行${COLOR_RESET}"
         fi
         if service_is_enabled; then
-            auto_start="${green}已设置${reset}"
+            auto_start="${COLOR_GREEN}已设置${COLOR_RESET}"
         else
-            auto_start="${red}未设置${reset}"
+            auto_start="${COLOR_RED}未设置${COLOR_RESET}"
         fi
         if [[ -f "$VERSION_FILE" ]]; then
             software_version=$(cat "$VERSION_FILE" 2>/dev/null || true)
@@ -856,25 +948,40 @@ show_status() {
     kv "安装状态" "$install_status"
     kv "运行状态" "$run_status"
     kv "开机自启" "$auto_start"
-    kv "当前系统" "${green}${distro}${reset}"
-    kv "软件版本" "${green}${software_version}${reset}"
+    kv "当前系统" "${COLOR_GREEN}${distro}${COLOR_RESET}"
+    kv "软件版本" "${COLOR_GREEN}${software_version}${COLOR_RESET}"
     if [[ -f "$BIN_FILE" && -f "$VERSION_FILE" && "$software_version" != "未知" ]]; then
         local chan
         chan=$(channel_name "$(detect_channel "$software_version")")
-        kv "版本通道" "${green}${chan}${reset}"
+        kv "版本通道" "${COLOR_GREEN}${chan}${COLOR_RESET}"
     fi
-    kv "本机IPv4" "${green}${ipv4}${reset}"
-    kv "本机IPv6" "${green}${ipv6:-无}${reset}"
-    if [[ -f "$CONFIG_FILE" ]]; then
-        kv "面板地址" "${green}$(panel_url)${reset}"
+    kv "本机IPv4" "${COLOR_GREEN}${ipv4}${COLOR_RESET}"
+    # 无 IPv6 时用默认色：绿色是成功色，"无"不是成功状态
+    if [[ -n "${ipv6:-}" ]]; then
+        kv "本机IPv6" "${COLOR_GREEN}${ipv6}${COLOR_RESET}"
     else
-        kv "面板地址" "${red}未安装${reset}"
+        kv "本机IPv6" "无"
     fi
-    kv "脚本版本" "${green}${SCRIPT_VERSION}${reset}"
-    kv "更新时间" "${green}${update_time}${reset}"
+    if [[ -f "$CONFIG_FILE" ]]; then
+        kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
+    else
+        kv "面板地址" "${COLOR_RED}未安装${COLOR_RESET}"
+    fi
+    # 脚本版本不在此展示：菜单页头与 status 子命令页头（print_header）各显示一次，
+    # 此处再显示会与页头同屏重复
+    kv "更新时间" "${COLOR_GREEN}${update_time}${COLOR_RESET}"
+}
+
+# status 子命令入口：页头 + 状态面板 + 收尾分隔线。
+# 页头保证子命令路径也能看到脚本版本，面板内不再重复展示
+status_cmd() {
+    print_header
+    show_status
+    hreq
 }
 
 # ---------- 服务操作 ----------
+# 执行服务操作并打印结果
 service_action() { # $1=start|stop|restart|enable|disable
     local action="$1" text
     case "$action" in
@@ -1004,7 +1111,7 @@ strip_controller_secret() { # $1=配置文件
     local f="$1" tmp
     [[ -f "$f" ]] || return 1
     tmp=$(mktemp "${ROOT_DIR}/.secret.XXXXXX")
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
     awk '!/^secret:/' "$f" >"$tmp"
     mv -f -- "$tmp" "$f"
     controller_secret=""
@@ -1046,7 +1153,7 @@ ensure_controller_secret() { # $1=配置文件 $2=沿用旧密钥（可选），
     # 必须整体读入后再决定插入位置：secret 可能出现在 external-controller 之前，
     # 单趟流式处理会先命中 controller 分支而漏掉占位空值，导致出现重复 secret 键。
     tmp=$(mktemp "${ROOT_DIR}/.secret.XXXXXX")
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
     awk -v s="$new" -v q="$q" '
         { lines[NR] = $0 }
         END {
@@ -1195,6 +1302,7 @@ list_providers() {
     ' "$CONFIG_FILE"
 }
 
+# 判断指定编号的机场订阅是否已存在
 provider_exists() { # $1=编号
     local num
     num=$(printf '%02d' "$1")
@@ -1219,7 +1327,7 @@ has_provider_refs() { # $1=文件
 normalize_config() { # $1=配置文件
     local f="$1" tmp rc=0
     tmp=$(mktemp "${ROOT_DIR}/.norm.XXXXXX")
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
 
     awk '
         {
@@ -1305,6 +1413,7 @@ apply_config() { # $1=备份路径
     ok "配置已生效，服务运行中"
 }
 
+# 落盘并应用新配置：写入 → 收紧权限 → 校验并重启，失败自动回滚
 commit_config() { # $1=新文件 $2=备份路径 $3=描述
     local new="$1" bak="$2" desc="$3"
     if ! mv -f -- "$new" "$CONFIG_FILE"; then
@@ -1323,7 +1432,7 @@ commit_config() { # $1=新文件 $2=备份路径 $3=描述
 read_subscription() { # $1=序号
     local idx="$1" url name
     while true; do
-        read_input url "${cyan}请输入第 ${idx} 个机场的订阅链接: ${reset}"
+        read_input url "${COLOR_CYAN}请输入第 ${idx} 个机场的订阅链接: ${COLOR_RESET}"
         if [[ -z "$url" ]]; then
             warn "订阅链接不能为空"
             continue
@@ -1334,7 +1443,7 @@ read_subscription() { # $1=序号
         fi
         break
     done
-    read_input name "${cyan}请输入机场名称（留空使用默认名）: ${reset}"
+    read_input name "${COLOR_CYAN}请输入机场名称（留空使用默认名）: ${COLOR_RESET}"
     [[ -z "$name" ]] && name="机场${idx}"
 
     printf '  provider_%02d:\n' "$idx"
@@ -1352,7 +1461,7 @@ read_subscription() { # $1=序号
 # 仅有 # 机场配置 标记时补全段头；两者皆无则追加到文件末尾。
 # 三个分支都会顺带清掉 CR，避免 Windows 编辑过的配置把 \r 带进 YAML 值。
 # 注意：必须接收文件路径而非 stdin —— 管道会让函数在子 shell 中执行，
-# 导致 TMP_FILES 无法被 trap 清理。
+# 导致 tmp_files 无法被 trap 清理。
 inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
     local block_file="$1" src="$2" dst="$3" before after
 
@@ -1486,6 +1595,7 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
 }
 
 # ---------- 新增订阅 ----------
+# 交互新增一个或多个机场订阅
 add_provider() {
     check_installation || return 1
     if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -1503,16 +1613,16 @@ add_provider() {
         block+=$(read_subscription "$idx")
         block+=$'\n'
         idx=$((idx + 1))
-        read_input ans "${cyan}是否继续添加？回车继续，输入 n/N 结束: ${reset}"
+        read_input ans "${COLOR_CYAN}是否继续添加？回车继续，输入 n/N 结束: ${COLOR_RESET}"
         [[ "$ans" =~ ^[nN]$ ]] && break
     done
 
     block_file=$(mktemp "${ROOT_DIR}/.block.XXXXXX")
-    TMP_FILES+=("$block_file")
+    tmp_files+=("$block_file")
     printf '%s' "$block" >"$block_file"
 
     tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
     # inject_providers 内部已做空块校验、段存在校验与数量校验
     if ! inject_providers "$block_file" "$CONFIG_FILE" "$tmp"; then
         err "新增订阅失败，现有配置未改动"
@@ -1523,24 +1633,75 @@ add_provider() {
 }
 
 # ---------- 修改订阅 ----------
+# 交互修改指定订阅的链接与名称
 modify_provider() {
     check_installation || return 1
-    local total
-    total=$(count_providers)
-    if (( total == 0 )); then
-        err "当前没有任何订阅可供修改"
-        return 1
-    fi
 
-    ok "当前共有 ${total} 个订阅："
-    list_providers
-    echo
-
-    local bak num url name tmp target
+    # 选号在前、备份在后：订阅为空时 select_provider 直接返回，不产生无用备份
+    select_provider "修改" || return 1
+    local bak url name tmp target="$provider_target"
     bak=$(backup_config) || return 1
 
     while true; do
-        read_input num "${cyan}请输入要修改的编号（如 01）: ${reset}"
+        read_input url "${COLOR_CYAN}新的订阅链接: ${COLOR_RESET}"
+        if grep -Eq '^https?://[^[:space:]"]+$' <<<"$url"; then
+            break
+        fi
+        warn "订阅链接格式不正确"
+    done
+    read_input name "${COLOR_CYAN}新的机场名称（留空保留原名）: ${COLOR_RESET}"
+
+    tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
+    tmp_files+=("$tmp")
+
+    # 名称留空时不改 additional-prefix：name 传空串，awk 内据此跳过该分支
+    awk -v target="$target" \
+        -v url="$(sanitize_yaml "$url")" \
+        -v name="$(sanitize_yaml "$name")" '
+        BEGIN { in_pp = 0; in_blk = 0 }
+        /^proxy-providers:[[:space:]]*$/ { in_pp = 1; print; next }
+        in_pp && /^[^[:space:]#]/ { in_pp = 0; in_blk = 0 }
+        in_pp {
+            if ($0 ~ /^  provider_[0-9]+:/) {
+                in_blk = ($1 == target)
+                print
+                next
+            }
+            if (in_blk && $0 ~ /^[[:space:]]+url:/) {
+                print "    url: \"" url "\""
+                next
+            }
+            if (name != "" && in_blk && $0 ~ /^[[:space:]]+additional-prefix:/) {
+                print "      additional-prefix: \"[" name "]\""
+                next
+            }
+        }
+        { print }
+    ' "$CONFIG_FILE" >"$tmp"
+
+    if ! grep -q "^  ${target}" "$tmp"; then
+        err "写入失败：目标订阅在结果中丢失，已中止"
+        return 1
+    fi
+
+    commit_config "$tmp" "$bak" "修改订阅 $(printf '%02d' "$provider_num")"
+}
+
+# 列出订阅并交互选择编号：结果写入全局 provider_total / provider_num / provider_target
+select_provider() { # $1=动作词（修改/删除），用于提示语
+    local num
+    provider_total=$(count_providers)
+    if (( provider_total == 0 )); then
+        err "当前没有任何订阅可供$1"
+        return 1
+    fi
+
+    ok "当前共有 ${provider_total} 个订阅："
+    list_providers
+    printf '\n'
+
+    while true; do
+        read_input num "${COLOR_CYAN}请输入要$1的编号（如 01）: ${COLOR_RESET}"
         num=${num#provider_}
         num=${num%:}
         if ! grep -Eq '^[0-9]+$' <<<"$num"; then
@@ -1553,73 +1714,12 @@ modify_provider() {
         fi
         break
     done
-    target="provider_$(printf '%02d' "$num"):"
-
-    while true; do
-        read_input url "${cyan}新的订阅链接: ${reset}"
-        if grep -Eq '^https?://[^[:space:]"]+$' <<<"$url"; then
-            break
-        fi
-        warn "订阅链接格式不正确"
-    done
-    read_input name "${cyan}新的机场名称（留空保留原名）: ${reset}"
-
-    tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$tmp")
-
-    if [[ -z "$name" ]]; then
-        awk -v target="$target" -v url="$(sanitize_yaml "$url")" '
-            BEGIN { in_pp = 0; in_blk = 0 }
-            /^proxy-providers:[[:space:]]*$/ { in_pp = 1; print; next }
-            in_pp && /^[^[:space:]#]/ { in_pp = 0; in_blk = 0 }
-            in_pp {
-                if ($0 ~ /^  provider_[0-9]+:/) {
-                    in_blk = ($1 == target)
-                    print
-                    next
-                }
-                if (in_blk && $0 ~ /^[[:space:]]+url:/) {
-                    print "    url: \"" url "\""
-                    next
-                }
-            }
-            { print }
-        ' "$CONFIG_FILE" >"$tmp"
-    else
-        awk -v target="$target" \
-            -v url="$(sanitize_yaml "$url")" \
-            -v name="$(sanitize_yaml "$name")" '
-            BEGIN { in_pp = 0; in_blk = 0 }
-            /^proxy-providers:[[:space:]]*$/ { in_pp = 1; print; next }
-            in_pp && /^[^[:space:]#]/ { in_pp = 0; in_blk = 0 }
-            in_pp {
-                if ($0 ~ /^  provider_[0-9]+:/) {
-                    in_blk = ($1 == target)
-                    print
-                    next
-                }
-                if (in_blk && $0 ~ /^[[:space:]]+url:/) {
-                    print "    url: \"" url "\""
-                    next
-                }
-                if (in_blk && $0 ~ /^[[:space:]]+additional-prefix:/) {
-                    print "      additional-prefix: \"[" name "]\""
-                    next
-                }
-            }
-            { print }
-        ' "$CONFIG_FILE" >"$tmp"
-    fi
-
-    if ! grep -q "^  ${target}" "$tmp"; then
-        err "写入失败：目标订阅在结果中丢失，已中止"
-        return 1
-    fi
-
-    commit_config "$tmp" "$bak" "修改订阅 $(printf '%02d' "$num")"
+    provider_num="$num"
+    provider_target="provider_$(printf '%02d' "$num"):"
 }
 
 # ---------- 删除订阅 ----------
+# 交互删除指定订阅，必要时重编号
 delete_provider() {
     check_installation || return 1
     local total
@@ -1634,31 +1734,13 @@ delete_provider() {
         return 1
     fi
 
-    ok "当前共有 ${total} 个订阅："
-    list_providers
-    echo
-
-    local bak num tmp tmp2 target
+    local bak tmp tmp2 target
     bak=$(backup_config) || return 1
-
-    while true; do
-        read_input num "${cyan}请输入要删除的编号（如 01）: ${reset}"
-        num=${num#provider_}
-        num=${num%:}
-        if ! grep -Eq '^[0-9]+$' <<<"$num"; then
-            warn "请输入纯数字编号"
-            continue
-        fi
-        if ! provider_exists "$num"; then
-            warn "未找到编号为 $(printf '%02d' "$num") 的订阅"
-            continue
-        fi
-        break
-    done
-    target="provider_$(printf '%02d' "$num"):"
+    select_provider "删除" || return 1
+    target="$provider_target"
 
     tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
     awk -v target="$target" '
         BEGIN { in_pp = 0; skipping = 0 }
         /^proxy-providers:[[:space:]]*$/ { in_pp = 1; print; next }
@@ -1678,7 +1760,7 @@ delete_provider() {
     ' "$CONFIG_FILE" >"$tmp"
 
     tmp2=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$tmp2")
+    tmp_files+=("$tmp2")
     if has_provider_refs "$tmp"; then
         # 有外部引用时不重编号，保留编号空档以维持引用有效
         warn "配置中存在 provider 编号引用（如 use:），跳过重编号"
@@ -1705,11 +1787,12 @@ delete_provider() {
         return 1
     fi
 
-    commit_config "$tmp2" "$bak" "删除订阅 $(printf '%02d' "$num")"
+    commit_config "$tmp2" "$bak" "删除订阅 $(printf '%02d' "$provider_num")"
     ok "当前剩余 $(count_providers) 个订阅"
 }
 
 # ---------- 重置配置 ----------
+# 用默认配置覆盖当前配置并重建订阅
 reset_config() {
     check_installation || return 1
     if ! confirm "重置将用默认配置覆盖当前配置（已自动备份），确认？(y/N):" "n"; then
@@ -1724,7 +1807,7 @@ reset_config() {
 
     check_network
     tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
     # 先下到临时文件，校验后再替换，避免 -O 先截断
     if ! download_file "$CONFIG_URL" "$tmp" "默认配置"; then
         err "默认配置下载失败，现有配置未改动"
@@ -1746,16 +1829,16 @@ reset_config() {
         block+=$(read_subscription "$idx")
         block+=$'\n'
         idx=$((idx + 1))
-        read_input ans "${cyan}是否继续添加？回车继续，输入 n/N 结束: ${reset}"
+        read_input ans "${COLOR_CYAN}是否继续添加？回车继续，输入 n/N 结束: ${COLOR_RESET}"
         [[ "$ans" =~ ^[nN]$ ]] && break
     done
 
     block_file=$(mktemp "${ROOT_DIR}/.block.XXXXXX")
-    TMP_FILES+=("$block_file")
+    tmp_files+=("$block_file")
     printf '%s' "$block" >"$block_file"
 
     merged=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$merged")
+    tmp_files+=("$merged")
     if ! inject_providers "$block_file" "$tmp" "$merged"; then
         err "订阅写入失败（现有配置未改动）"
         return 1
@@ -1778,15 +1861,15 @@ reset_config() {
 
     detect_network_info
     echo
-    printf '%s\n' "${blue}${HR_EQ}${reset}"
-    kv "面板地址" "${green}$(panel_url)${reset}"
+    hreq
+    kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
     if [[ -n "$controller_secret" ]]; then
-        kv "面板密钥" "${green}${controller_secret}${reset}"
+        kv "面板密钥" "${COLOR_GREEN}${controller_secret}${COLOR_RESET}"
     else
-        kv "面板密钥" "${yellow}未启用（面板无鉴权）${reset}"
+        kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
-    printf '%s\n' "  ${yellow}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${reset}"
-    printf '%s\n' "${blue}${HR_EQ}${reset}"
+    printf '%s\n' "  ${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
+    hreq
 }
 
 # ---------- 面板密钥 ----------
@@ -1795,7 +1878,7 @@ secret_set() { # $1=on|off|reset
     check_installation || return 1
     local action="$1" tmp bak
     tmp=$(mktemp "${ROOT_DIR}/.config.XXXXXX")
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
     cp -f -- "$CONFIG_FILE" "$tmp"
 
     case "$action" in
@@ -1805,7 +1888,7 @@ secret_set() { # $1=on|off|reset
             bak=$(backup_config) || return 1
             commit_config "$tmp" "$bak" "面板密钥" || return 1
             # 密钥只上屏、不落盘：kv 是纯 printf，ok 会经 log 写入 /var/log/mihomo.log
-            kv "面板密钥" "${green}${controller_secret}${reset}"
+            kv "面板密钥" "${COLOR_GREEN}${controller_secret}${COLOR_RESET}"
             ;;
         off)
             strip_controller_secret "$tmp"
@@ -1843,20 +1926,21 @@ manage_secret() {
         }
     ' "$CONFIG_FILE" 2>/dev/null || true)
 
-    printf '\n%s\n' "${blue}${HR_EQ}${reset}"
+    printf '\n'
+    hreq
     if [[ -n "$cur" ]]; then
-        kv "面板密钥" "${green}已启用  ${cur}${reset}"
+        kv "面板密钥" "${COLOR_GREEN}已启用  ${cur}${COLOR_RESET}"
     else
-        kv "面板密钥" "${yellow}未启用（面板无鉴权）${reset}"
+        kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
-    kv "面板地址" "${green}$(panel_url)${reset}"
-    printf '%s\n' "${blue}${HR}${reset}"
-    printf '%s\n' "${green}1${reset}. 启用并生成新密钥"
-    printf '%s\n' "${green}2${reset}. 禁用（移除密钥）"
-    printf '%s\n' "${green}3${reset}. 重新生成密钥"
-    printf '%s\n' "${HR}"
+    kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
+    hr
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 启用并生成新密钥"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 禁用（移除密钥）"
+    printf '%s\n' "${COLOR_GREEN}3${COLOR_RESET}. 重新生成密钥"
+    hr
 
-    read_input choice "${cyan}请输入选项 (1/2/3): ${reset}"
+    read_input choice "${COLOR_CYAN}请输入选项 (1/2/3): ${COLOR_RESET}"
     case "$choice" in
         1) secret_set on ;;
         2) secret_set off ;;
@@ -1865,24 +1949,127 @@ manage_secret() {
     esac
 }
 
+# ---------- 管理面板 ----------
+# 面板子命令入口：无参数进交互菜单，install/update 非交互直接安装
+panel_cmd() { # $1=install|update（可选）
+    case "${1:-}" in
+        install|update) panel_install ;;
+        "")             panel_menu ;;
+        *)              err "未知参数：$1（可选 install / update）"; return 1 ;;
+    esac
+}
+
+# 安装/更新管理面板：与安装流程共用 install_webui，重装即更新（幂等）
+panel_install() {
+    check_installation || return 1
+    if ! command_exists unzip; then
+        err "缺少 unzip，无法解压面板（Debian/Ubuntu: apt install unzip；Alpine: apk add unzip）"
+        return 1
+    fi
+    install_webui
+}
+
+# 面板交互菜单：状态与地址一览，可触发安装/更新
+panel_menu() {
+    check_installation || return 1
+    local choice=""
+    printf '\n'
+    hreq
+    kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
+    if [[ -d "${ROOT_DIR}/ui" ]]; then
+        kv "面板状态" "${COLOR_GREEN}已安装${COLOR_RESET}"
+    else
+        kv "面板状态" "${COLOR_YELLOW}未安装${COLOR_RESET}"
+    fi
+    hr
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 安装/更新面板"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 显示访问地址"
+    printf '%s\n' "${COLOR_GREEN}0${COLOR_RESET}. 返回"
+    hr
+
+    read_input choice "${COLOR_CYAN}请输入选项 (0/1/2): ${COLOR_RESET}"
+    case "$choice" in
+        1) panel_install ;;
+        2) panel_addresses ;;
+        0) return 0 ;;
+        *) warn "无效选项"; return 1 ;;
+    esac
+}
+
+# 面板访问地址三行展示：本机 / 内网 / 公网提示
+# （借鉴 nelvko/clashctl 的 clashui：公网能否访问取决于放线与鉴权，脚本只提示不代决）
+panel_addresses() {
+    detect_network_info
+    local lan rest port
+    lan=$(panel_url)
+    rest="${lan#*://}"
+    rest="${rest%%/*}"
+    port="${rest##*:}"
+    printf '\n'
+    hreq
+    kv "本机访问" "${COLOR_GREEN}http://127.0.0.1:${port}/ui${COLOR_RESET}"
+    kv "内网访问" "${COLOR_GREEN}${lan}${COLOR_RESET}"
+    printf '%s\n' "  ${COLOR_YELLOW}公网访问需放行 ${port} 端口并确认面板已启用鉴权${COLOR_RESET}"
+    hreq
+}
+
+# 下载并安装管理面板（zashboard），失败只告警不影响内核
+install_webui() {
+    local zip="${ROOT_DIR}/gh-pages.zip"
+    local tmpdir="${ROOT_DIR}/.webui-tmp"
+    local -a dirs=()
+
+    info "开始下载管理面板..."
+    download_file "$WEBUI_URL" "$zip" "管理面板" probe_asset || return 1
+
+    rm -rf -- "$tmpdir"
+    if ! unzip -oq "$zip" -d "$tmpdir"; then
+        rm -f -- "$zip"
+        err "面板压缩包解压失败"
+        return 1
+    fi
+    rm -f -- "$zip"
+
+    shopt -s nullglob
+    dirs=("${tmpdir}"/*-gh-pages)
+    shopt -u nullglob
+
+    if (( ${#dirs[@]} == 0 )); then
+        rm -rf -- "$tmpdir"
+        err "面板压缩包结构异常，未找到 gh-pages 目录"
+        return 1
+    fi
+
+    rm -rf -- "${ROOT_DIR}/ui"
+    if ! mv -f -- "${dirs[0]}" "${ROOT_DIR}/ui"; then
+        rm -rf -- "$tmpdir"
+        err "面板目录安装失败"
+        return 1
+    fi
+    rm -rf -- "$tmpdir"
+    chmod -R a+rX "${ROOT_DIR}/ui"
+    ok "管理面板已安装"
+}
+
 # ---------- 配置菜单 ----------
+# 配置管理菜单入口
 config_mihomo() {
     check_installation || return 1
-    printf '%s\n' "${HR_EQ}"
-    printf '%s\n' "${cyan}  操作说明${reset}"
+    hreq
+    printf '%s\n' "${COLOR_CYAN}  操作说明${COLOR_RESET}"
     printf '%s\n' "    1. 订阅编号从 01 开始依次排列"
     printf '%s\n' "    2. 订阅不能全部删除，至少保留一个"
-    printf '%s\n' "    3. 所有写操作前自动备份配置${reset}"
-    printf '%s\n' "${HR}"
-    printf '%s\n' "${green}1${reset}. 新增机场订阅"
-    printf '%s\n' "${green}2${reset}. 修改机场订阅"
-    printf '%s\n' "${green}3${reset}. 删除机场订阅"
-    printf '%s\n' "${green}4${reset}. 重置配置文件"
-    printf '%s\n' "${green}5${reset}. 面板密钥（启用/禁用/更换）"
-    printf '%s\n' "${HR}"
+    printf '%s\n' "    3. 所有写操作前自动备份配置${COLOR_RESET}"
+    hr
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 新增机场订阅"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 修改机场订阅"
+    printf '%s\n' "${COLOR_GREEN}3${COLOR_RESET}. 删除机场订阅"
+    printf '%s\n' "${COLOR_GREEN}4${COLOR_RESET}. 重置配置文件"
+    printf '%s\n' "${COLOR_GREEN}5${COLOR_RESET}. 面板密钥（启用/禁用/更换）"
+    hr
 
     local choice=""
-    read_input choice "${cyan}输入选项数字: ${reset}"
+    read_input choice "${COLOR_CYAN}输入选项数字: ${COLOR_RESET}"
     case "$choice" in
         1) add_provider     ;;
         2) modify_provider  ;;
@@ -1893,8 +2080,10 @@ config_mihomo() {
     esac
 }
 
-# ---------- 安装 ----------
-install_mihomo() {
+# ---------- 重装（下载并调用 install.sh）----------
+# 注意：本函数与 install.sh 中的同名 install_mihomo 语义不同，故不复用该名字——
+# 此处只负责"取回安装脚本并执行"，真正的安装编排在 install.sh 内部。
+reinstall_mihomo() {
     check_network
 
     local old="${ROOT_DIR}.old" tmp
@@ -1925,7 +2114,7 @@ install_mihomo() {
     fi
 
     tmp=$(mktemp /tmp/mihomo-install.XXXXXX)
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
 
     # 先下载再校验，最后才执行
     if ! download_file "$INSTALL_URL" "$tmp" "安装脚本"; then
@@ -2009,6 +2198,7 @@ binary_asset_url() { # $1=资产文件名
     fi
 }
 
+# 下载指定通道的内核并替换：校验 → 自检 → 停服替换 → 启动失败回滚
 download_and_install() { # $1=alpha|stable
     local -a cands=()
     local base="" c url gz bak
@@ -2163,6 +2353,7 @@ update_mihomo() {
 }
 
 # ---------- 版本切换 ----------
+# 在正式版与测试版之间切换内核
 switch_version() {
     check_installation || return 1
     local current choice=""
@@ -2173,14 +2364,14 @@ switch_version() {
     current=$(cat "$VERSION_FILE" 2>/dev/null || true)
     channel=$(detect_channel "$current")
 
-    printf '%s\n' "${HR_EQ}"
+    hreq
     printf '当前版本: %s（%s）\n' "$current" "$(channel_name "$channel")"
-    printf '%s\n' "${HR}"
-    printf '%s\n' "${green}1${reset}. 测试版 (Alpha，如 alpha-94b13ae)"
-    printf '%s\n' "${green}2${reset}. 正式版 (Release，如 v1.19.32)"
-    printf '%s\n' "${HR}"
+    hr
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 测试版 (Alpha，如 alpha-94b13ae)"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 正式版 (Release，如 v1.19.32)"
+    hr
 
-    read_input choice "${cyan}请输入选项 (1/2): ${reset}"
+    read_input choice "${COLOR_CYAN}请输入选项 (1/2): ${COLOR_RESET}"
     case "$choice" in
         1)
             if [[ "$channel" == "alpha" ]]; then
@@ -2203,6 +2394,7 @@ switch_version() {
 }
 
 # ---------- 卸载 ----------
+# 卸载 mihomo 及其服务、面板与管理脚本
 uninstall_mihomo() {
     # 卸载不依赖安装完整性：二进制丢失或安装中断后仍需能够清理残留
     local old="${ROOT_DIR}.old"
@@ -2215,6 +2407,12 @@ uninstall_mihomo() {
     if ! confirm "确认卸载 mihomo？(y/N):" "n"; then
         warn "已取消卸载"
         return 0
+    fi
+    # 订阅链接是高价数据：重装尚且保留，卸载也应给机会。默认 N——卸载是显式
+    # destructive 操作，静默往外写文件比丢失更糟
+    local keep_config="n" keep_path
+    if [[ -f "$CONFIG_FILE" ]] && confirm "是否保留订阅配置文件？(y/N):" "n"; then
+        keep_config="y"
     fi
 
     local failures=0
@@ -2233,6 +2431,16 @@ uninstall_mihomo() {
     rm -f -- "$LOGCLEAN_SERVICE" "$LOGCLEAN_TIMER" "$LOGCLEAN_PERIODIC" || true
     rm -f -- "$SERVICE_SYSTEMD" || failures=$((failures + 1))
     rm -f -- "$SERVICE_OPENRC" || failures=$((failures + 1))
+    # 保留订阅配置：落在 ROOT_DIR 同级，不随 rm -rf 丢失；失败只警告，不阻断卸载
+    if [[ "$keep_config" == "y" ]]; then
+        keep_path="$(dirname "$ROOT_DIR")/mihomo-config.yaml.bak"
+        if cp -f -- "$CONFIG_FILE" "$keep_path" 2>/dev/null; then
+            chmod 600 "$keep_path" 2>/dev/null || true
+            info "订阅配置已保留：${keep_path}（含面板密钥，注意保密）"
+        else
+            warn "订阅配置保留失败，仍将删除 ${ROOT_DIR}"
+        fi
+    fi
     # 防误删护栏：只删除至少两层的绝对路径。ROOT_DIR 目前是常量 /root/mihomo，
     # 若将来改为可配置，这道判断能挡住 /、/root、/usr 这类顶层目录
     if [[ "$ROOT_DIR" == /*/* ]]; then
@@ -2256,7 +2464,9 @@ uninstall_mihomo() {
     sleep 1
     if (( failures == 0 )) && [[ ! -d "$ROOT_DIR" && ! -d "$old" ]]; then
         ok "mihomo 卸载完成"
-        printf '\n%s\n' "如需删除本脚本：rm -f ${SHELL_FILE}"
+        printf '\n%s\n' "后续清理（如需）："
+        printf '%s\n' "  rm -f ${SHELL_FILE} ${SHELL_FILE}.bak    # 删除本脚本及其备份"
+        printf '%s\n' "  unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY"
     else
         err "卸载未完全成功（失败步骤 ${failures} 个），请手动检查残留"
         return 1
@@ -2264,10 +2474,11 @@ uninstall_mihomo() {
 }
 
 # ---------- 脚本更新 ----------
+# 下载校验并更新管理脚本自身
 update_shell() {
     local tmp newver
     tmp=$(mktemp /tmp/mihomo-sh.XXXXXX)
-    TMP_FILES+=("$tmp")
+    tmp_files+=("$tmp")
 
     check_network
     info "正在检查脚本更新..."
@@ -2278,6 +2489,13 @@ update_shell() {
     # 覆盖前必须校验，避免损坏现有脚本
     if ! bash -n "$tmp" 2>/dev/null; then
         err "下载的脚本语法校验失败，已取消更新"
+        return 1
+    fi
+    # 语法过不代表能跑：冒烟执行 version 子命令。main() 的 version 分支在 require_root
+    # 之前，不需要 root 与系统环境；顶级错误（CRLF 行尾、函数定义笔误、set 选项冲突等）
+    # 在此拦截，避免把"能解析、一跑就崩"的脚本装进系统——与内核更新的启动回滚对称
+    if ! bash "$tmp" version >/dev/null 2>&1; then
+        err "下载的脚本冒烟测试失败，已取消更新"
         return 1
     fi
     # 同时兼容 SCRIPT_VERSION="x" 与 SCRIPT_VERSION='x'，避免上游改用单引号后解析为空
@@ -2303,20 +2521,35 @@ update_shell() {
         err "写入失败，已保留原脚本"
         return 1
     fi
+    # 刷新脚本头的 date 行，让状态面板「更新时间」反映本次升级日期。
+    # 只替换 # 注释行，不碰 SCRIPT_VERSION，版本比对与后续升级不受影响
+    sed -i "s/^#[[:space:]]*date[[:space:]]*:.*/# date   : $(date +%Y-%m-%d)/" \
+        "$SHELL_FILE" 2>/dev/null || true
     hash -r 2>/dev/null || true
     ok "更新完成，当前版本：${newver}"
+    info "如新版异常，回滚命令：cp -f ${SHELL_FILE}.bak ${SHELL_FILE}"
     info "3 秒后重新加载新脚本..."
     sleep 3
-    # exec 替换进程镜像，不会再执行 EXIT trap，TMP_FILES 里的 $tmp 必须在这里删掉
+    # exec 替换进程镜像，不会再执行 EXIT trap，tmp_files 里的 $tmp 必须在这里删掉
     rm -f -- "$tmp" 2>/dev/null || true
     exec "$SHELL_FILE"
 }
 
 # ---------- 主菜单 ----------
+# 等待用户按回车返回主菜单
 pause_menu() {
     local _=""
-    printf '\n%s' "${cyan}按回车返回主菜单${reset}"
+    printf '\n%s' "${COLOR_CYAN}按回车返回主菜单${COLOR_RESET}"
     IFS= read -r _ || true
+}
+
+# 页头：交互菜单与 status 子命令共用。
+# 脚本版本只在此处出现，show_status 面板不再重复展示
+print_header() {
+    hreq
+    printf '%s\n' "${COLOR_CYAN}  mihomo 一键管理脚本  v${SCRIPT_VERSION}${COLOR_RESET}"
+    kv "作者" "ChatGPT JK789"
+    hr
 }
 
 # 渲染交互主菜单
@@ -2324,38 +2557,36 @@ menu() {
     local input=""
     while true; do
         clear 2>/dev/null || true
-        printf '%s\n' "${blue}${HR_EQ}${reset}"
-        printf '%s\n' "${cyan}  mihomo 一键管理脚本  v${SCRIPT_VERSION}${reset}"
-        kv "作者" "ChatGPT JK789"
-        printf '%s\n' "${blue}${HR}${reset}"
-        printf '%s\n' "${cyan}  使用说明${reset}"
-        printf '%s\n' "    1. 更换订阅可以保存原有机场订阅"
-        printf '%s\n' "    2. 需要通过脚本添加机场订阅"
+        print_header
+        printf '%s\n' "${COLOR_CYAN}  使用说明${COLOR_RESET}"
+        printf '%s\n' "    1. 重装 mihomo 会保留原有机场订阅"
+        printf '%s\n' "    2. 机场订阅请通过配置管理添加，勿直接编辑配置"
         kv "子命令" "mihomo status / config / update 等，详见 mihomo help"
-        printf '%s\n' "${blue}${HR}${reset}"
-        printf '%s\n' "${green} 1${reset}. 安装 mihomo"
-        printf '%s\n' "${green} 2${reset}. 更新 mihomo"
-        printf '%s\n' "${green} 3${reset}. 卸载 mihomo"
-        printf '%s\n' "${HR}"
-        printf '%s\n' "${green} 4${reset}. 启动 mihomo"
-        printf '%s\n' "${green} 5${reset}. 停止 mihomo"
-        printf '%s\n' "${green} 6${reset}. 重启 mihomo"
-        printf '%s\n' "${HR}"
-        printf '%s\n' "${green} 7${reset}. 添加开机自启"
-        printf '%s\n' "${green} 8${reset}. 关闭开机自启"
-        printf '%s\n' "${green} 9${reset}. 切换软件版本"
-        printf '%s\n' "${HR}"
-        printf '%s\n' "${green}10${reset}. 配置管理"
-        printf '%s\n' "${green}11${reset}. 查看日志"
-        printf '%s\n' "${green}12${reset}. 更新脚本"
-        printf '%s\n' "${green} 0${reset}. 退出脚本"
-        printf '%s\n' "${HR_EQ}"
+        hr
+        printf '%s\n' "${COLOR_GREEN} 1${COLOR_RESET}. 安装 mihomo"
+        printf '%s\n' "${COLOR_GREEN} 2${COLOR_RESET}. 更新 mihomo"
+        printf '%s\n' "${COLOR_GREEN} 3${COLOR_RESET}. 卸载 mihomo"
+        hr
+        printf '%s\n' "${COLOR_GREEN} 4${COLOR_RESET}. 启动 mihomo"
+        printf '%s\n' "${COLOR_GREEN} 5${COLOR_RESET}. 停止 mihomo"
+        printf '%s\n' "${COLOR_GREEN} 6${COLOR_RESET}. 重启 mihomo"
+        hr
+        printf '%s\n' "${COLOR_GREEN} 7${COLOR_RESET}. 添加开机自启"
+        printf '%s\n' "${COLOR_GREEN} 8${COLOR_RESET}. 关闭开机自启"
+        printf '%s\n' "${COLOR_GREEN} 9${COLOR_RESET}. 切换软件版本"
+        hr
+        printf '%s\n' "${COLOR_GREEN}10${COLOR_RESET}. 配置管理"
+        printf '%s\n' "${COLOR_GREEN}11${COLOR_RESET}. 查看日志"
+        printf '%s\n' "${COLOR_GREEN}12${COLOR_RESET}. 更新脚本"
+        printf '%s\n' "${COLOR_GREEN} 0${COLOR_RESET}. 退出脚本"
+        hreq
         show_status
-        printf '%s\n' "${HR_EQ}"
+        hreq
 
-        read_input input "${cyan}请输入上面选项: ${reset}"
+        read_input input "${COLOR_CYAN}请输入上面选项: ${COLOR_RESET}"
+        # 20/30 分别是 10（配置管理）/ 11（查看日志）的快捷别名，保留既有输入习惯
         case "$input" in
-            1)  install_mihomo          || true ;;
+            1)  reinstall_mihomo       || true ;;
             2)  update_mihomo           || true ;;
             3)  uninstall_mihomo        || true ;;
             4)  service_action start    || true ;;
@@ -2375,6 +2606,7 @@ menu() {
 }
 
 # ---------- 命令行入口 ----------
+# 输出命令行帮助
 usage() {
     cat <<EOF
 mihomo 一键管理脚本 v${SCRIPT_VERSION}
@@ -2392,6 +2624,7 @@ mihomo 一键管理脚本 v${SCRIPT_VERSION}
   logs                实时查看日志
   config              配置管理（交互）
   secret [on|off|reset]  面板密钥：启用 / 禁用 / 重新生成
+  panel [install|update]  管理面板：安装 / 更新 / 查看访问地址
   log-clean           立即清理日志（超过 1 MB 时压缩）
   update              更新 mihomo 内核
   switch              切换正式版 / 测试版
@@ -2420,7 +2653,7 @@ main() {
 
     case "${1:-}" in
         "")                     menu ;;
-        status)                 show_status ;;
+        status)                 status_cmd ;;
         start)                  service_action start ;;
         stop)                   service_action stop ;;
         restart)                service_action restart ;;
@@ -2429,10 +2662,11 @@ main() {
         logs)                   logs_mihomo ;;
         config)                 config_mihomo ;;
         secret)                 secret_cmd "${2:-}" ;;
+        panel)                  panel_cmd "${2:-}" ;;
         log-clean)              log_clean ;;
         update)                 update_mihomo ;;
         switch)                 switch_version ;;
-        install)                install_mihomo ;;
+        install)                reinstall_mihomo ;;
         uninstall)              uninstall_mihomo ;;
         update-shell)           update_shell ;;
         *)                      err "未知子命令：$1"; usage; exit 1 ;;
