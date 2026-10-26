@@ -3,9 +3,9 @@
 # ----------------------------------------
 # name   : mihomo.sh
 # desc   : 管理 & 面板
-# date   : 2026-10-26 19:20:42
+# date   : 2026-10-26 19:35:20
 # author : ChatGPT
-# ver    : 1.7.8
+# ver    : 1.7.11
 # ----------------------------------------
 
 # 与 install.sh 共用 68 个同名函数，改动需同步两份（main / usage / print_header
@@ -88,7 +88,7 @@ hreq() { printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"; }
 kv() { printf '  %s%s%s  %s\n' "$COLOR_CYAN" "$1" "$COLOR_RESET" "$2"; }
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.7.8"
+SCRIPT_VERSION="1.7.11"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -2589,8 +2589,8 @@ pause_menu() {
 # 脚本版本只在此处出现，show_status 面板不再重复展示
 print_header() {
     hreq
-    printf '%s\n' "${COLOR_CYAN}  mihomo 管理脚本  v${SCRIPT_VERSION}${COLOR_RESET}"
-    kv "作者" "ChatGPT JK789"
+    printf '%s\n' "${COLOR_CYAN}  mihomo 管理脚本${COLOR_RESET}  ${COLOR_BLUE}v${SCRIPT_VERSION}${COLOR_RESET}"
+    printf '%s\n' "${COLOR_BLUE}  作者  ChatGPT JK789${COLOR_RESET}"
     hr
 }
 
@@ -2601,9 +2601,10 @@ menu() {
         clear 2>/dev/null || true
         print_header
         printf '%s\n' "${COLOR_CYAN}  使用说明${COLOR_RESET}"
-        printf '%s\n' "    1. 重装 mihomo 会保留原有机场订阅"
-        printf '%s\n' "    2. 机场订阅请通过配置管理添加，勿直接编辑配置"
-        kv "子命令" "mihomo status / config / update 等，详见 mihomo help"
+        printf '%s\n' "    1. 重装或更新 mihomo 时，原有机场订阅会自动保留"
+        printf '%s\n' "    2. 添加订阅请用「配置管理」，勿直接编辑配置文件"
+        printf '%s\n' "${COLOR_CYAN}  子命令${COLOR_RESET}"
+        printf '%s\n' "    mihomo status / config / update 等，详见 mihomo help"
         hr
         printf '%s\n' "${COLOR_GREEN} 1${COLOR_RESET}. 安装 mihomo"
         printf '%s\n' "${COLOR_GREEN} 2${COLOR_RESET}. 更新 mihomo"

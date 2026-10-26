@@ -3,9 +3,9 @@
 # ----------------------------------------
 # name   : install.sh
 # desc   : 安装 & 配置
-# date   : 2026-10-26 19:20:42
+# date   : 2026-10-26 19:35:20
 # author : ChatGPT
-# ver    : 1.7.8
+# ver    : 1.7.11
 # ----------------------------------------
 
 # 与 mihomo.sh 共用 68 个同名函数，改动需同步两份（main / usage / print_header
@@ -67,7 +67,7 @@ else
 fi
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.7.8"
+SCRIPT_VERSION="1.7.11"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
