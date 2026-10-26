@@ -3,15 +3,16 @@
 # ----------------------------------------
 # name   : mihomo.sh
 # desc   : 管理 & 面板
-# date   : 2026-10-26 18:49:15
+# date   : 2026-10-26 19:20:42
 # author : ChatGPT
-# ver    : 1.7.5
+# ver    : 1.7.8
 # ----------------------------------------
 
-# 与 install.sh 共用 65 个同名函数，改动需同步两份
+# 与 install.sh 共用 68 个同名函数，改动需同步两份（main / usage / print_header
+# 因入口职责不同各自实现，不参与同步）
 
-# 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
-# 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
+# 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换。
+# 此处刻意用单括号 [ ]，以便在 sh 下也能执行到这条提示，而不是抛出晦涩的 set 报错。
 if [ -z "${BASH_VERSION:-}" ]; then
     printf '%s\n' "错误：请使用 bash 运行本脚本" >&2
     exit 1
@@ -87,7 +88,7 @@ hreq() { printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"; }
 kv() { printf '  %s%s%s  %s\n' "$COLOR_CYAN" "$1" "$COLOR_RESET" "$2"; }
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.7.5"
+SCRIPT_VERSION="1.7.8"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -181,7 +182,7 @@ warn() { printf '%s\n' "${STDERR_COLOR_WARNING}$*${STDERR_COLOR_RESET}" >&2; log
 # 输出错误日志（标准错误）
 err()  { printf '%s\n' "${STDERR_COLOR_ERROR}$*${STDERR_COLOR_RESET}" >&2; log "ERROR $*"; }
 # 输出错误并退出脚本
-die()  { err "$*"; exit 1; }
+die()  { err "$*"; err "详细日志：${LOG_FILE}"; exit 1; }
 
 # ---------- 清理 ----------
 # 清理脚本运行期间登记的临时文件
@@ -335,6 +336,8 @@ service_do() { # $1=start|stop|restart
 service_enable_toggle() { # $1=enable|disable
     case "$init_sys" in
         systemd)
+            # 单元文件可能刚写入，先重载再操作，避免按旧定义处理
+            systemctl daemon-reload >/dev/null 2>&1 || true
             systemctl "$1" mihomo >/dev/null 2>&1
             ;;
         openrc)
@@ -1099,9 +1102,24 @@ ask_secret() {
 }
 
 # 未启用密钥时的统一警告，安装、重置、禁用三处共用
+# 只提示监听范围，不拼访问地址：访问地址由状态面板的「面板地址」给出，
+# 避免探测不到本机 IPv4 时把回环地址当成对外地址显示
 warn_secret_disabled() {
-    local host="${ipv4:-127.0.0.1}"
-    warn "⚠ 面板未启用密钥：http://${host}:9090/ui 任何人可访问"
+    local host port disp
+    read -r host port <<<"$(controller_parts)"
+    disp="${host:-0.0.0.0}"
+    # 通配监听在配置里写作 ::，展示时补回方括号，避免拼成 :::9090
+    [[ "$disp" == "::" ]] && disp="[::]"
+
+    warn "⚠ 面板未启用密钥"
+    case "$host" in
+        ""|0.0.0.0|"::")
+            warn "  监听 ${disp}:${port} 覆盖所有网卡，同网段与公网均可直连"
+            ;;
+        *)
+            warn "  当前仅监听 ${disp}:${port}，实际仅本机可访问"
+            ;;
+    esac
     warn "  任何能访问该端口的人都可以修改你的配置。"
     warn "  建议用防火墙限制来源，或改用 SSH 隧道访问。"
 }
@@ -1197,12 +1215,10 @@ ensure_controller_secret() { # $1=配置文件 $2=沿用旧密钥（可选），
     printf '%s' "$new"
 }
 
-# 从配置读取面板监听地址，拼成可访问的 URL
-# 监听 0.0.0.0 / :: 表示所有网卡，对外应显示本机 IPv4，而不是 0.0.0.0
-panel_url() {
+# 解析配置里的 external-controller，输出「监听主机 端口」两段
+# 主机已剥离 IPv6 方括号；配置缺失时按默认 0.0.0.0:9090 处理
+controller_parts() {
     local addr host port
-
-    [[ -n "$ipv4" ]] || detect_network_info
 
     addr=$(awk '
         /^[[:space:]]*external-controller:/ {
@@ -1225,8 +1241,20 @@ panel_url() {
         port="${addr##*:}"
     fi
 
+    printf '%s %s' "${host:-0.0.0.0}" "$port"
+}
+
+# 从配置读取面板监听地址，拼成可访问的 URL
+# 监听 0.0.0.0 / :: 表示所有网卡，对外应显示本机 IPv4，而不是 0.0.0.0
+panel_url() {
+    local host port
+    read -r host port <<<"$(controller_parts)"
+
     case "$host" in
-        ""|0.0.0.0|"::") host="${ipv4:-127.0.0.1}" ;;
+        ""|0.0.0.0|"::")
+            [[ -n "$ipv4" ]] || detect_network_info
+            host="${ipv4:-127.0.0.1}"
+            ;;
     esac
 
     printf 'http://%s:%s/ui' "$host" "$port"
@@ -1403,6 +1431,7 @@ apply_config() { # $1=备份路径
     sleep 1
     if ! wait_active 10; then
         err "服务未处于运行状态"
+        err "排查：journalctl -u mihomo -n 50"
         if [[ -n "$bak" && -f "$bak" ]]; then
             cp -f -- "$bak" "$CONFIG_FILE"
             err "已回滚到备份：${bak}"
@@ -2053,7 +2082,9 @@ install_webui() {
 
 # ---------- 配置菜单 ----------
 # 配置管理菜单入口
-config_mihomo() {
+# 配置管理菜单入口。与 install.sh 的 config_mihomo 同名不同义，
+# 那边是「生成并写入默认配置」，这边只是二级菜单，故改名以免混淆
+config_menu() {
     check_installation || return 1
     hreq
     printf '%s\n' "${COLOR_CYAN}  操作说明${COLOR_RESET}"
@@ -2199,19 +2230,19 @@ binary_asset_url() { # $1=资产文件名
 }
 
 # 下载指定通道的内核并替换：校验 → 自检 → 停服替换 → 启动失败回滚
-download_and_install() { # $1=alpha|stable
+# 下载并校验 mihomo 二进制，解压到安装目录
+# 依赖全局 channel / arch_raw；成功时写入全局 version 与 base（资产名），返回 0
+fetch_mihomo_binary() {
     local -a cands=()
-    local base="" c url gz bak
-
-    channel="$1"
-    detect_arch || return 1
-    check_network
+    local c url gz
+    base=""
 
     if [[ "$channel" == "alpha" ]]; then
-        version=$(fetch_alpha_version) || { err "获取测试版版本失败"; return 1; }
+        version=$(fetch_alpha_version) || { err "获取测试版版本号失败，请检查网络"; return 1; }
     else
-        version=$(fetch_latest_version) || { err "获取正式版版本失败"; return 1; }
+        version=$(fetch_latest_version) || { err "获取正式版版本号失败，请检查网络"; return 1; }
     fi
+    ok "获取软件版本：${version}（$(channel_name "$channel")）"
 
     while IFS= read -r c; do
         [[ -n "$c" ]] && cands+=("$c")
@@ -2236,15 +2267,15 @@ download_and_install() { # $1=alpha|stable
         err "amd64 已同时尝试 compatible 与普通变体，仍失败说明该版本未发布此架构资产"
         return 1
     fi
+    ok "匹配资产：${base}.gz"
 
     url=$(binary_asset_url "${base}.gz")
     gz="${ROOT_DIR}/${base}.gz"
 
     pick_fastest_source "$url" || return 1
-    info "开始下载 mihomo ${version}..."
-    if ! download_file "$url" "$gz" "mihomo 二进制" probe_asset; then
-        return 1
-    fi
+    info "开始下载 mihomo ${version} 二进制..."
+    download_file "$url" "$gz" "mihomo 二进制" probe_asset || return 1
+
     if ! verify_checksum "$gz" "${base}.gz"; then
         rm -f -- "$gz"
         return 1
@@ -2266,14 +2297,25 @@ download_and_install() { # $1=alpha|stable
         return 1
     fi
 
-    # 新内核必须能解析现有配置；若现有配置本身已不合法，则不阻断升级
+    # 新内核必须能解析现有配置；现有配置本身不合法时不阻断升级
     if [[ -f "$CONFIG_FILE" ]] && "$BIN_FILE" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
         if ! "${ROOT_DIR}/${base}" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
-            err "新内核无法解析现有配置，已中止升级（当前版本未改动）"
+            err "新内核无法解析现有配置，已中止（当前版本未改动）"
             rm -f -- "${ROOT_DIR}/${base}"
             return 1
         fi
     fi
+    return 0
+}
+
+# 更新 mihomo 内核：下载校验 → 替换 → 启动 → 失败回滚
+download_and_install() { # $1=alpha|stable
+    local bak
+
+    channel="$1"
+    detect_arch || return 1
+    check_network
+    fetch_mihomo_binary || return 1
 
     # 停服务 → 备份 → 替换 → 启动 → 失败回滚
     bak="${BIN_FILE}.bak"
@@ -2547,7 +2589,7 @@ pause_menu() {
 # 脚本版本只在此处出现，show_status 面板不再重复展示
 print_header() {
     hreq
-    printf '%s\n' "${COLOR_CYAN}  mihomo 一键管理脚本  v${SCRIPT_VERSION}${COLOR_RESET}"
+    printf '%s\n' "${COLOR_CYAN}  mihomo 管理脚本  v${SCRIPT_VERSION}${COLOR_RESET}"
     kv "作者" "ChatGPT JK789"
     hr
 }
@@ -2586,7 +2628,7 @@ menu() {
         read_input input "${COLOR_CYAN}请输入上面选项: ${COLOR_RESET}"
         # 20/30 分别是 10（配置管理）/ 11（查看日志）的快捷别名，保留既有输入习惯
         case "$input" in
-            1)  reinstall_mihomo       || true ;;
+            1)  reinstall_mihomo        || true ;;
             2)  update_mihomo           || true ;;
             3)  uninstall_mihomo        || true ;;
             4)  service_action start    || true ;;
@@ -2595,8 +2637,8 @@ menu() {
             7)  service_action enable   || true ;;
             8)  service_action disable  || true ;;
             9)  switch_version          || true ;;
-            10|20) config_mihomo        || true ;;
-            11|30) logs_mihomo          || true ;;
+            10) config_menu             || true ;;
+            11) logs_mihomo             || true ;;
             12) update_shell            || true ;;
             0|q|Q|exit) exit 0 ;;
             *)  warn "无效选项，请重新选择"; continue ;;
@@ -2660,7 +2702,7 @@ main() {
         enable)                 service_action enable ;;
         disable)                service_action disable ;;
         logs)                   logs_mihomo ;;
-        config)                 config_mihomo ;;
+        config)                 config_menu ;;
         secret)                 secret_cmd "${2:-}" ;;
         panel)                  panel_cmd "${2:-}" ;;
         log-clean)              log_clean ;;

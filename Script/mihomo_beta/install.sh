@@ -3,15 +3,16 @@
 # ----------------------------------------
 # name   : install.sh
 # desc   : 安装 & 配置
-# date   : 2026-10-26 18:49:15
+# date   : 2026-10-26 19:20:42
 # author : ChatGPT
-# ver    : 1.7.5
+# ver    : 1.7.8
 # ----------------------------------------
 
-# 与 mihomo.sh 共用 65 个同名函数，改动需同步两份
+# 与 mihomo.sh 共用 68 个同名函数，改动需同步两份（main / usage / print_header
+# 因入口职责不同各自实现，不参与同步）
 
-# 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换，
-# 提前拦截以给出明确提示，而不是抛出晦涩的 set 报错。
+# 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换。
+# 此处刻意用单括号 [ ]，以便在 sh 下也能执行到这条提示，而不是抛出晦涩的 set 报错。
 if [ -z "${BASH_VERSION:-}" ]; then
     printf '%s\n' "错误：请使用 bash 运行本脚本" >&2
     exit 1
@@ -66,7 +67,7 @@ else
 fi
 
 # ---------- 常量 ----------
-SCRIPT_VERSION="1.7.5"
+SCRIPT_VERSION="1.7.8"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -819,45 +820,43 @@ check_ip_forward() {
 }
 
 # ---------- 服务管理 ----------
-# 设置服务开机自启
-service_enable() {
+# 按 init 系统执行 start / stop / restart
+service_do() { # $1=start|stop|restart
     case "$init_sys" in
         systemd)
-            systemctl daemon-reload >/dev/null 2>&1 || true
-            systemctl enable mihomo >/dev/null 2>&1
+            if [[ "$1" == "restart" ]]; then
+                systemctl daemon-reload >/dev/null 2>&1 || true
+            fi
+            systemctl "$1" mihomo
             ;;
         openrc)
-            rc-update add mihomo default >/dev/null 2>&1
+            rc-service mihomo "$1"
             ;;
         *)
+            err "当前 init 系统不受支持"
             return 1
             ;;
     esac
 }
 
-# 重启服务（systemd / OpenRC）
-service_restart() {
+# 按 init 系统设置或取消开机自启
+service_enable_toggle() { # $1=enable|disable
     case "$init_sys" in
         systemd)
+            # 单元文件可能刚写入，先重载再操作，避免按旧定义处理
             systemctl daemon-reload >/dev/null 2>&1 || true
-            systemctl restart mihomo
+            systemctl "$1" mihomo >/dev/null 2>&1
             ;;
         openrc)
-            rc-service mihomo restart
+            if [[ "$1" == "enable" ]]; then
+                rc-update add mihomo default >/dev/null 2>&1
+            else
+                rc-update del mihomo >/dev/null 2>&1
+            fi
             ;;
         *)
-            err "当前 init 系统不受支持，无法重启服务"
             return 1
             ;;
-    esac
-}
-
-# 停止服务，尽力而为：任何 init 下都返回 0，避免裸调用点中断流程
-service_stop() {
-    case "$init_sys" in
-        systemd) systemctl stop mihomo >/dev/null 2>&1 || true ;;
-        openrc)  rc-service mihomo stop >/dev/null 2>&1 || true ;;
-        *)       return 0 ;;
     esac
 }
 
@@ -1097,7 +1096,7 @@ install_binary() { # $1=新二进制路径
     local src="$1" bak="${BIN_FILE}.bak"
     if [[ -f "$BIN_FILE" ]]; then
         cp -f -- "$BIN_FILE" "$bak" || warn "备份旧二进制失败"
-        service_stop
+        service_do stop >/dev/null 2>&1 || true
     fi
     if ! mv -f -- "$src" "$BIN_FILE"; then
         err "替换二进制失败"
@@ -1112,14 +1111,17 @@ install_binary() { # $1=新二进制路径
 }
 
 # 下载、校验并安装 mihomo 内核
-download_mihomo_binary() {
+# 下载并校验 mihomo 二进制，解压到安装目录
+# 依赖全局 channel / arch_raw；成功时写入全局 version 与 base（资产名），返回 0
+fetch_mihomo_binary() {
     local -a cands=()
-    local base="" c url gz
+    local c url gz
+    base=""
 
     if [[ "$channel" == "alpha" ]]; then
-        version=$(fetch_alpha_version) || die "获取测试版版本号失败，请检查网络"
+        version=$(fetch_alpha_version) || { err "获取测试版版本号失败，请检查网络"; return 1; }
     else
-        version=$(fetch_latest_version) || die "获取正式版版本号失败，请检查网络"
+        version=$(fetch_latest_version) || { err "获取正式版版本号失败，请检查网络"; return 1; }
     fi
     ok "获取软件版本：${version}（$(channel_name "$channel")）"
 
@@ -1152,14 +1154,13 @@ download_mihomo_binary() {
     gz="${ROOT_DIR}/${base}.gz"
 
     pick_fastest_source "$url" || return 1
-    info "开始下载 mihomo 二进制..."
+    info "开始下载 mihomo ${version} 二进制..."
     download_file "$url" "$gz" "mihomo 二进制" probe_asset || return 1
 
     if ! verify_checksum "$gz" "${base}.gz"; then
         rm -f -- "$gz"
         return 1
     fi
-
     if ! gzip -t "$gz" 2>/dev/null; then
         rm -f -- "$gz"
         err "压缩包完整性校验失败"
@@ -1177,15 +1178,20 @@ download_mihomo_binary() {
         return 1
     fi
 
-    # 覆盖安装时，新内核必须能解析现有配置；首次安装无 config.yaml，条件自然跳过
+    # 新内核必须能解析现有配置；现有配置本身不合法时不阻断升级
     if [[ -f "$CONFIG_FILE" ]] && "$BIN_FILE" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
         if ! "${ROOT_DIR}/${base}" -t -f "$CONFIG_FILE" >/dev/null 2>&1; then
-            err "新内核无法解析现有配置，已中止安装（当前版本未改动）"
+            err "新内核无法解析现有配置，已中止（当前版本未改动）"
             rm -f -- "${ROOT_DIR}/${base}"
             return 1
         fi
     fi
+    return 0
+}
 
+# 安装 mihomo 二进制：下载校验通过后替换到安装目录
+download_mihomo_binary() {
+    fetch_mihomo_binary || return 1
     install_binary "${ROOT_DIR}/${base}"
     ok "mihomo 二进制已就绪"
 }
@@ -1246,7 +1252,7 @@ install_service() {
     fi
 
     ok "系统服务已安装：${dest}"
-    service_enable || warn "设置开机自启失败"
+    service_enable_toggle enable || warn "设置开机自启失败"
 }
 
 # ---------- 管理面板 ----------
@@ -1560,36 +1566,40 @@ inject_providers() { # $1=块文件 $2=源配置 $3=输出文件
 apply_config() { # $1=备份路径
     local bak="${1:-}"
     if ! config_test "$CONFIG_FILE"; then
-        err "配置校验未通过，已回滚"
+        err "配置校验未通过"
         if [[ -n "$bak" && -f "$bak" ]]; then
             cp -f -- "$bak" "$CONFIG_FILE"
+            err "已回滚到备份：${bak}"
         fi
         return 1
     fi
 
-    # init 未知（如 runit/s6 系统）时无法托管服务，只保证配置有效
+    # init 未知（如 runit/s6 系统）时无法托管服务，只保证配置有效。
+    # 缺少此分支会让 service_do 返回 1，导致每次写配置都被误判为失败并回滚。
     if [[ "$init_sys" == "unknown" ]]; then
         warn "未识别 init 系统，跳过服务重启"
-        warn "请手动启动：${BIN_FILE} -d ${ROOT_DIR}"
+        warn "请手动重启使配置生效：${BIN_FILE} -d ${ROOT_DIR}"
         return 0
     fi
 
-    if ! service_restart; then
-        err "服务重启失败，已回滚配置"
+    if ! service_do restart; then
+        err "服务重启失败"
         if [[ -n "$bak" && -f "$bak" ]]; then
             cp -f -- "$bak" "$CONFIG_FILE"
+            err "已回滚到备份：${bak}"
+            service_do restart >/dev/null 2>&1 || true
         fi
-        service_restart >/dev/null 2>&1 || true
         return 1
     fi
     sleep 1
     if ! wait_active 10; then
-        err "服务未处于运行状态，已回滚配置"
+        err "服务未处于运行状态"
         err "排查：journalctl -u mihomo -n 50"
         if [[ -n "$bak" && -f "$bak" ]]; then
             cp -f -- "$bak" "$CONFIG_FILE"
+            err "已回滚到备份：${bak}"
+            service_do restart >/dev/null 2>&1 || true
         fi
-        service_restart >/dev/null 2>&1 || true
         return 1
     fi
     ok "配置已生效，服务运行中"
@@ -1613,9 +1623,24 @@ ask_secret() {
 }
 
 # 未启用密钥时的统一警告，安装、重置、禁用三处共用
+# 只提示监听范围，不拼访问地址：访问地址由状态面板的「面板地址」给出，
+# 避免探测不到本机 IPv4 时把回环地址当成对外地址显示
 warn_secret_disabled() {
-    local host="${ipv4:-127.0.0.1}"
-    warn "⚠ 面板未启用密钥：http://${host}:9090/ui 任何人可访问"
+    local host port disp
+    read -r host port <<<"$(controller_parts)"
+    disp="${host:-0.0.0.0}"
+    # 通配监听在配置里写作 ::，展示时补回方括号，避免拼成 :::9090
+    [[ "$disp" == "::" ]] && disp="[::]"
+
+    warn "⚠ 面板未启用密钥"
+    case "$host" in
+        ""|0.0.0.0|"::")
+            warn "  监听 ${disp}:${port} 覆盖所有网卡，同网段与公网均可直连"
+            ;;
+        *)
+            warn "  当前仅监听 ${disp}:${port}，实际仅本机可访问"
+            ;;
+    esac
     warn "  任何能访问该端口的人都可以修改你的配置。"
     warn "  建议用防火墙限制来源，或改用 SSH 隧道访问。"
 }
@@ -1700,12 +1725,10 @@ ensure_controller_secret() { # $1=配置文件 $2=沿用旧密钥（可选），
     printf '%s' "$new"
 }
 
-# 从配置读取面板监听地址，拼成可访问的 URL
-# 监听 0.0.0.0 / :: 表示所有网卡，对外应显示本机 IPv4，而不是 0.0.0.0
-panel_url() {
+# 解析配置里的 external-controller，输出「监听主机 端口」两段
+# 主机已剥离 IPv6 方括号；配置缺失时按默认 0.0.0.0:9090 处理
+controller_parts() {
     local addr host port
-
-    [[ -n "$ipv4" ]] || detect_network_info
 
     addr=$(awk '
         /^[[:space:]]*external-controller:/ {
@@ -1728,8 +1751,20 @@ panel_url() {
         port="${addr##*:}"
     fi
 
+    printf '%s %s' "${host:-0.0.0.0}" "$port"
+}
+
+# 从配置读取面板监听地址，拼成可访问的 URL
+# 监听 0.0.0.0 / :: 表示所有网卡，对外应显示本机 IPv4，而不是 0.0.0.0
+panel_url() {
+    local host port
+    read -r host port <<<"$(controller_parts)"
+
     case "$host" in
-        ""|0.0.0.0|"::") host="${ipv4:-127.0.0.1}" ;;
+        ""|0.0.0.0|"::")
+            [[ -n "$ipv4" ]] || detect_network_info
+            host="${ipv4:-127.0.0.1}"
+            ;;
     esac
 
     printf 'http://%s:%s/ui' "$host" "$port"
@@ -1885,7 +1920,7 @@ install_default_config_only() {
         return 0
     fi
 
-    if ! service_restart; then
+    if ! service_do restart; then
         err "服务启动失败，请查看日志：journalctl -u mihomo -n 50"
         return 1
     fi
