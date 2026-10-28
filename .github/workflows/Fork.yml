@@ -1,6 +1,10 @@
-# ---------- 拉取上游 mihomo 规则 ----------
+# ----------------------------------------
+# name   : Fork.yml
 # desc   : 定时拉取上游 mihomo 规则文件，提交并推送
-# date   : 2026-10-23 10:29:00
+# date   : 2026-10-28 14:35:43
+# author : ChatGPT DeepSeek JK789
+# ver    : 0.1.0
+# ----------------------------------------
 
 name: 拉取上游 mihomo 规则
 
@@ -8,6 +12,7 @@ name: 拉取上游 mihomo 规则
 on:
   workflow_dispatch:
   schedule:
+    # 注意：cron 使用 UTC。15 */12 * * * = 香港时间 08:15 / 20:15
     - cron: '15 */12 * * *'
 
 # ---------- 权限与并发 ----------
@@ -29,6 +34,7 @@ defaults:
 # ---------- 运行环境 ----------
 env:
   TZ: Asia/Hong_Kong
+  UPSTREAM_REPO: Abcd789JK/Tools
   UPSTREAM_BRANCH: main
   DOWNLOAD_PARALLEL: '8'
 
@@ -42,10 +48,10 @@ jobs:
 
     steps:
       - name: 检出上游仓库
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
-          repository: Abcd789JK/Tools
-          ref: main
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.UPSTREAM_BRANCH }}
           path: Tools-repo
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 1
@@ -196,6 +202,9 @@ jobs:
           # 先提交再 rebase：工作区已干净，无需 --autostash，冲突概率大幅降低
           pushed=0
           for attempt in 1 2 3; do
+              # 上一次 pull --rebase 若因冲突中断，仓库会停在 rebase 中间态，
+              # 后续 pull 会直接失败，因此每次重试前先清理未完成的 rebase
+              git rebase --abort >/dev/null 2>&1 || true
               if git pull --rebase origin "${UPSTREAM_BRANCH}" \
                     && git push origin "HEAD:${UPSTREAM_BRANCH}"; then
                   pushed=1
