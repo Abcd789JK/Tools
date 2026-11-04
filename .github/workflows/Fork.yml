@@ -1,9 +1,9 @@
 # ----------------------------------------
 # name   : Fork.yml
 # desc   : 定时拉取上游 mihomo 规则文件，提交并推送
-# date   : 2026-10-28 14:35:43
-# author : ChatGPT DeepSeek JK789
-# ver    : 0.1.0
+# date   : 2026-11-04 19:03:20
+# author : ChatGPT JK789
+# ver    : 0.1.2
 # ----------------------------------------
 
 name: 拉取上游 mihomo 规则
@@ -22,8 +22,9 @@ permissions:
   actions: write
 
 # 防止定时任务与手动触发并发导致 push 冲突
+# 与 Auto-Update.yml 共用同一 group：两个工作流写同一分支，必须互斥，否则只能依赖推送重试兜底
 concurrency:
-  group: fork-mihomo-rules
+  group: ruleset-sync
   cancel-in-progress: false
 
 # 统一 shell，避免逐 step 重复声明
@@ -36,19 +37,22 @@ env:
   TZ: Asia/Hong_Kong
   UPSTREAM_REPO: Abcd789JK/Tools
   UPSTREAM_BRANCH: main
+  # 环境变量只能是字符串，供 xargs -P 使用，转换为整数由 xargs 自行处理
   DOWNLOAD_PARALLEL: '8'
 
 # ---------- 任务 ----------
 jobs:
   git-mihomo:
     runs-on: ubuntu-24.04
-    # 36 个文件、并发 8，单文件 curl max-time 90s + retry 3 最坏约 5 分钟，
-    # 5 轮约 25 分钟，留足余量避免 job 被强杀后通知步骤拿不到 env
-    timeout-minutes: 30
+    # 36 个文件、并发 8，单文件 curl max-time 90s + retry 3 最坏约 6 分钟，
+    # 5 轮最坏约 30 分钟。timeout 必须大于该最坏值：job 超时被强杀时，
+    # if: always() 的后续步骤不会执行，通知与清理都会丢失。
+    timeout-minutes: 45
 
     steps:
       - name: 检出上游仓库
-        uses: actions/checkout@v7
+        # 固定到 v7.0.1 的完整 Commit SHA，避免 tag 被移动导致执行未审查的代码。
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ${{ env.UPSTREAM_REPO }}
           ref: ${{ env.UPSTREAM_BRANCH }}
@@ -59,7 +63,7 @@ jobs:
       - name: 下载 mihomo 规则
         working-directory: ${{ github.workspace }}/Tools-repo
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
           # 目录必须在这里一次性建全，避免后续 cp 因目录缺失失败
           mkdir -p \
@@ -145,28 +149,46 @@ jobs:
           export -f fetch_one
 
           echo "开始并发下载（并行度 ${DOWNLOAD_PARALLEL}）..."
-          # xargs 在有失败项时返回 123，这里用 || true 吞掉，改为按日志统计
+          # xargs 在有失败项时返回 123，这里用 || true 吞掉，改为按日志统计。
+          # 单引号是必要的：$1 由子 bash 自行展开，外层 shell 不得提前插值。
+          # shellcheck disable=SC2016
           xargs -r -d '\n' -P "${DOWNLOAD_PARALLEL}" -n 1 \
               bash -c 'fetch_one "$1"' _ < "$manifest" || true
 
           failures=$(wc -l < "$fail_log" | tr -d ' ')
+          total=$(wc -l < "$manifest" | tr -d ' ')
+          # 必须在可能的 exit 之前写入：否则中止时通知只能拿到默认值 0，掩盖真实失败数。
+          echo "failures=${failures}" >> "$GITHUB_ENV"
           if [[ "$failures" -gt 0 ]]; then
-              echo "::warning::共有 ${failures} 个上游文件下载失败，继续执行"
+              echo "::warning::共有 ${failures}/${total} 个上游文件下载失败，继续执行"
               cat "$fail_log"
           else
-              echo "全部上游规则下载成功"
+              echo "全部上游规则下载成功（共 ${total} 个）"
           fi
-          echo "failures=${failures}" >> "$GITHUB_ENV"
+          # 全部失败时必须中止：后续步骤会用旧文件或空文件重建规则，
+          # 继续执行可能把既有规则清空后推送，造成规则丢失。
+          if [[ "$failures" -ge "$total" ]]; then
+              echo "::error::全部 ${total} 个上游文件下载失败，中止以避免覆盖既有规则"
+              exit 1
+          fi
 
       - name: 提交并推送更新
         working-directory: ${{ github.workspace }}/Tools-repo
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
-          git config --local user.name "GitHub Actions"
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          # 统一使用项目规定的 GitHub Actions Bot 身份（含 App 数字前缀）。
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add -A
+          # 清理中断运行可能残留的中间文件，避免被下面的 add 误提交。
+          find Ruleset -type f \
+              \( -name '*.part' -o -name '*.sorted' -o -name '*.dedup' -o -name '*.tmp' \) \
+              -delete 2>/dev/null || true
+
+          # 只暂存本工作流产出的目录（Ruleset），避免把仓库内其他无关变更一并提交。
+          # 新增输出目录时必须同步修改这里的路径。
+          git add -A -- Ruleset
 
           if git diff --cached --quiet; then
               echo "规则文件无变更，跳过提交"
@@ -186,9 +208,11 @@ jobs:
           added="$(git diff --cached --name-status | awk '$1=="A"' | wc -l | tr -d ' ')"
           modified="$(git diff --cached --name-status | awk '$1=="M"' | wc -l | tr -d ' ')"
           deleted="$(git diff --cached --name-status | awk '$1=="D"' | wc -l | tr -d ' ')"
-          echo "added=${added}"       >> "$GITHUB_ENV"
-          echo "modified=${modified}" >> "$GITHUB_ENV"
-          echo "deleted=${deleted}"   >> "$GITHUB_ENV"
+          {
+              echo "added=${added}"
+              echo "modified=${modified}"
+              echo "deleted=${deleted}"
+          } >> "$GITHUB_ENV"
 
           # 用 awk 取前 20 行，避免 head 提前关闭管道触发 SIGPIPE
           {
@@ -222,7 +246,7 @@ jobs:
 
       - name: 设置时间与变更信息
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
           echo "time=$(date +'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
@@ -244,7 +268,9 @@ jobs:
 
       - name: 发送 Telegram 通知
         if: always()
-        uses: appleboy/telegram-action@master
+        # 固定到 v1.1.1 的完整 Commit SHA：该 Action 持有 TELEGRAM_TOKEN，
+        # 跟随 @master 等于把凭据交给可被上游随时改写的内容。
+        uses: appleboy/telegram-action@214f06cfa3d3a588c1472116889437e7c6fd29b1
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
@@ -253,7 +279,7 @@ jobs:
             📢 <b>GitHub Actions 自动化任务通知</b>
 
             ✉️ 标题: mihomo 上游规则拉取
-            📦 仓库: 小姐姐
+            📦 仓库: ${{ github.repository }}
             ⏰ 时间: ${{ env.time || 'N/A' }}
 
             🎯 状态: ${{ job.status == 'success' && '恭喜你! 任务成功' || '很遗憾! 任务失败' }}
@@ -264,7 +290,11 @@ jobs:
 
       - name: 清理旧工作流运行记录
         if: always()
-        uses: Mattraks/delete-workflow-runs@main
+        # 固定到 v2.1.0 的完整 Commit SHA：该 Action 持有 actions:write，
+        # 跟随 @main 等于把删除权限交给可被上游随时改写的内容。
+        uses: Mattraks/delete-workflow-runs@b3018382ca039b53d238908238bd35d1fb14f8ee
         with:
-          retain_days: 0
+          # 保留 7 天运行记录用于回溯失败原因；设为 0 会删除全部历史，
+          # 只剩 keep_minimum_runs 兜底，排查问题时无据可查。
+          retain_days: 7
           keep_minimum_runs: 3
