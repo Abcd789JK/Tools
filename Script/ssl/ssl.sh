@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # name   : ssl.sh
 # desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
-# date   : 2026-11-03 20:56:24
+# date   : 2026-11-04 16:24:46
 # author : ChatGPT JK789
 # ver    : 0.3.1
 # --------------------------------------------------
@@ -11,13 +11,7 @@
 # 必须用 bash 运行：dash 等 shell 不支持 pipefail / [[ ]] / =~ 等语法。
 # 本段使用 POSIX 兼容写法，确保在非 bash 环境下也能输出友好提示后退出。
 if [ -z "${BASH_VERSION:-}" ]; then
-    _c=''
-    _r=''
-    if [ -t 2 ]; then
-        _c=$(printf '\033[31m')
-        _r=$(printf '\033[0m')
-    fi
-    printf '%s\n' "${_c}[错误] 请使用 bash 运行本脚本: bash ssl.sh${_r}" >&2
+    printf '%s\n' '[错误] 请使用 bash 运行本脚本: bash ssl.sh' >&2
     exit 1
 fi
 
@@ -35,14 +29,14 @@ if (( EUID != 0 )); then
     exit 1
 fi
 
-# 私钥必须在创建瞬间就是 600：--install-cert 落盘后再 chmod 存在 644 的窗口期。
-umask 077
-
 # 声明当前脚本版本。
 # 必须与文件头 ver 完全一致，供 --version 与启动标题统一读取。
 readonly SCRIPT_VERSION="0.3.1"
 
-# ---------- 常量 ----------
+# 私钥必须在创建瞬间就是 600：--install-cert 落盘后再 chmod 存在 644 的窗口期。
+umask 077
+
+# 常量定义。
 readonly SCRIPT_NAME="Cloudflare DNS 证书申请脚本"      # 脚本中文显示名称，仅在启动标题中使用
 readonly SCRIPT_DESCRIPTION="仅支持 DNS-01 验证，适用于未开放 80/443 端口的家庭服务器"
 readonly ACME_BIN="/root/.acme.sh/acme.sh"             # acme.sh 可执行文件路径
@@ -51,7 +45,7 @@ readonly DEFAULT_CA="letsencrypt"                      # 默认证书颁发机�
 readonly HR="--------------------------------------------------"
 readonly HR_EQ="=================================================="
 
-# ---------- 全局状态 ----------
+# 全局状态变量。
 domain=""            # 要申请证书的域名，由 get_cloudflare_info 填写
 cf_token=""          # Cloudflare API Token
 cf_account_id=""     # Cloudflare Account ID
@@ -59,7 +53,7 @@ distro="unknown"     # 发行版 ID，由 detect_distro 填写
 pkg_mgr=""           # 包管理器：apt / dnf / pacman / apk / zypper / none
 tmp_files=()         # 临时文件清单，退出时由 cleanup 统一清理
 
-# ---------- 颜色 ----------
+# 颜色初始化。
 # ANSI 颜色常量，由 setup_colors 根据终端环境初始化。
 COLOR_RESET=''
 COLOR_RED=''
@@ -84,7 +78,7 @@ setup_colors() {
     fi
 }
 
-# ---------- 日志 ----------
+# 日志函数。
 # 统一日志输出函数；全部写入标准错误，避免污染 stdout 数据流。
 log_info() {
     printf '%s[INFO]%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$*" >&2
@@ -116,7 +110,7 @@ die() {
     exit 1
 }
 
-# ---------- 分隔线与键值输出 ----------
+# 分隔线与键值输出。
 # 打印单线分隔线。
 hr() {
     printf '%s\n' "${COLOR_BLUE}${HR}${COLOR_RESET}"
@@ -137,7 +131,7 @@ kv() {
         "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
-# ---------- 清理 ----------
+# 清理与信号处理。
 # 脚本退出时清理临时文件（正常退出与异常退出都会触发）。
 # 只删除记录在 tmp_files 中的文件，不涉及用户数据。
 cleanup() {
@@ -157,7 +151,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'err_report ${LINENO}' ERR
 
-# ---------- 通用 ----------
+# 通用辅助函数。
 # 判断命令是否存在。
 # 参数：$1 表示命令名称。
 # 返回：存在时返回 0；不存在时返回非 0。
@@ -165,7 +159,7 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# ---------- 用法 ----------
+# 帮助信息。
 # 打印帮助。--help / --version 遵循项目统一 Root 启动要求，需以 root 运行。
 usage() {
     cat <<EOF
@@ -203,7 +197,7 @@ parse_args() {
     esac
 }
 
-# ---------- 系统检测 ----------
+# 系统检测。
 # 识别发行版与包管理器，覆盖主流发行版：
 #   Debian / Ubuntu 及其衍生版（Mint、Kali、Armbian 等）→ apt
 #   Fedora / RHEL / CentOS / Rocky / AlmaLinux → dnf（无 dnf 时退回 yum）
@@ -361,7 +355,7 @@ install_acme() {
     log_success "默认颁发机构已设置为 Let's Encrypt"
 }
 
-# ---------- 用户输入 ----------
+# 用户输入收集。
 # 交互收集 Cloudflare API Token、Account ID 与域名，并导出 acme.sh 所需环境变量。
 get_cloudflare_info() {
     local re
@@ -396,7 +390,7 @@ get_cloudflare_info() {
     export CF_Account_ID="$cf_account_id"
 }
 
-# ---------- 证书申请 ----------
+# 证书申请与安装。
 # 申请证书并安装到 SSL_DIR，同时注册续期时的自动复制。
 issue_cert() {
     local -a d_args=()
@@ -446,7 +440,7 @@ issue_cert() {
     hr
 }
 
-# ---------- 启动标题 ----------
+# 启动标题。
 # 打印脚本横幅：名称、版本与适用场景。
 # 名称与版本必须读取 SCRIPT_NAME / SCRIPT_VERSION 常量，不得多处硬编码。
 print_script_header() {
@@ -457,7 +451,7 @@ print_script_header() {
     hreq
 }
 
-# ---------- 主流程 ----------
+# 主流程入口。
 # 脚本入口：参数解析 → 标题 → 环境检查 → 装依赖 → 装 acme.sh → 收集输入 → 申请证书。
 main() {
     parse_args "$@"
