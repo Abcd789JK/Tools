@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : mihomo.sh
 # desc   : mihomo 内核与订阅配置的交互式管理脚本
-# date   : 2026-11-03 20:34:00
+# date   : 2026-11-04 20:18:53
 # author : ChatGPT JK789
-# ver    : 2.3.0
+# ver    : 2.4.0
 # --------------------------------------------------
 
 # 与 install.sh 共用 68 个同名函数，改动需同步两份；
@@ -36,7 +36,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.3.0"
+readonly SCRIPT_VERSION="2.4.0"
 
 # 收紧新建文件的默认权限：配置、日志和临时文件只允许属主访问。
 umask 077
@@ -2680,11 +2680,6 @@ update_shell() {
     check_network
     log_info "正在检查管理脚本更新..."
 
-    if ! command_exists jq; then
-        log_error "缺少必要依赖：jq，无法校验远端版本，更新取消"
-        return 1
-    fi
-
     # 候选脚本放在本次创建的私有临时目录中，由 EXIT Trap 统一回收。
     if ! work_dir="$(mktemp -d /tmp/mihomo-update.XXXXXX 2>/dev/null)"; then
         log_error "无法创建临时目录，更新取消"
@@ -2699,7 +2694,7 @@ update_shell() {
         log_info "已锁定远端提交：${pinned_commit}"
     else
         source_url="$SHELL_URL"
-        log_warn "无法锁定远端提交，改用分支地址下载，本次制品不可复现"
+        log_warn "无法锁定远端提交（接口不可达或缺少 jq），改用分支地址下载，本次制品不可复现"
     fi
 
     if ! download_file "$source_url" "$candidate_file" "管理脚本"; then
@@ -2769,8 +2764,28 @@ update_shell() {
 
     hash -r 2>/dev/null || true
     log_success "管理脚本已更新：${SCRIPT_VERSION} -> ${remote_version}"
-    log_info "新版本将在下次启动时生效，当前进程仍运行旧代码"
     log_info "如新版异常，回滚命令：cp -f ${SHELL_FILE}.bak ${SHELL_FILE}"
+
+    if [[ ! -x "$SHELL_FILE" ]]; then
+        log_error "新脚本缺少可执行权限，请手动执行：chmod 755 ${SHELL_FILE}"
+        return 1
+    fi
+
+    # 覆盖后旧代码仍在内存中，等待 3 秒缓冲，随后直接用新脚本替换当前进程；
+    # 否则菜单、函数与版本号会新旧混跑，行为不可预期。
+    log_info "3 秒后自动运行新版本..."
+    sleep 3
+
+    # exec 不会触发 EXIT Trap，先手动回收本次创建的临时目录，避免遗留。
+    # Trap 本身不解除：万一 exec 失败，接下来退出时仍能正常收尾。
+    cleanup
+
+    # execfail 让 exec 失败时返回而不是直接退出，便于提示后保留当前进程可用。
+    shopt -s execfail
+    exec "$SHELL_FILE" || true
+    shopt -u execfail
+    log_error "启动新版本失败，请手动运行：${SHELL_FILE}"
+    return 1
 }
 
 # 等待用户按回车返回主菜单。
@@ -2814,7 +2829,7 @@ menu() {
         hr
         printf '%s\n' "${COLOR_GREEN}10${COLOR_RESET}. 配置管理"
         printf '%s\n' "${COLOR_GREEN}11${COLOR_RESET}. 查看日志"
-        printf '%s\n' "${COLOR_GREEN}12${COLOR_RESET}. 更新管理脚本（当前版本：${SCRIPT_VERSION}）"
+        printf '%s\n' "${COLOR_GREEN}12${COLOR_RESET}. 更新脚本"
         printf '%s\n' "${COLOR_GREEN} 0${COLOR_RESET}. 退出脚本"
         hreq
         show_status
