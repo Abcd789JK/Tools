@@ -3,9 +3,10 @@
 # --------------------------------------------------
 # name   : Backup_Win.sh
 # desc   : Windows 版 GitHub 仓库自动同步脚本，拉取更新并提交本地变更
-# date   : 2026-11-04 16:27:24
+# date   : 2026-11-04 19:48:44
 # author : ChatGPT JK789
-# ver    : 0.4.0
+# ver    : 0.5.0
+# 更新时间: 2026-11-04 19:48:44
 # --------------------------------------------------
 
 # 启用 Bash 严格模式。
@@ -15,7 +16,7 @@ set -Eeuo pipefail
 # 本脚本仅在 Windows Git Bash 环境运行，不涉及系统级特权操作。
 
 # 声明当前脚本版本。
-readonly SCRIPT_VERSION="0.4.0"
+readonly SCRIPT_VERSION="0.5.0"
 
 # ==================================================
 # 全局常量与默认配置
@@ -166,9 +167,9 @@ load_env_file() {
     log_debug "已加载环境变量文件：$env_file"
 }
 
-# 更新已修改脚本文件头中的日期字段。
+# 更新已修改脚本文件头中的日期与更新时间字段。
 # 参数：$1 仓库目录。
-# 副作用：原地修改匹配文件的日期字段。
+# 副作用：原地修改匹配文件的字段，仅处理本地已修改、待推送的文件。
 update_header_date() {
     local repo_dir="${1:?缺少仓库目录}"
     local now
@@ -183,20 +184,23 @@ update_header_date() {
         abs_file="${repo_root}/${file}"
         [[ -f "$abs_file" ]] || continue
 
-        if grep -qE '^(# *date[[:space:]]*:|#!date[[:space:]]*=)' "$abs_file"; then
-            # 区分 GNU sed 与 BSD sed 的原地修改参数。
+        if grep -qE '^(# *date[[:space:]]*:|#!date[[:space:]]*=|# *更新时间[[:space:]]*:)' "$abs_file"; then
+            # 使用 -E 启用扩展正则，使括号作为捕获组，与 grep -E 的正则保持一致；
+            # 同时区分 GNU sed 与 BSD sed 的原地修改参数。
             if sed --version >/dev/null 2>&1; then
-                sed -i \
+                sed -E -i \
                     -e "s|^(# *date[[:space:]]*:[[:space:]]*).*$|\1$now|" \
                     -e "s|^(#!date[[:space:]]*=[[:space:]]*).*$|\1$now|" \
+                    -e "s|^(# *更新时间[[:space:]]*:[[:space:]]*).*$|\1$now|" \
                     "$abs_file"
             else
-                sed -i '' \
+                sed -E -i '' \
                     -e "s|^(# *date[[:space:]]*:[[:space:]]*).*$|\1$now|" \
                     -e "s|^(#!date[[:space:]]*=[[:space:]]*).*$|\1$now|" \
+                    -e "s|^(# *更新时间[[:space:]]*:[[:space:]]*).*$|\1$now|" \
                     "$abs_file"
             fi
-            log_debug "已更新文件日期：$abs_file"
+            log_debug "已更新文件日期与更新时间：$abs_file"
         fi
     done < <(git -C "$repo_dir" diff --name-only --diff-filter=M -z)
 }

@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : Backup.sh
 # desc   : GitHub 仓库自动同步与备份脚本，拉取远程更新并打包备份
-# date   : 2026-11-04 16:27:24
+# date   : 2026-11-04 19:48:44
 # author : ChatGPT JK789
-# ver    : 0.2.0
+# ver    : 0.3.0
 # --------------------------------------------------
 
 # 启用 Bash 严格模式。
@@ -23,14 +23,14 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本。
-readonly SCRIPT_VERSION="0.2.0"
+readonly SCRIPT_VERSION="0.3.0"
 
 # ==================================================
 # 全局常量与默认配置
 # ==================================================
 
 readonly SCRIPT_NAME="GitHub 仓库自动同步备份脚本"
-readonly SCRIPT_DESCRIPTION="批量拉取 GitHub 仓库更新，有更新时打包备份并通过 Telegram 通知结果"
+readonly SCRIPT_DESCRIPTION="批量拉取 GitHub 仓库更新，有更新时打包 /root/GitHub 仓库目录（排除 .git）并通过 Telegram 通知结果"
 
 # 分隔线固定为 50 个可见 ASCII 字符。
 readonly HR="--------------------------------------------------"
@@ -38,6 +38,9 @@ readonly HR_EQ="=================================================="
 
 # 备份保留数量。
 readonly BACKUP_KEEP_COUNT=5
+
+# 备份源目录：打包该目录下所有被同步的 GitHub 仓库，自动排除各仓库的 .git。
+readonly BACKUP_SOURCE_DIR="/root/GitHub"
 
 # 脚本所在目录，用于定位同目录下的 .env 配置文件。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -277,11 +280,16 @@ process_repo() {
 }
 
 # 创建备份压缩包。
-# 副作用：创建备份目录和压缩文件，清理旧备份。
+# 副作用：打包备份源目录下所有仓库（排除 .git），创建备份目录和压缩文件，清理旧备份。
 create_backup() {
     local backup_dir
     local timestamp
     local backup_file
+
+    if [[ ! -d "$BACKUP_SOURCE_DIR" ]]; then
+        log_error "备份源目录不存在：$BACKUP_SOURCE_DIR"
+        return 1
+    fi
 
     backup_dir="${SCRIPT_DIR}/backups"
     timestamp=$(date +'%Y%m%d_%H%M%S')
@@ -289,12 +297,11 @@ create_backup() {
 
     mkdir -p "$backup_dir"
 
-    log_info "正在创建备份：$backup_file"
-    if ! tar -czf "$backup_file" -C "$SCRIPT_DIR" \
-        --exclude='./backups' \
-        --exclude='./.git' \
-        --exclude='./.env' \
-        -- ./*.sh; then
+    log_info "正在备份目录：$BACKUP_SOURCE_DIR"
+    # 打包整个备份源目录，排除各仓库的 .git 版本控制目录。
+    if ! tar -czf "$backup_file" -C "$BACKUP_SOURCE_DIR" \
+        --exclude='.git' \
+        -- .; then
         log_error "备份创建失败"
         return 1
     fi
