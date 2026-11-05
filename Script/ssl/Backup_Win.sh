@@ -3,26 +3,49 @@
 # --------------------------------------------------
 # name   : Backup_Win.sh
 # desc   : Windows 版 GitHub 仓库自动同步脚本，拉取更新并提交本地变更
-# date   : 2026-11-04 19:48:44
+# date   : 2026-11-05 16:01:01
 # author : ChatGPT JK789
-# ver    : 0.5.0
-# 更新时间: 2026-11-04 19:48:44
+# ver    : 0.6.2
 # --------------------------------------------------
+
+# 解释器守卫：必须早于 set -u 等 Bash 专有选项，给出可读错误提示。
+if [ -z "${BASH_VERSION:-}" ]; then
+    printf '%s\n' '错误：请使用 bash 运行本脚本' >&2
+    exit 1
+fi
 
 # 启用 Bash 严格模式。
 set -Eeuo pipefail
 
-# Windows Git Bash 环境无 Root 概念，跳过 Root 检查。
-# 本脚本仅在 Windows Git Bash 环境运行，不涉及系统级特权操作。
+# 要求 Bash 4.0+（使用 [[ ]]、local、read -d '' 等特性）。
+if (( BASH_VERSINFO[0] < 4 )); then
+    printf '[ERROR] 需要 Bash 4.0 及以上版本，当前版本：%s\n' "$BASH_VERSION" >&2
+    exit 1
+fi
+
+# 平台检测：MINGW*/MSYS*/CYGWIN* 为 Windows Git Bash。
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WIN=1 ;;
+    *)                    IS_WIN=0 ;;
+esac
+
+# 本脚本仅支持 Windows Git Bash；原生 Linux 请使用 Backup.sh。
+if (( IS_WIN == 0 )); then
+    printf '[ERROR] 本脚本仅支持 Windows Git Bash 环境，当前系统不匹配。\n' >&2
+    exit 1
+fi
 
 # 声明当前脚本版本。
-readonly SCRIPT_VERSION="0.5.0"
+readonly SCRIPT_VERSION="0.6.2"
+
+# 脚本加载含凭据的 .env，收紧默认文件权限，避免新建文件被 group/other 读取。
+umask 077
 
 # ==================================================
 # 全局常量与默认配置
 # ==================================================
 
-readonly SCRIPT_NAME="GitHub 仓库自动同步脚本"
+readonly SCRIPT_NAME="GitHub 仓库本地变更同步脚本"
 readonly SCRIPT_DESCRIPTION="Windows 版，拉取 GitHub 仓库更新并检测本地变更，自动提交推送"
 
 # 分隔线固定为 50 个可见 ASCII 字符。
@@ -102,6 +125,56 @@ kv() {
         "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
+# 计算文本的终端显示宽度：ASCII 1 字节宽 1，CJK/全角 3 字节宽 2，4 字节字符（如 emoji）按宽 2 估算。
+# 宽度 = (字符数 + 字节数) / 2。
+# 参数：$1 文本。stdout 输出显示宽度数值。
+_display_width() {
+    local text="$1"
+    local byte_count char_count
+    byte_count=$(printf '%s' "$text" | wc -c)
+    char_count=$(printf '%s' "$text" | LC_ALL=C.UTF-8 wc -m)
+    printf '%s' $(( (char_count + byte_count) / 2 ))
+}
+
+# 按终端显示宽度折行打印文本，自动在空格边界断行。
+# 参数：$1 缩进空格数；$2 ANSI 颜色码（可空，空则用终端默认色）；$3 文本。
+# 可用正文宽度 = 50 - 缩进，续行保持相同缩进。
+print_wrapped_text() {
+    local indent="$1"
+    local color="${2:-}"
+    local text="$3"
+    local max_width=$(( 50 - indent ))
+    local line="" line_width=0 word word_width first=1
+
+    for word in $text; do
+        word_width=$(_display_width "$word")
+        if (( first )); then
+            line="$word"
+            line_width=$word_width
+            first=0
+        elif (( line_width + 1 + word_width > max_width )); then
+            printf '%*s%s%s%s\n' "$indent" '' "$color" "$line" "$COLOR_RESET"
+            line="$word"
+            line_width=$word_width
+        else
+            line="$line $word"
+            line_width=$(( line_width + 1 + word_width ))
+        fi
+    done
+    if (( line_width > 0 )); then
+        printf '%*s%s%s%s\n' "$indent" '' "$color" "$line" "$COLOR_RESET"
+    fi
+}
+
+# 打印启动横幅（50 列双线，见 BASH_AGENTS.md 10.06.06）。
+print_script_header() {
+    hreq
+    # 名称行 2 空格缩进，显示中文用途名与版本号；说明行 4 空格缩进，按显示宽度折行。
+    print_wrapped_text 2 "$COLOR_CYAN" "$SCRIPT_NAME  v$SCRIPT_VERSION"
+    print_wrapped_text 4 '' "$SCRIPT_DESCRIPTION"
+    hreq
+}
+
 # ==================================================
 # 依赖检查与帮助信息
 # ==================================================
@@ -150,21 +223,52 @@ load_env_file() {
         return 1
     fi
 
-    # 环境文件会被 source 执行，必须确认归属与权限，防止加载被篡改的配置。
-    if [[ ! -O "$env_file" ]]; then
-        log_error "环境变量文件不属于当前用户，拒绝加载：$env_file"
-        return 1
-    fi
+    if (( IS_WIN == 0 )); then
+        # 环境文件会被 source 执行，必须确认归属与权限，防止加载被篡改的配置。
+        if [[ ! -O "$env_file" ]]; then
+            log_error "环境变量文件不属于当前用户，拒绝加载：$env_file"
+            return 1
+        fi
 
-    # 检查 group/other 是否拥有写权限，存在则拒绝加载。
-    if [[ -n "$(find "$env_file" -maxdepth 0 -type f \( -perm -g=w -o -perm -o=w \) -print 2>/dev/null)" ]]; then
-        log_error "环境变量文件 group/other 可写，拒绝加载：$env_file"
-        return 1
+        # 检查 group/other 是否拥有写权限，存在则拒绝加载。
+        if [[ -n "$(find "$env_file" -maxdepth 0 -type f \( -perm -g=w -o -perm -o=w \) -print 2>/dev/null)" ]]; then
+            log_error "环境变量文件 group/other 可写，拒绝加载：$env_file"
+            return 1
+        fi
+    else
+        # Windows ACL 下属主位与 group/other 权限位映射不完整，仅记录调试信息，不做强制拒绝。
+        log_debug "Windows 环境跳过 .env 属主与权限位校验：$env_file"
     fi
 
     # shellcheck source=/dev/null
     source "$env_file"
     log_debug "已加载环境变量文件：$env_file"
+}
+
+# 解析仓库默认分支：优先 origin/HEAD 符号引用；缺失时依次探测远端 main/master；均不可用时回退 main。
+# 参数：$1 仓库目录。stdout 输出分支名。
+resolve_default_branch() {
+    local repo_dir="${1:?缺少仓库目录}"
+    local branch candidate
+
+    # 1) 读取 origin/HEAD 符号引用；--short 对 remote-tracking 引用会保留 origin/ 前缀，取最后一段得到纯分支名。
+    local head_ref
+    head_ref="$(git -C "$repo_dir" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || printf '')"
+    branch="${head_ref##*/}"
+
+    # 2) origin/HEAD 未设置时，探测远端已存在的 main / master 跟踪分支。
+    if [[ -z "$branch" ]]; then
+        for candidate in main master; do
+            if git -C "$repo_dir" rev-parse --verify --quiet "origin/$candidate" >/dev/null 2>&1; then
+                branch="$candidate"
+                break
+            fi
+        done
+    fi
+
+    # 3) 仍无法确定时回退 main，交由后续 git 命令给出明确错误。
+    [[ -z "$branch" ]] && branch="main"
+    printf '%s' "$branch"
 }
 
 # 更新已修改脚本文件头中的日期与更新时间字段。
@@ -178,7 +282,10 @@ update_header_date() {
 
     now=$(date +'%Y-%m-%d %H:%M:%S')
     # 获取仓库根目录，将 diff 输出的相对路径转换为绝对路径，避免在错误目录查找文件。
-    repo_root="$(git -C "$repo_dir" rev-parse --show-toplevel)"
+    if ! repo_root="$(git -C "$repo_dir" rev-parse --show-toplevel)"; then
+        log_error "获取仓库根目录失败：$repo_dir"
+        return 1
+    fi
 
     while IFS= read -r -d '' file; do
         abs_file="${repo_root}/${file}"
@@ -202,35 +309,47 @@ update_header_date() {
             fi
             log_debug "已更新文件日期与更新时间：$abs_file"
         fi
-    done < <(git -C "$repo_dir" diff --name-only --diff-filter=M -z)
+    # 相对 HEAD 对比，覆盖已暂存与未暂存的新增/复制/修改/重命名文件；删除文件由 -f 检查跳过。
+    done < <(git -C "$repo_dir" diff --name-only --no-renames --diff-filter=ACMR HEAD -z)
 }
 
 # 检测本地变更并提交推送。
 # 参数：$1 仓库别名，$2 仓库目录。
 # 副作用：更新文件头日期、提交并推送本地变更。
 commit_local_changes() {
-    local alias="${1:?缺少仓库别名}"
+    local repo_alias="${1:?缺少仓库别名}"
     local project_dir="${2:?缺少仓库目录}"
 
-    if [[ -n "$(git -C "$project_dir" status --porcelain)" ]]; then
-        log_info "检测到本地变更，正在提交：$alias"
+    # 先取状态输出并显式检查退出码；仓库损坏或命令失败时不得误判为"无变更"。
+    local status_out
+    if ! status_out=$(git -C "$project_dir" status --porcelain); then
+        log_error "读取仓库状态失败：$repo_alias"
+        return 1
+    fi
+
+    if [[ -n "$status_out" ]]; then
+        local default_branch
+        default_branch="$(resolve_default_branch "$project_dir")"
+        log_info "检测到本地变更，正在提交：$repo_alias"
         update_header_date "$project_dir"
+        # 提交前输出变更清单留痕，便于复核暂存范围（对应 GIT_AGENTS 5.1/5.2）。
+        printf '%s\n' "$status_out" | sed 's/^/    /' >&2
         git -C "$project_dir" add -A
 
         # 显式检查提交结果，失败时返回明确错误。
         if ! git -C "$project_dir" commit -m "chore: auto sync $(date +'%Y-%m-%d %H:%M:%S')"; then
-            log_error "提交本地变更失败：$alias"
+            log_error "提交本地变更失败：$repo_alias"
             return 1
         fi
 
-        log_info "正在推送本地变更：$alias"
-        if ! git -C "$project_dir" push origin main; then
-            log_error "推送本地变更失败：$alias"
+        log_info "正在推送本地变更：$repo_alias"
+        if ! git -C "$project_dir" push origin "$default_branch"; then
+            log_error "推送本地变更失败：$repo_alias"
             return 1
         fi
-        log_success "本地变更已提交并推送：$alias"
+        log_success "本地变更已提交并推送：$repo_alias"
     else
-        log_debug "本地仓库无变更：$alias"
+        log_debug "本地仓库无变更：$repo_alias"
     fi
 }
 
@@ -238,13 +357,13 @@ commit_local_changes() {
 # 参数：$1 仓库别名，$2 仓库 URL，$3 本地项目目录。
 # 副作用：可能克隆仓库、拉取远程更新、修改本地 .git/config、提交并推送。
 process_repo() {
-    local alias="${1:?缺少仓库别名}"
+    local repo_alias="${1:?缺少仓库别名}"
     local repo_url="${2:?缺少仓库 URL}"
     local project_dir="${3:?缺少本地项目目录}"
 
     hr
-    kv "仓库" "$alias"
-    log_info "开始处理仓库：$alias"
+    kv "仓库" "$repo_alias"
+    log_info "开始处理仓库：$repo_alias"
 
     # 检查本地项目目录是否存在。
     if [[ ! -d "$project_dir/.git" ]]; then
@@ -273,32 +392,38 @@ process_repo() {
     git -C "$project_dir" config --local core.autocrlf input
 
     # 获取远程最新信息。
-    log_info "正在获取远程更新：$alias"
+    log_info "正在获取远程更新：$repo_alias"
     if ! git -C "$project_dir" fetch origin; then
-        log_error "获取远程更新失败：$alias"
+        log_error "获取远程更新失败：$repo_alias"
         return 1
     fi
+
+    # 解析默认分支，避免硬编码 main。
+    local default_branch
+    default_branch="$(resolve_default_branch "$project_dir")"
 
     # 比较本地与远程提交。
     local local_commit remote_commit
     local_commit=$(git -C "$project_dir" rev-parse HEAD 2>/dev/null || printf '')
-    remote_commit=$(git -C "$project_dir" rev-parse origin/main 2>/dev/null || printf '')
+    remote_commit=$(git -C "$project_dir" rev-parse "origin/$default_branch" 2>/dev/null || printf '')
 
     if [[ -n "$remote_commit" && "$local_commit" != "$remote_commit" ]]; then
-        log_info "检测到远程更新，正在拉取：$alias"
-        if ! git -C "$project_dir" pull --rebase --autostash origin main; then
-            log_error "拉取远程更新失败：$alias"
+        log_info "检测到远程更新，正在拉取：$repo_alias"
+        if ! git -C "$project_dir" pull --rebase --autostash origin "$default_branch"; then
+            log_error "拉取远程更新失败：$repo_alias"
             return 1
         fi
-        log_success "远程更新已同步：$alias"
+        log_success "远程更新已同步：$repo_alias"
     else
-        log_debug "远程仓库无更新：$alias"
+        log_debug "远程仓库无更新：$repo_alias"
     fi
 
-    # 检测并提交本地变更。
-    commit_local_changes "$alias" "$project_dir"
+    # 检测并提交本地变更；失败时向上返回非零，避免主流程误报成功。
+    if ! commit_local_changes "$repo_alias" "$project_dir"; then
+        return 1
+    fi
 
-    log_success "仓库同步完成：$alias"
+    log_success "仓库同步完成：$repo_alias"
     hr
     printf '\n'
 }
@@ -329,12 +454,12 @@ main() {
     done
 
     # 集中检查必要依赖。
-    check_dependencies git grep sed date find
+    check_dependencies git grep sed date find wc uname
 
-    hreq
-    printf '  %s%s  v%s%s\n' "$COLOR_CYAN" "$SCRIPT_NAME" "$SCRIPT_VERSION" "$COLOR_RESET"
-    printf '  %s\n' "$SCRIPT_DESCRIPTION"
-    hreq
+    # 记录 git 可执行路径与版本，便于排查环境差异（DEBUG 级）。
+    log_debug "git 路径：$(command -v git)；版本：$(git --version 2>/dev/null || printf '未知')"
+
+    print_script_header
     printf '\n'
 
     # 加载环境变量。
@@ -347,11 +472,16 @@ main() {
     fi
 
     # 遍历 ACCOUNTS 并处理每个仓库。
-    local alias repo_url project_dir
-    while IFS=',' read -r alias repo_url project_dir || [[ -n "$alias" ]]; do
+    local repo_alias repo_url project_dir
+    while IFS=',' read -r repo_alias repo_url project_dir || [[ -n "$repo_alias" ]]; do
         # 跳过空行和注释行。
-        [[ -z "$alias" || "$alias" =~ ^[[:space:]]*# ]] && continue
-        process_repo "$alias" "$repo_url" "$project_dir" || log_warn "仓库处理失败：$alias"
+        [[ -z "$repo_alias" || "$repo_alias" =~ ^[[:space:]]*# ]] && continue
+        # 校验必填字段，缺 URL 或目录时跳过该行。
+        if [[ -z "$repo_url" || -z "$project_dir" ]]; then
+            log_warn "账号行字段不完整，已跳过：$repo_alias"
+            continue
+        fi
+        process_repo "$repo_alias" "$repo_url" "$project_dir" || log_warn "仓库处理失败：$repo_alias"
     done <<< "$ACCOUNTS"
 
     hreq
