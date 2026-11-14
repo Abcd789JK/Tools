@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # name   : convert.sh
 # desc   : 批量将 Loon 插件转换为 Surge 模块，支持多 JSON 订阅源、并发与增量转换
-# date   : 2026-11-04 16:24:06
+# date   : 2026-11-14 08:38:43
 # author : ChatGPT JK789
 # ver    : 2.2.1
 # --------------------------------------------------
@@ -32,6 +32,7 @@ readonly SCRIPT_VERSION="2.2.1"
 # SCRIPT_DESCRIPTION 与文件头 desc 保持一致，供统一启动标题使用。
 readonly SCRIPT_NAME='Loon 插件转 Surge 模块脚本'
 readonly SCRIPT_DESCRIPTION='批量将 Loon 插件转换为 Surge 模块，支持多 JSON 订阅源、并发与增量转换'
+readonly SCRIPT_AUTHOR='ChatGPT JK789'
 readonly DEFAULT_OUTPUT_DIR='./output'
 readonly DEFAULT_CONCURRENCY=5
 readonly DEFAULT_CONVERT_TYPE='loon-plugin'
@@ -39,7 +40,8 @@ readonly DEFAULT_CONVERT_TARGET='surge-module'
 readonly DEFAULT_TIMEOUT=30
 # 转换进度提示的步长：每完成该数量报告一次进度，避免逐条刷屏。
 readonly PROGRESS_STEP=25
-# 统一双线分隔符，固定 50 个可见 ASCII 字符。
+# 统一分隔符，固定 50 个可见 ASCII 字符。
+readonly HR="--------------------------------------------------"
 readonly HR_EQ="=================================================="
 
 # 颜色变量先初始化为空字符串，避免严格模式下因未定义而退出。
@@ -88,19 +90,24 @@ log_debug() {
     fi
 }
 
+# 打印单线分隔线。
+hr() {
+    printf '%s\n' "${COLOR_BLUE}${HR}${COLOR_RESET}"
+}
+
 # 打印双线分隔符。
 hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 输出非管理脚本统一启动标题。
-# 名称与版本使用青色，前后双线使用蓝色；用途说明使用默认终端颜色。
-# 标题中不显示任何路径。
+# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 说明文本 → 双线。
 print_script_header() {
     hreq
-    printf '  %s%s  v%s%s\n' \
-        "$COLOR_CYAN" "$SCRIPT_NAME" "$SCRIPT_VERSION" "$COLOR_RESET"
-    printf '  %s\n' "$SCRIPT_DESCRIPTION"
+    printf '%s名  字:%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
+    hr
+    printf '%s说  明:%s\n' "$COLOR_CYAN" "$COLOR_RESET"
+    printf '%s\n' "$SCRIPT_DESCRIPTION"
     hreq
 }
 

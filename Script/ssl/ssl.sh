@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # name   : ssl.sh
 # desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
-# date   : 2026-11-04 16:24:46
+# date   : 2026-11-14 08:38:43
 # author : ChatGPT JK789
 # ver    : 0.3.1
 # --------------------------------------------------
@@ -39,6 +39,7 @@ umask 077
 # 常量定义。
 readonly SCRIPT_NAME="Cloudflare DNS 证书申请脚本"      # 脚本中文显示名称，仅在启动标题中使用
 readonly SCRIPT_DESCRIPTION="仅支持 DNS-01 验证，适用于未开放 80/443 端口的家庭服务器"
+readonly SCRIPT_AUTHOR="ChatGPT JK789"
 readonly ACME_BIN="/root/.acme.sh/acme.sh"             # acme.sh 可执行文件路径
 readonly SSL_DIR="/root/ssl"                           # 证书输出目录
 readonly DEFAULT_CA="letsencrypt"                      # 默认证书颁发机构
@@ -440,14 +441,14 @@ issue_cert() {
     hr
 }
 
-# 启动标题。
-# 打印脚本横幅：名称、版本与适用场景。
-# 名称与版本必须读取 SCRIPT_NAME / SCRIPT_VERSION 常量，不得多处硬编码。
+# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 说明文本 → 双线。
 print_script_header() {
     hreq
-    printf '  %s%s  v%s%s\n' \
-        "$COLOR_CYAN" "$SCRIPT_NAME" "$SCRIPT_VERSION" "$COLOR_RESET"
-    printf '  %s\n' "$SCRIPT_DESCRIPTION"
+    printf '%s名  字:%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
+    hr
+    printf '%s说  明:%s\n' "$COLOR_CYAN" "$COLOR_RESET"
+    printf '%s\n' "$SCRIPT_DESCRIPTION"
     hreq
 }
 
