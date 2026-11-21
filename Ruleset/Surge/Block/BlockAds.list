@@ -1,6 +1,6 @@
 #!name = 广告拦截
 #!desc = 规则
-#!date = 2026-09-23 10:59:21
+#!date = 2026-11-21 19:25:02
 #!author = RuCu6
  
 # ======= 0 ======= #
@@ -63,7 +63,6 @@ URL-REGEX,"^http:\/\/[\d\.]+:8000\/v1\/resource\/\w{32}-1-SPLASH"
 # 百度
 DOMAIN,afd.baidu.com
 DOMAIN,mobads.baidu.com
-DOMAIN,180.76.76.200
 IP-CIDR,180.76.76.200/32
 # 宝宝树孕育
 URL-REGEX,"^http:\/\/go\.babytree\.com\/go_pregnancy\/api\/(index_activity\/get_app_index_activity|sign\/sign_h_5)\?"
@@ -434,6 +433,8 @@ USER-AGENT,"httpdns*"
 USER-AGENT,"httpsdns*"
 USER-AGENT,"Httpdns*"
 USER-AGENT,"Httpsdns*"
+AND,((URL-REGEX,"^http:\/\/119\.29\.29\.90\/d\?"),(USER-AGENT,"%E5%98%80%E5%97%92%E5%87%BA%E8%A1%8C*")),DIRECT
+AND,((URL-REGEX,"^http:\/\/119\.28\.28\.90\/d\?"),(USER-AGENT,"%E5%98%80%E5%97%92%E5%87%BA%E8%A1%8C*")),DIRECT
 URL-REGEX,"^http:\/\/((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?:\/v?[0-9]+)?\/(?:sign_)?(?:(?:d|ss)[46]?|resolve)\?"
 URL-REGEX,"^http:\/\/\[[0-9a-fA-F:]+\](?:\/v?[0-9]+)?\/(?:sign_)?(?:(?:d|ss)[46]?|resolve)\?"
 DOMAIN,yyapp-httpdns.gslb.yy.com
@@ -501,6 +502,15 @@ IP-CIDR,203.107.1.0/24
 DOMAIN,amdc.alipay.com
 DOMAIN,ucdc.upaas.quark.cn
 DOMAIN,httpdns.danuoyi.tbcache.com
+URL-REGEX,"^http:\/\/amdc\.m\.taobao\.com\/amdc\/mobileDispatch"
+URL-REGEX,"^http:\/\/47\.246\.103\.9\/amdc\/mobileDispatch"
+URL-REGEX,"^http:\/\/47\.246\.103\.10\/amdc\/mobileDispatch"
+URL-REGEX,"^http:\/\/59\.82\.113\.10\/amdc\/mobileDispatch"
+URL-REGEX,"^http:\/\/59\.82\.113\.219\/amdc\/mobileDispatch"
+DOMAIN,xpis-xcdn.youku.com
+DOMAIN,pre-xpis-xcdn.youku.com
+DOMAIN,xpis-tel-xcdn.youku.com
+DOMAIN,xpis-mob-xcdn.youku.com
 DOMAIN,httpdns.cctv.com
 DOMAIN,httpdns-browser.platform.dbankcloud.cn
 DOMAIN,httpdns.huaweicloud.com
@@ -566,6 +576,10 @@ IP-CIDR,182.61.194.7/32
 IP-CIDR6,2402:4e00:1200:ed00:0:9089:6dac:96b6/128
 IP-CIDR6,240c:409f:1000::/128
 DOMAIN,hd.xiaojukeji.com
+IP-CIDR,116.85.2.41/32
+IP-CIDR,116.85.3.39/32
+IP-CIDR,123.207.209.142/32
+IP-CIDR,139.199.240.84/32
 DOMAIN,httpdns.zybang.com
 DOMAIN,serveraddr.service.kugou.com
 DOMAIN,twns.p2ptun.qq.com
@@ -578,6 +592,7 @@ DOMAIN,httpdns.zybang.com
 
 # 广告平台拦截器
 DOMAIN-KEYWORD,adstrategy
+AND,((DOMAIN-KEYWORD,tnc),(OR,((DOMAIN-SUFFIX,capcutapi.com),(DOMAIN-SUFFIX,zijieapi.com),(DOMAIN-SUFFIX,isnssdk.com),(DOMAIN-SUFFIX,toutiaoapi.com),(DOMAIN-SUFFIX,bytedance.com),(DOMAIN-SUFFIX,snssdk.com),(DOMAIN-SUFFIX,sgsnssdk.com)))),DIRECT
 AND,((DOMAIN-KEYWORD,-ad-),(DOMAIN-SUFFIX,byteimg.com))
 AND,((DOMAIN-KEYWORD,ads),(DOMAIN-KEYWORD,-normal.zijieapi.com))
 DOMAIN,lf-ad-ies.bytecdn.cn
@@ -633,7 +648,12 @@ DOMAIN-SUFFIX,popadshop.com
 DOMAIN-SUFFIX,admobile.vip
 DOMAIN-SUFFIX,yksdks.com
 DOMAIN-SUFFIX,dutils.com
+DOMAIN,init.sms.mob.com,DIRECT
+DOMAIN,sdkapi.sms.mob.com,DIRECT
+DOMAIN,code.sms.mob.com,DIRECT
 DOMAIN-SUFFIX,mob.com
+DOMAIN,smartop-sdkapi.jiguang.cn,DIRECT
+DOMAIN,sdk.verification.jiguang.cn,DIRECT
 DOMAIN-SUFFIX,jiguang.cn
 DOMAIN-SUFFIX,jpush.cn
 DOMAIN-SUFFIX,jpush.io
@@ -692,8 +712,9 @@ DOMAIN-KEYWORD,ad.hunyuan.tencent.com
 DOMAIN-SUFFIX,gdt.qq.com
 DOMAIN-SUFFIX,l.qq.com
 DOMAIN-SUFFIX,imtmp.net
+DOMAIN-SUFFIX,gdtimg.com
 DOMAIN-SUFFIX,ugdtimg.com
-IP-CIDR,47.110.187.87/32,no-resolve
+IP-CIDR,47.110.187.87/32
 DOMAIN-SUFFIX,opadlink.com
 DOMAIN-SUFFIX,staevent.work
 DOMAIN-SUFFIX,openinstall.online
@@ -757,10 +778,10 @@ DOMAIN,df.tanx.com
 DOMAIN,opehs.tanx.com
 DOMAIN,beacon-api.aliyuncs.com
 DOMAIN,adash.man.aliyuncs.com
+DOMAIN,adashx.m.taobao.com
 DOMAIN,applog.uc.cn
 DOMAIN,atoken.m.taobao.com
 AND,((DOMAIN-KEYWORD,adash),(DOMAIN-SUFFIX,ut.taobao.com))
-URL-REGEX,"^http:\/\/.+\/amdc\/mobileDispatch"
 DOMAIN,baichuan-sdk.alicdn.com
 DOMAIN,acs4baichuan.m.taobao.com
 DOMAIN,nbsdk-baichuan.alicdn.com
@@ -832,6 +853,7 @@ DOMAIN-SUFFIX,66mobi.com
 DOMAIN-SUFFIX,xdplt.com
 DOMAIN,ads.cup.com.cn
 DOMAIN-SUFFIX,adjust.com
+DOMAIN-SUFFIX,adjust.io
 DOMAIN-SUFFIX,adjust.net.in
 DOMAIN,app-analytics-services.com
 DOMAIN,odm.app-ads-services.com
@@ -885,6 +907,7 @@ DOMAIN-SUFFIX,hzjizhun.cn
 DOMAIN-SUFFIX,hzjizhun.com
 DOMAIN-SUFFIX,sogaha.cn
 DOMAIN,zxid-m.mobileservice.cn
+DOMAIN,xadsmartget.adgain.cn
 DOMAIN-SUFFIX,tradplusad.com
 DOMAIN-SUFFIX,fancyapi.com
 DOMAIN-SUFFIX,medproad.com
