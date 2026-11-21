@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # name   : Backup.sh
 # desc   : GitHub 仓库自动同步与备份脚本，拉取远程更新、提交推送本地变更并打包备份
-# date   : 2026-11-14 08:38:43
+# date   : 2026-11-21 19:53:59
 # author : ChatGPT JK789
 # ver    : 0.5.4
 # --------------------------------------------------
@@ -57,8 +57,8 @@ umask 077
 # ==================================================
 
 readonly SCRIPT_NAME="GitHub 仓库自动同步备份脚本"
-readonly SCRIPT_DESCRIPTION="批量拉取 GitHub 仓库更新，按需提交推送本地变更，有更新时打包 /root/GitHub 仓库目录（排除 .git 与凭据）并通过 Telegram 通知结果"
 readonly SCRIPT_AUTHOR="ChatGPT JK789"
+readonly SCRIPT_DESCRIPTION="拉取 GitHub 仓库更新, 有更新时北方, 并通过 Telegram 通知结果"
 
 # 分隔线固定为 50 个可见 ASCII 字符。
 readonly HR="--------------------------------------------------"
@@ -191,8 +191,7 @@ print_script_header() {
     printf '%s名  字:%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
     printf '%s作  者:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
-    printf '%s说  明:%s\n' "$COLOR_CYAN" "$COLOR_RESET"
-    printf '%s\n' "$SCRIPT_DESCRIPTION"
+    printf '%s说  明:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
     hreq
 }
 

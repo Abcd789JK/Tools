@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # name   : Backup_Win.sh
 # desc   : Windows 版 GitHub 仓库自动同步脚本，拉取更新并提交本地变更
-# date   : 2026-11-21 19:29:02
+# date   : 2026-11-21 19:53:59
 # author : ChatGPT JK789
 # ver    : 0.6.7
 # --------------------------------------------------
@@ -47,7 +47,7 @@ umask 077
 
 readonly SCRIPT_NAME="GitHub 仓库本地变更同步脚本"
 readonly SCRIPT_AUTHOR="ChatGPT JK789"
-readonly SCRIPT_DESCRIPTION="Windows 版，拉取 GitHub 仓库更新并检测本地变更，自动提交推送"
+readonly SCRIPT_DESCRIPTION="拉取 GitHub 仓库更新并检测本地变更，自动提交推送"
 
 # 分隔线固定为 50 个可见 ASCII 字符。
 readonly HR="--------------------------------------------------"
@@ -174,8 +174,7 @@ print_script_header() {
     printf '%s名  字:%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
     printf '%s作  者:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
-    printf '%s说  明:%s\n' "$COLOR_CYAN" "$COLOR_RESET"
-    printf '%s\n' "$SCRIPT_DESCRIPTION"
+    printf '%s说  明:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
     hreq
 }
 
