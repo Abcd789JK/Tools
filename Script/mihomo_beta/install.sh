@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : install.sh
 # desc   : 一键安装 mihomo 内核、系统服务与管理面板并生成订阅配置
-# date   : 2026-11-04 20:18:53
+# date   : 2026-11-22 11:08:03
 # author : ChatGPT JK789
-# ver    : 2.4.0
+# ver    : 2.4.0-beta
 # --------------------------------------------------
 
 # 与 mihomo.sh 共用 68 个同名函数，改动需同步两份；
@@ -36,13 +36,14 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.4.0"
+readonly SCRIPT_VERSION="2.4.0-beta"
 
 # 收紧新建文件的默认权限：配置与临时文件只允许属主访问。
 umask 077
 
 # 脚本元数据：标题、版本、用途统一从这里取值，避免多处硬编码。
 readonly SCRIPT_NAME="mihomo 一键安装脚本"
+readonly SCRIPT_AUTHOR="ChatGPT JK789"
 readonly SCRIPT_DESCRIPTION="安装并配置 mihomo 内核、系统服务与管理面板"
 
 readonly ROOT_DIR="/root/mihomo"
@@ -163,12 +164,12 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印“标签: 值”行；标签统一青色，值由调用方按语义选择颜色。
+# 打印"标签 值"行；顶格输出，标签统一青色，值由调用方按语义选择颜色。
 kv() {
     local label="${1:?kv 缺少标签参数}"
     local value="${2-}"
 
-    printf '  %s%s%s  %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
+    printf '%s%s%s %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
 # 清理脚本运行期间登记的临时文件与临时目录。
@@ -200,16 +201,18 @@ step() {
 
 # 打印子命令说明行；命令列固定 15 列宽并左对齐，命令绿色、说明默认色。
 cmd_row() {
-    printf '    %s%-15s%s%s\n' "$COLOR_GREEN" "$1" "$COLOR_RESET" "$2"
+    printf '%s%-15s%s%s\n' "$COLOR_GREEN" "$1" "$COLOR_RESET" "$2"
 }
 
-# 打印脚本启动标题，遵循非管理脚本的统一标题格式。
+# 打印脚本启动标题，与 Backup_Win 等非管理脚本保持同一标题格式：
+# 双线 → 名字/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
 # 标题只包含名称、版本与用途，不显示任何文件系统路径。
 print_script_header() {
     hreq
-    printf '  %s%s  v%s%s\n' \
-        "$COLOR_CYAN" "$SCRIPT_NAME" "$SCRIPT_VERSION" "$COLOR_RESET"
-    printf '  %s\n' "$SCRIPT_DESCRIPTION"
+    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
+    hr
+    printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
     hreq
 }
 
@@ -1854,11 +1857,11 @@ config_mihomo() {
     kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
     if [[ -n "$controller_secret" ]]; then
         kv "面板密钥" "${COLOR_GREEN}${controller_secret}${COLOR_RESET}"
-        printf '%s\n' "  ${COLOR_YELLOW}面板已开启鉴权，首次访问需填写该密钥${COLOR_RESET}"
+        printf '%s\n' "${COLOR_YELLOW}面板已开启鉴权，首次访问需填写该密钥${COLOR_RESET}"
     else
         kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
-    printf '%s\n' "  ${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
+    printf '%s\n' "${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
     hr
 }
 
@@ -1997,12 +2000,12 @@ install_mihomo() {
         log_info "检测到已有机场订阅，将保留并刷新默认配置"
         config_mihomo || die "配置写入失败，请检查上方错误输出"
     else
-        printf '%s\n' "  ${COLOR_GREEN}y${COLOR_RESET}  下载默认配置并添加机场订阅"
-        printf '%s\n' "  ${COLOR_GREEN}n${COLOR_RESET}  仅安装默认配置，稍后再添加订阅"
+        printf '%s\n' "${COLOR_GREEN}y${COLOR_RESET}  下载默认配置并添加机场订阅"
+        printf '%s\n' "${COLOR_GREEN}n${COLOR_RESET}  仅安装默认配置，稍后再添加订阅"
 
         local ans="y"
         if is_interactive; then
-            read_input ans "  请选择 [y/n，默认 y]: "
+            read_input ans "请选择 [y/n，默认 y]: "
         else
             log_info "非交互环境，默认下载默认配置并添加订阅"
         fi
@@ -2032,7 +2035,7 @@ install_mihomo() {
         kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
     hr
-    printf '%s\n' "${COLOR_CYAN}  后续操作${COLOR_RESET}"
+    printf '%s\n' "${COLOR_CYAN}后续操作${COLOR_RESET}"
     cmd_row "mihomo"  "进入交互管理菜单（安装、更新、卸载、配置、日志）"
     hr
 
@@ -2130,13 +2133,13 @@ choose_channel() {
 
     printf '\n'
     hr
-    printf '%s\n' "  ${COLOR_CYAN}请选择要安装的版本通道${COLOR_RESET}"
-    printf '%s\n' "  ${COLOR_GREEN}1${COLOR_RESET}. 正式版 Release（默认，如 v1.19.32）"
-    printf '%s\n' "  ${COLOR_GREEN}2${COLOR_RESET}. 测试版 Alpha（如 alpha-94b13ae）"
+    printf '%s\n' "${COLOR_CYAN}请选择要安装的版本通道${COLOR_RESET}"
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 正式版 Release（默认，如 v1.19.32）"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 测试版 Alpha（如 alpha-94b13ae）"
     hr
 
     local ans=""
-    read_input ans "  请输入选项 [1]: "
+    read_input ans "请输入选项 [1]: "
     ans=${ans//[[:space:]]/}
     case "$ans" in
         2|a|A|alpha|Alpha) channel="alpha" ;;

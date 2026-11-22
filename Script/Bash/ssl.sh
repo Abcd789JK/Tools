@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : ssl.sh
 # desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
-# date   : 2026-11-14 08:38:43
+# date   : 2026-11-22 10:24:03
 # author : ChatGPT JK789
-# ver    : 0.3.1
+# ver    : 0.3.2
 # --------------------------------------------------
 
 # 必须用 bash 运行：dash 等 shell 不支持 pipefail / [[ ]] / =~ 等语法。
@@ -31,7 +31,7 @@ fi
 
 # 声明当前脚本版本。
 # 必须与文件头 ver 完全一致，供 --version 与启动标题统一读取。
-readonly SCRIPT_VERSION="0.3.1"
+readonly SCRIPT_VERSION="0.3.2"
 
 # 私钥必须在创建瞬间就是 600：--install-cert 落盘后再 chmod 存在 644 的窗口期。
 umask 077
@@ -54,7 +54,6 @@ distro="unknown"     # 发行版 ID，由 detect_distro 填写
 pkg_mgr=""           # 包管理器：apt / dnf / pacman / apk / zypper / none
 tmp_files=()         # 临时文件清单，退出时由 cleanup 统一清理
 
-# 颜色初始化。
 # ANSI 颜色常量，由 setup_colors 根据终端环境初始化。
 COLOR_RESET=''
 COLOR_RED=''
@@ -62,7 +61,6 @@ COLOR_GREEN=''
 COLOR_YELLOW=''
 COLOR_BLUE=''
 COLOR_CYAN=''
-COLOR_GRAY=''
 
 # 根据终端能力和 NO_COLOR 设置日志颜色。
 # 颜色只辅助表达状态，不替代文字标签；禁用颜色时标签和文字仍然完整。
@@ -75,11 +73,9 @@ setup_colors() {
         COLOR_YELLOW=$'\033[33m'
         COLOR_BLUE=$'\033[34m'
         COLOR_CYAN=$'\033[36m'
-        COLOR_GRAY=$'\033[90m'
     fi
 }
 
-# 日志函数。
 # 统一日志输出函数；全部写入标准错误，避免污染 stdout 数据流。
 log_info() {
     printf '%s[INFO]%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$*" >&2
@@ -95,12 +91,6 @@ log_warn() {
 
 log_error() {
     printf '%s[ERROR]%s %s\n' "$COLOR_RED" "$COLOR_RESET" "$*" >&2
-}
-
-log_debug() {
-    if [[ "${APP_DEBUG:-0}" == '1' ]]; then
-        printf '%s[DEBUG]%s %s\n' "$COLOR_GRAY" "$COLOR_RESET" "$*" >&2
-    fi
 }
 
 # 记录致命错误并立即终止脚本。
@@ -122,13 +112,14 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印“标签: 值”行；标签统一青色，值由调用方按语义选择颜色。
+# 打印“标签: 值”行；标签「私  钥」占 6 列，与 [INFO]/[ OK ] 标签同宽、前后对齐，
+# 再补 1 个空格让值与日志正文同从第 7 列开始；值由调用方按语义选择颜色。
 # 参数：$1 表示标签，$2 表示值。
 kv() {
     local label="${1:?kv 缺少标签参数}"
     local value="${2-}"
 
-    printf '  %s%s%s  %s\n' \
+    printf '%s%s%s %s\n' \
         "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
@@ -435,28 +426,27 @@ issue_cert() {
 
     hr
     log_success "证书安装完成!"
-    kv "私钥" "$SSL_DIR/$domain.key"
-    kv "证书" "$SSL_DIR/$domain.crt"
+    kv "私  钥" "$SSL_DIR/$domain.key"
+    kv "证  书" "$SSL_DIR/$domain.crt"
     log_warn "acme.sh 已自动注册续期任务，证书到期前将自动续期并同步以上文件，无需额外操作。"
     hr
 }
 
-# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 说明文本 → 双线。
+# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 双线。
 print_script_header() {
     hreq
-    printf '%s名  字:%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
-    printf '%s作  者:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
+    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
-    printf '%s说  明:%s\n' "$COLOR_CYAN" "$COLOR_RESET"
-    printf '%s\n' "$SCRIPT_DESCRIPTION"
+    printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
     hreq
 }
 
-# 主流程入口。
 # 脚本入口：参数解析 → 标题 → 环境检查 → 装依赖 → 装 acme.sh → 收集输入 → 申请证书。
 main() {
     parse_args "$@"
     print_script_header
+    printf '\n'
     detect_distro
     install_dependencies
     install_acme

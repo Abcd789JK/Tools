@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : mihomo.sh
 # desc   : mihomo 内核与订阅配置的交互式管理脚本
-# date   : 2026-11-04 20:18:53
+# date   : 2026-11-22 11:08:03
 # author : ChatGPT JK789
-# ver    : 2.4.0
+# ver    : 2.4.0-beta
 # --------------------------------------------------
 
 # 与 install.sh 共用 68 个同名函数，改动需同步两份；
@@ -36,7 +36,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.4.0"
+readonly SCRIPT_VERSION="2.4.0-beta"
 
 # 收紧新建文件的默认权限：配置、日志和临时文件只允许属主访问。
 umask 077
@@ -232,12 +232,12 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印“标签: 值”行；标签统一青色，值由调用方按语义选择颜色。
+# 打印"标签 值"行；顶格输出，标签统一青色，值由调用方按语义选择颜色。
 kv() {
     local label="${1:?kv 缺少标签参数}"
     local value="${2-}"
 
-    printf '  %s%s%s  %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
+    printf '%s%s%s %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
 # 清理脚本运行期间登记的临时文件与临时目录。
@@ -1349,7 +1349,7 @@ list_providers() {
     awk '
         function show() {
             if (cur != "") {
-                printf "  %s  %s\n", cur, (pname == "" ? "<未命名>" : pname)
+                printf "%s  %s\n", cur, (pname == "" ? "<未命名>" : pname)
                 cur = ""
                 pname = ""
             }
@@ -1939,7 +1939,7 @@ reset_config() {
     else
         kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
-    printf '%s\n' "  ${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
+    printf '%s\n' "${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
     hreq
 }
 
@@ -2060,7 +2060,7 @@ panel_addresses() {
     hreq
     kv "本机访问" "${COLOR_GREEN}http://127.0.0.1:${port}/ui${COLOR_RESET}"
     kv "内网访问" "${COLOR_GREEN}${lan}${COLOR_RESET}"
-    printf '%s\n' "  ${COLOR_YELLOW}公网访问需放行 ${port} 端口并确认面板已启用鉴权${COLOR_RESET}"
+    printf '%s\n' "${COLOR_YELLOW}公网访问需放行 ${port} 端口并确认面板已启用鉴权${COLOR_RESET}"
     hreq
 }
 
@@ -2108,10 +2108,10 @@ install_webui() {
 config_menu() {
     check_installation || return 1
     hreq
-    printf '%s\n' "${COLOR_CYAN}  操作说明${COLOR_RESET}"
-    printf '%s\n' "    1. 订阅编号从 01 开始依次排列"
-    printf '%s\n' "    2. 订阅不能全部删除，至少保留一个"
-    printf '%s\n' "    3. 所有写操作前自动备份配置${COLOR_RESET}"
+    printf '%s\n' "${COLOR_CYAN}操作说明${COLOR_RESET}"
+    printf '%s\n' "1. 订阅编号从 01 开始依次排列"
+    printf '%s\n' "2. 订阅不能全部删除，至少保留一个"
+    printf '%s\n' "3. 所有写操作前自动备份配置${COLOR_RESET}"
     hr
     printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 新增机场订阅"
     printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 修改机场订阅"
@@ -2526,28 +2526,30 @@ uninstall_mihomo() {
     if (( failures == 0 )) && [[ ! -d "$ROOT_DIR" && ! -d "$old" ]]; then
         log_success "mihomo 卸载完成"
         printf '\n%s\n' "后续清理（如需）："
-        printf '%s\n' "  rm -f ${SHELL_FILE} ${SHELL_FILE}.bak    # 删除本脚本及其备份"
-        printf '%s\n' "  unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY"
+        printf '%s\n' "rm -f ${SHELL_FILE} ${SHELL_FILE}.bak    # 删除本脚本及其备份"
+        printf '%s\n' "unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY"
     else
         log_error "卸载未完全成功（失败步骤 ${failures} 个），请手动检查残留"
         return 1
     fi
 }
 
-# 判断字符串是否为稳定版三段式 SemVer。
+# 判断字符串是否为三段式 SemVer，允许 -beta 之类的预发布后缀。
 # 参数：$1 表示待校验字符串。
 # 返回：合法返回 0，否则返回 1。
 is_semver() {
-    [[ "${1:-}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+    [[ "${1:-}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]
 }
 
-# 按 SemVer 优先级比较两个稳定版三段式版本号。
+# 按 SemVer 优先级比较两个三段式版本号（可带 -beta 等预发布后缀）。
+# 数字主体相同的情况下，正式版高于预发布版；同为预发布时按后缀字典序比较。
 # 参数：$1 表示左版本，$2 表示右版本。
 # 输出：左大于右输出 1，相等输出 0，小于输出 -1。
 # 返回：任一版本不合法时返回非 0，避免把不可比较的值当作可升级。
 compare_semver() {
     local left_version="$1"
     local right_version="$2"
+    local left_core left_pre right_core right_pre
     local -a left_parts
     local -a right_parts
     local index
@@ -2555,8 +2557,14 @@ compare_semver() {
     is_semver "$left_version" || return 1
     is_semver "$right_version" || return 1
 
-    IFS='.' read -r -a left_parts <<<"$left_version"
-    IFS='.' read -r -a right_parts <<<"$right_version"
+    # 先剥离预发布后缀，数字主体仍按三段数值比较。
+    left_core="${left_version%%-*}"
+    right_core="${right_version%%-*}"
+    left_pre="${left_version#"$left_core"}"
+    right_pre="${right_version#"$right_core"}"
+
+    IFS='.' read -r -a left_parts <<<"$left_core"
+    IFS='.' read -r -a right_parts <<<"$right_core"
 
     for index in 0 1 2; do
         if (( left_parts[index] > right_parts[index] )); then
@@ -2568,12 +2576,31 @@ compare_semver() {
             return 0
         fi
     done
+
+    # 数字主体相等：正式版（无后缀）高于预发布版。
+    if [[ -z "$left_pre" && -n "$right_pre" ]]; then
+        printf '1'
+        return 0
+    fi
+    if [[ -n "$left_pre" && -z "$right_pre" ]]; then
+        printf '%s' '-1'
+        return 0
+    fi
+    # 同为预发布版：按后缀字典序比较（-beta < -beta.1）。
+    if [[ "$left_pre" > "$right_pre" ]]; then
+        printf '1'
+        return 0
+    fi
+    if [[ "$left_pre" < "$right_pre" ]]; then
+        printf '%s' '-1'
+        return 0
+    fi
     printf '0'
 }
 
 # 从未执行的候选脚本中静态提取唯一的顶层 SCRIPT_VERSION 声明。
 # 参数：$1 表示候选脚本路径。
-# 输出：校验通过的 X.Y.Z 版本号。
+# 输出：校验通过的 X.Y.Z 版本号（可带 -beta 等预发布后缀）。
 # 返回：文件无效、声明缺失、重复或格式不符时返回非 0。
 extract_script_version() {
     local candidate_file="${1:-}"
@@ -2591,7 +2618,7 @@ extract_script_version() {
         }
         /^readonly SCRIPT_VERSION=/ {
             declaration_count++
-            if ($0 !~ /^readonly SCRIPT_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$/) {
+            if ($0 !~ /^readonly SCRIPT_VERSION="[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?"$/) {
                 invalid_declaration = 1
                 next
             }
@@ -2795,18 +2822,18 @@ pause_menu() {
     IFS= read -r _ || true
 }
 
-# 打印管理脚本页头与使用说明；顺序与 10.6.4 固定布局一致。
+# 打印管理脚本页头与使用说明，标签格式与 Backup_Win 等非管理脚本一致：
+# 双线 → 名字/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
 # 脚本版本只在此处出现，show_status 面板不再重复展示。
 print_header() {
     hreq
-    printf '  %s%s  v%s%s\n' \
-        "$COLOR_CYAN" "$SCRIPT_NAME" "$SCRIPT_VERSION" "$COLOR_RESET"
-    printf '%s\n' "${COLOR_BLUE}  作者  ${SCRIPT_AUTHOR}${COLOR_RESET}"
+    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
-    printf '%s\n' "${COLOR_CYAN}  使用说明${COLOR_RESET}"
-    printf '    1. %s\n' "$USAGE_NOTE_1"
-    printf '    2. %s\n' "$USAGE_NOTE_2"
-    hr
+    printf '%s说  明%s\n' "$COLOR_CYAN" "$COLOR_RESET"
+    printf '1. %s\n' "$USAGE_NOTE_1"
+    printf '2. %s\n' "$USAGE_NOTE_2"
+    hreq
 }
 
 # 渲染交互主菜单。
@@ -2815,22 +2842,22 @@ menu() {
     while true; do
         clear 2>/dev/null || true
         print_header
-        printf '%s\n' "${COLOR_GREEN} 1${COLOR_RESET}. 安装 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 2${COLOR_RESET}. 更新 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 3${COLOR_RESET}. 卸载 mihomo"
+        printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 安装 mihomo"
+        printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 更新 mihomo"
+        printf '%s\n' "${COLOR_GREEN}3${COLOR_RESET}. 卸载 mihomo"
         hr
-        printf '%s\n' "${COLOR_GREEN} 4${COLOR_RESET}. 启动 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 5${COLOR_RESET}. 停止 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 6${COLOR_RESET}. 重启 mihomo"
+        printf '%s\n' "${COLOR_GREEN}4${COLOR_RESET}. 启动 mihomo"
+        printf '%s\n' "${COLOR_GREEN}5${COLOR_RESET}. 停止 mihomo"
+        printf '%s\n' "${COLOR_GREEN}6${COLOR_RESET}. 重启 mihomo"
         hr
-        printf '%s\n' "${COLOR_GREEN} 7${COLOR_RESET}. 添加开机自启"
-        printf '%s\n' "${COLOR_GREEN} 8${COLOR_RESET}. 关闭开机自启"
-        printf '%s\n' "${COLOR_GREEN} 9${COLOR_RESET}. 切换软件版本"
+        printf '%s\n' "${COLOR_GREEN}7${COLOR_RESET}. 添加开机自启"
+        printf '%s\n' "${COLOR_GREEN}8${COLOR_RESET}. 关闭开机自启"
+        printf '%s\n' "${COLOR_GREEN}9${COLOR_RESET}. 切换软件版本"
         hr
         printf '%s\n' "${COLOR_GREEN}10${COLOR_RESET}. 配置管理"
         printf '%s\n' "${COLOR_GREEN}11${COLOR_RESET}. 查看日志"
         printf '%s\n' "${COLOR_GREEN}12${COLOR_RESET}. 更新脚本"
-        printf '%s\n' "${COLOR_GREEN} 0${COLOR_RESET}. 退出脚本"
+        printf '%s\n' "${COLOR_GREEN}0${COLOR_RESET}. 退出脚本"
         hreq
         show_status
         hreq

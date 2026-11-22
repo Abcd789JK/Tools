@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : convert.sh
 # desc   : 批量将 Loon 插件转换为 Surge 模块，支持多 JSON 订阅源、并发与增量转换
-# date   : 2026-11-14 08:38:43
+# date   : 2026-11-22 10:56:05
 # author : ChatGPT JK789
-# ver    : 2.2.1
+# ver    : 2.4.0
 # --------------------------------------------------
 
 # 启用 Bash 严格模式。
@@ -22,10 +22,8 @@ if (( EUID != 0 )); then
     exit 1
 fi
 
-# 声明当前脚本版本。
-# 必须与文件头 ver 完全一致；声明格式统一见 AGENTS.md 20.6.14.2。
-# shellcheck disable=SC2034 # 供版本管理工具静态读取，脚本无需运行时展示版本。
-readonly SCRIPT_VERSION="2.2.1"
+# 声明当前脚本版本，须与文件头 ver 一致，供启动标题读取。
+readonly SCRIPT_VERSION="2.4.0"
 
 # 全局常量与默认配置。
 # SCRIPT_NAME 为标题使用的简体中文显示名称，须根据脚本用途概括，不使用文件名；
@@ -33,11 +31,44 @@ readonly SCRIPT_VERSION="2.2.1"
 readonly SCRIPT_NAME='Loon 插件转 Surge 模块脚本'
 readonly SCRIPT_DESCRIPTION='批量将 Loon 插件转换为 Surge 模块，支持多 JSON 订阅源、并发与增量转换'
 readonly SCRIPT_AUTHOR='ChatGPT JK789'
-readonly DEFAULT_OUTPUT_DIR='./output'
-readonly DEFAULT_CONCURRENCY=5
-readonly DEFAULT_CONVERT_TYPE='loon-plugin'
-readonly DEFAULT_CONVERT_TARGET='surge-module'
+
+# ==================================================
+# 内置默认配置（保留空白，用户可按需填写）
+# 同目录存在 .env 时，以 .env 中的同名项为准；否则使用下面填写的内置值。
+# 内置值与 .env 均为空时，脚本会给出明确错误并退出。
+# ==================================================
+# Script-Hub Docker 服务地址（不带结尾斜杠），示例：http://localhost:9100
+readonly DEFAULT_SCRIPT_HUB_URL=''
+# 转换参数：type=源格式（loon-plugin / qx-rewrite / surge-module）
+#          target=目标格式（surge-module / shadowrocket-module / stash）
+readonly DEFAULT_CONVERT_TYPE=''
+readonly DEFAULT_CONVERT_TARGET=''
+# 输出目录（转换后的 .sgmodule 文件保存位置）
+readonly DEFAULT_OUTPUT_DIR=''
+# 并发数（同时转换多少个插件，建议 5-10，太高可能压垮 Script-Hub）
+readonly DEFAULT_CONCURRENCY=''
+# 增量转换：true=上游插件未更新时跳过，只转换已更新的插件；
+# false=每次都全量重新转换。判断依据为上游插件文件的修改时间。
+readonly DEFAULT_CHECK_UPDATED=''
+# JSON 订阅源：每行一个地址，自动拉取并解析其中所有插件地址。
+# 三种写法（可混用）：
+#   "https://example.com/list.json"          → 子目录取域名 example.com（默认）
+#   "我的插件|https://example.com/list.json"  → 子目录用自定义名称
+#   "|https://example.com/list.json"          → 不建子目录，模块直接放输出目录
+# 自定义名称中的 / 和 \ 会替换为 _；名称留空即平铺。
+readonly DEFAULT_JSON_SOURCES=()
+# 下载超时（秒，内置固定值）
 readonly DEFAULT_TIMEOUT=30
+
+# 先用内置默认配置初始化工作变量；后续 .env 中的同名项会覆盖这些值。
+# [@...:-] 形式兼容旧版 Bash 下空数组在 set -u 中的展开。
+SCRIPT_HUB_URL="$DEFAULT_SCRIPT_HUB_URL"
+CONVERT_TYPE="$DEFAULT_CONVERT_TYPE"
+CONVERT_TARGET="$DEFAULT_CONVERT_TARGET"
+OUTPUT_DIR="$DEFAULT_OUTPUT_DIR"
+CONCURRENCY="$DEFAULT_CONCURRENCY"
+CHECK_UPDATED="$DEFAULT_CHECK_UPDATED"
+JSON_SOURCES=("${DEFAULT_JSON_SOURCES[@]:-}")
 # 转换进度提示的步长：每完成该数量报告一次进度，避免逐条刷屏。
 readonly PROGRESS_STEP=25
 # 统一分隔符，固定 50 个可见 ASCII 字符。
@@ -51,7 +82,6 @@ COLOR_GREEN=''
 COLOR_YELLOW=''
 COLOR_BLUE=''
 COLOR_CYAN=''
-COLOR_GRAY=''
 
 # 根据终端能力和 NO_COLOR 环境变量初始化日志颜色。
 # stdout 与 stderr 均须为交互式终端才启用颜色，避免颜色码写入重定向流。
@@ -63,7 +93,6 @@ setup_colors() {
         COLOR_YELLOW=$'\033[33m'
         COLOR_BLUE=$'\033[34m'
         COLOR_CYAN=$'\033[36m'
-        COLOR_GRAY=$'\033[90m'
     fi
 }
 
@@ -84,12 +113,6 @@ log_error() {
     printf '%s[ERROR]%s %s\n' "$COLOR_RED" "$COLOR_RESET" "$*" >&2
 }
 
-log_debug() {
-    if [[ "${APP_DEBUG:-0}" == '1' ]]; then
-        printf '%s[DEBUG]%s %s\n' "$COLOR_GRAY" "$COLOR_RESET" "$*" >&2
-    fi
-}
-
 # 打印单线分隔线。
 hr() {
     printf '%s\n' "${COLOR_BLUE}${HR}${COLOR_RESET}"
@@ -100,25 +123,24 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 说明文本 → 双线。
+# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 双线。
 print_script_header() {
     hreq
-    printf '%s名  字:%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
-    printf '%s作  者:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
+    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
-    printf '%s说  明:%s\n' "$COLOR_CYAN" "$COLOR_RESET"
-    printf '%s\n' "$SCRIPT_DESCRIPTION"
+    printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
     hreq
 }
 
-# 加载 .env 配置文件。
-# 返回：成功返回 0；文件不存在返回非 0。
+# 加载 .env 配置文件（存在则以其中同名项覆盖内置默认配置）。
+# .env 不存在不是错误：沿用脚本内置默认配置继续执行，返回 0。
 load_config() {
     local env_file="$1"
 
     if [[ ! -f "$env_file" ]]; then
-        log_error "配置文件不存在：$env_file"
-        return 1
+        log_info "未检测到 .env，使用脚本内置默认配置"
+        return 0
     fi
 
     # shellcheck disable=SC1090,SC1091
@@ -126,20 +148,6 @@ load_config() {
     # ShellCheck 无法静态跟踪 source 目标；.env 是用户维护的配置
     # 文件（非项目代码），按项目约定由 load_config 统一加载，风险可控。
     source "$env_file"
-}
-
-# 检查依赖命令是否已安装。
-# 参数：$1... 表示一个或多个命令名称。
-# 返回：全部存在返回 0；任意一个缺失返回非 0。
-check_dependencies() {
-    local dependency_name
-
-    for dependency_name in "$@"; do
-        if ! command -v "$dependency_name" >/dev/null 2>&1; then
-            log_error "缺少依赖：$dependency_name"
-            return 1
-        fi
-    done
 }
 
 # 从 URL 中提取域名（去掉协议前缀和路径部分）。
@@ -241,20 +249,27 @@ check_plugin_updated() {
 }
 
 # 从 JSON 订阅源提取插件 URL 并填入全局插件映射。
-# 参数：$1 表示 JSON 源 URL。
+# 参数：$1 表示 JSON 源 URL；$2 表示可选子目录（省略则取域名，空字符串表示平铺）。
 # 副作用：写入全局关联数组 PLUGIN_MAP，key=插件URL，value="子目录|名称"。
 collect_plugins_from_json() {
     local json_url="$1"
-    local subdir
+    local subdir="${2-}"
     local json_content
     local plugin_urls
     local count=0
     local purl
     local name
 
-    subdir="$(get_domain "$json_url")"
+    # 未显式传入子目录时沿用域名；显式空字符串表示平铺到输出根目录。
+    if (( $# < 2 )); then
+        subdir="$(get_domain "$json_url")"
+    fi
     log_info "解析 JSON 源：$json_url"
-    log_info "子目录：$subdir"
+    if [[ -n "$subdir" ]]; then
+        log_info "子目录：$subdir"
+    else
+        log_info "子目录：（平铺到输出根目录）"
+    fi
 
     if ! json_content="$(download_to_stdout "$json_url")"; then
         log_warn "JSON 源下载失败，已跳过：$json_url"
@@ -279,7 +294,11 @@ collect_plugins_from_json() {
         count=$((count + 1))
     done <<< "$plugin_urls"
 
-    log_success "提取到 ${count} 个插件 → ${subdir}/"
+    if [[ -n "$subdir" ]]; then
+        log_success "提取到 ${count} 个插件 → ${subdir}/"
+    else
+        log_success "提取到 ${count} 个插件 → 输出根目录"
+    fi
 }
 
 # 转换单个插件（在子 Shell 中执行，供并发调度）。
@@ -399,8 +418,7 @@ main() {
     local total
     local json_url
 
-    # 基于 BASH_SOURCE 定位脚本目录，避免依赖当前工作目录。
-    # 定位脚本所在目录并显式检查退出状态，失败时无法加载同目录 .env。
+    # 基于 BASH_SOURCE 定位脚本目录，显式检查失败（否则无法加载同目录 .env）。
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || { log_error "无法定位脚本目录"; return 1; }
     env_file="${script_dir}/.env"
 
@@ -408,24 +426,33 @@ main() {
 
     # 统一启动标题：业务前的第一组终端输出。
     print_script_header
+    printf '\n'
 
     if ! load_config "$env_file"; then
         return 1
     fi
 
-    # 配置校验：必填项缺失时给出明确错误并退出。
-    : "${SCRIPT_HUB_URL:?请在 .env 中设置 SCRIPT_HUB_URL}"
+    # 配置校验：内置配置与 .env 均为空时，给出一次性明确提示并退出。
+    if [[ -z "$SCRIPT_HUB_URL" && -z "$CONVERT_TYPE" && -z "$CONVERT_TARGET" && -z "$OUTPUT_DIR" && -z "$CONCURRENCY" && -z "$CHECK_UPDATED" && -z "${JSON_SOURCES[0]:-}" ]]; then
+        log_error "未检测到任何有效配置：请在脚本内置默认配置中填写，或在同一目录创建 .env。"
+        return 1
+    fi
+    # 必填项 SCRIPT_HUB_URL 单独校验，避免 set -u 下参数展开输出生硬错误。
+    if [[ -z "$SCRIPT_HUB_URL" ]]; then
+        log_error "SCRIPT_HUB_URL 未配置：请在脚本内置默认配置中填写，或在 .env 中设置。"
+        return 1
+    fi
     CONVERT_TYPE="${CONVERT_TYPE:-$DEFAULT_CONVERT_TYPE}"
     CONVERT_TARGET="${CONVERT_TARGET:-$DEFAULT_CONVERT_TARGET}"
     OUTPUT_DIR="${OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
     CONCURRENCY="${CONCURRENCY:-$DEFAULT_CONCURRENCY}"
     # 外部输入校验（AGENTS.md 6.19）：CONCURRENCY 须为无前导零的 1-50 整数，
     # 避免用户输入被当作算术表达式执行、前导零触发八进制错误或压垮 Script-Hub。
-    if [[ ! "$CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || (( CONCURRENCY < 1 || CONCURRENCY > 50 )); then
+    if [[ ! "$CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || (( CONCURRENCY > 50 )); then
         log_error "CONCURRENCY 必须为 1-50 的整数（当前值：${CONCURRENCY}）"
         return 1
     fi
-    CHECK_UPDATED="${CHECK_UPDATED:-true}"
+    CHECK_UPDATED="${CHECK_UPDATED:-$DEFAULT_CHECK_UPDATED}"
     if [[ "$CHECK_UPDATED" != 'true' && "$CHECK_UPDATED" != 'false' ]]; then
         log_error "CHECK_UPDATED 只能为 true 或 false（当前值：${CHECK_UPDATED}）"
         return 1
@@ -455,12 +482,32 @@ main() {
     log_info "下载工具：$DOWNLOADER"
     printf '\n'
 
-    for json_url in "${JSON_SOURCES[@]}"; do
+    local entry custom_subdir
+    for entry in "${JSON_SOURCES[@]}"; do
         # 去除首尾空白，使用参数展开避免 xargs 对含引号 URL 解析失败。
+        entry="${entry#"${entry%%[![:space:]]*}"}"
+        entry="${entry%"${entry##*[![:space:]]}"}"
+        [[ -z "$entry" || "$entry" == \#* ]] && continue
+
+        # 可选写法 "子目录|URL"：显式指定输出子目录；"|URL" 表示平铺。
+        # 未含 | 时保持原有行为（子目录取域名）。
+        custom_subdir=''
+        json_url="$entry"
+        if [[ "$entry" == *"|"* ]]; then
+            custom_subdir="${entry%%|*}"
+            json_url="${entry#*|}"
+        fi
+        # 自定义名称仅限安全字符，防止路径穿越或误建多级目录。
+        custom_subdir="${custom_subdir//[\/\\]/_}"
         json_url="${json_url#"${json_url%%[![:space:]]*}"}"
         json_url="${json_url%"${json_url##*[![:space:]]}"}"
-        [[ -z "$json_url" || "$json_url" == \#* ]] && continue
-        collect_plugins_from_json "$json_url"
+        [[ -z "$json_url" ]] && { log_warn "JSON 源地址为空，已跳过：$entry"; continue; }
+
+        if [[ "$entry" == *"|"* ]]; then
+            collect_plugins_from_json "$json_url" "$custom_subdir"
+        else
+            collect_plugins_from_json "$json_url"
+        fi
     done
 
     # 空关联数组在旧版 Bash 下直接取长度会触发 unbound variable，改用遍历计数。
