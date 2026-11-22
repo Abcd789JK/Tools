@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : convert.sh
 # desc   : 批量将 Loon 插件转换为 Surge 模块，支持多 JSON 订阅源、并发与增量转换
-# date   : 2026-11-22 10:56:05
+# date   : 2026-11-22 11:31:33
 # author : ChatGPT JK789
-# ver    : 2.4.0
+# ver    : 2.4.1
 # --------------------------------------------------
 
 # 启用 Bash 严格模式。
@@ -23,7 +23,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，须与文件头 ver 一致，供启动标题读取。
-readonly SCRIPT_VERSION="2.4.0"
+readonly SCRIPT_VERSION="2.4.1"
 
 # 全局常量与默认配置。
 # SCRIPT_NAME 为标题使用的简体中文显示名称，须根据脚本用途概括，不使用文件名；
@@ -123,10 +123,10 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 双线。
+# 打印启动横幅：双线 → 名称/作者（标签青色）→ 单线 → 说明（标签青色）→ 双线。
 print_script_header() {
     hreq
-    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s名  称%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
     printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
     printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"

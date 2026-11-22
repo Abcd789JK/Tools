@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : Backup_Win.sh
 # desc   : Windows 版 GitHub 仓库自动同步脚本，拉取更新并提交本地变更
-# date   : 2026-11-22 10:24:03
+# date   : 2026-11-22 11:31:33
 # author : ChatGPT JK789
-# ver    : 0.6.8
+# ver    : 0.6.9
 # --------------------------------------------------
 
 # 解释器守卫：必须早于 set -u 等 Bash 专有选项，给出可读错误提示。
@@ -36,7 +36,7 @@ if (( IS_WIN == 0 )); then
 fi
 
 # 声明当前脚本版本。
-readonly SCRIPT_VERSION="0.6.8"
+readonly SCRIPT_VERSION="0.6.9"
 
 # 脚本加载含凭据的 .env，收紧默认文件权限，避免新建文件被 group/other 读取。
 umask 077
@@ -127,10 +127,10 @@ kv() {
         "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
-# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 说明文本 → 双线。
+# 打印启动横幅：双线 → 名称/作者（标签青色）→ 单线 → 说明（标签青色）→ 说明文本 → 双线。
 print_script_header() {
     hreq
-    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s名  称%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
     printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
     printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"

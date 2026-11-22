@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : ssl.sh
 # desc   : 基于 acme.sh + Cloudflare DNS 的 SSL 证书一键申请（DNS-01 验证）
-# date   : 2026-11-22 10:24:03
+# date   : 2026-11-22 11:31:33
 # author : ChatGPT JK789
-# ver    : 0.3.2
+# ver    : 0.3.3
 # --------------------------------------------------
 
 # 必须用 bash 运行：dash 等 shell 不支持 pipefail / [[ ]] / =~ 等语法。
@@ -31,7 +31,7 @@ fi
 
 # 声明当前脚本版本。
 # 必须与文件头 ver 完全一致，供 --version 与启动标题统一读取。
-readonly SCRIPT_VERSION="0.3.2"
+readonly SCRIPT_VERSION="0.3.3"
 
 # 私钥必须在创建瞬间就是 600：--install-cert 落盘后再 chmod 存在 644 的窗口期。
 umask 077
@@ -432,10 +432,10 @@ issue_cert() {
     hr
 }
 
-# 打印启动横幅：双线 → 名字/作者（标签青色）→ 单线 → 说明（标签青色）→ 双线。
+# 打印启动横幅：双线 → 名称/作者（标签青色）→ 单线 → 说明（标签青色）→ 双线。
 print_script_header() {
     hreq
-    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s名  称%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
     printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
     printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
