@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : install.sh
 # desc   : 一键安装 mihomo 内核、系统服务与管理面板并生成订阅配置
-# date   : 2026-11-22 11:08:03
+# date   : 2026-11-22 11:41:54
 # author : ChatGPT JK789
-# ver    : 2.4.0-beta
+# ver    : 2.5.0-beta
 # --------------------------------------------------
 
 # 与 mihomo.sh 共用 68 个同名函数，改动需同步两份；
@@ -36,7 +36,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.4.0-beta"
+readonly SCRIPT_VERSION="2.5.0-beta"
 
 # 收紧新建文件的默认权限：配置与临时文件只允许属主访问。
 umask 077
@@ -86,6 +86,7 @@ use_cdn=false
 url_prefix=""          # 空 = 直连；非空 = 已验证可用的镜像前缀
 controller_secret=""   # 面板密钥，安装时本地生成并写入配置
 secret_enabled=1       # 是否启用面板密钥：1=启用 0=禁用（由 ask_secret 决定）
+keep_existing=1        # 覆盖安装是否保留现有订阅与配置：1=保留并备份 0=不保留不备份（由 prepare_dirs 决定）
 tmp_files=()
 self_installer=""      # 本次运行的安装脚本绝对路径，由 resolve_self_path 在 cd 之前填充
 
@@ -205,11 +206,11 @@ cmd_row() {
 }
 
 # 打印脚本启动标题，与 Backup_Win 等非管理脚本保持同一标题格式：
-# 双线 → 名字/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
+# 双线 → 名称/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
 # 标题只包含名称、版本与用途，不显示任何文件系统路径。
 print_script_header() {
     hreq
-    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s名  称%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
     printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
     printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
@@ -1314,8 +1315,10 @@ install_manager() {
 }
 
 # 备份当前配置，固定覆盖同一份 .bak，不累积时间戳文件。
+# keep_existing=0（覆盖安装时选择不保留）时跳过备份，直接返回 0。
 backup_config() {
     local bak="${CONFIG_FILE}.bak"
+    (( keep_existing )) || return 0
     [[ -f "$CONFIG_FILE" ]] || return 0
     if ! cp -f -- "$CONFIG_FILE" "$bak"; then
         log_error "配置备份失败，已中止写入"
@@ -1782,8 +1785,9 @@ config_mihomo() {
     bak=$(backup_config) || die "配置备份失败，已中止"
     [[ -n "$bak" ]] && log_success "原配置已备份：${bak}"
 
-    # 覆盖安装时保留现有机场订阅，避免重装一次就要重输全部链接
-    if [[ -f "$CONFIG_FILE" ]]; then
+    # 覆盖安装时保留现有机场订阅，避免重装一次就要重输全部链接；
+    # keep_existing=0 时跳过，按全新安装处理（不沿用旧订阅）
+    if (( keep_existing )) && [[ -f "$CONFIG_FILE" ]]; then
         keep=$(count_providers "$CONFIG_FILE")
     fi
 
@@ -1936,23 +1940,33 @@ install_default_config_only() {
     return 0
 }
 
-# 准备安装目录，覆盖安装前先备份配置并确认。
+# 准备安装目录，覆盖安装前确认是否继续、是否保留现有订阅与配置。
 prepare_dirs() {
     if [[ -d "$ROOT_DIR" ]]; then
         log_warn "检测到已存在的安装目录：${ROOT_DIR}"
         local bak ans=""
         if ! is_interactive; then
-            log_info "非交互环境，继续覆盖安装（现有机场订阅将保留）"
+            log_info "非交互环境，继续覆盖安装（现有机场订阅将保留，配置会先备份）"
         else
-            read_input ans "${COLOR_CYAN}继续将覆盖安装（订阅将保留，配置会先备份），是否继续？(y/N): ${COLOR_RESET}"
+            read_input ans "${COLOR_CYAN}继续将覆盖安装，是否继续？(y/N): ${COLOR_RESET}"
             case "$ans" in
                 [Yy]*) ;;
                 *) log_info "已取消安装"; exit 0 ;;
             esac
+
+            read_input ans "${COLOR_CYAN}是否保留现有订阅与配置（保留会先备份，不保留将直接覆盖）？(Y/n): ${COLOR_RESET}"
+            case "$ans" in
+                [Nn]*) keep_existing=0 ;;
+                *)     keep_existing=1 ;;
+            esac
         fi
 
-        bak=$(backup_config) || die "配置备份失败，已中止安装"
-        [[ -n "$bak" ]] && log_success "原配置已备份：${bak}"
+        if (( keep_existing )); then
+            bak=$(backup_config) || die "配置备份失败，已中止安装"
+            [[ -n "$bak" ]] && log_success "原配置已备份：${bak}"
+        else
+            log_warn "不保留现有配置：将直接覆盖，不生成 .bak 备份"
+        fi
 
         # 不在此处停服务、删二进制：下载与校验全部在旧内核运行时完成，
         # 真正的替换由 install_binary 负责（自带备份与失败回滚）。
@@ -1996,7 +2010,7 @@ install_mihomo() {
     install_manager || die "管理脚本安装失败"
 
     step "写入配置"
-    if (( $(count_providers "$CONFIG_FILE" 2>/dev/null || printf '0') > 0 )); then
+    if (( keep_existing )) && (( $(count_providers "$CONFIG_FILE" 2>/dev/null || printf '0') > 0 )); then
         log_info "检测到已有机场订阅，将保留并刷新默认配置"
         config_mihomo || die "配置写入失败，请检查上方错误输出"
     else

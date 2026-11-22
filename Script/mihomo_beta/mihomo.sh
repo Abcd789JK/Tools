@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : mihomo.sh
 # desc   : mihomo 内核与订阅配置的交互式管理脚本
-# date   : 2026-11-22 11:08:03
+# date   : 2026-11-22 11:41:54
 # author : ChatGPT JK789
-# ver    : 2.4.0-beta
+# ver    : 2.5.0-beta
 # --------------------------------------------------
 
 # 与 install.sh 共用 68 个同名函数，改动需同步两份；
@@ -36,7 +36,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.4.0-beta"
+readonly SCRIPT_VERSION="2.5.0-beta"
 
 # 收紧新建文件的默认权限：配置、日志和临时文件只允许属主访问。
 umask 077
@@ -2823,11 +2823,11 @@ pause_menu() {
 }
 
 # 打印管理脚本页头与使用说明，标签格式与 Backup_Win 等非管理脚本一致：
-# 双线 → 名字/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
+# 双线 → 名称/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
 # 脚本版本只在此处出现，show_status 面板不再重复展示。
 print_header() {
     hreq
-    printf '%s名  字%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s名  称%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
     printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
     printf '%s说  明%s\n' "$COLOR_CYAN" "$COLOR_RESET"
