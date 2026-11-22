@@ -3,17 +3,14 @@
 # --------------------------------------------------
 # name   : install.sh
 # desc   : 一键安装 mihomo 内核、系统服务与管理面板并生成订阅配置
-# date   : 2026-11-03 19:40:00
+# date   : 2026-11-22 13:38:12
 # author : ChatGPT JK789
-# ver    : 2.0.0
+# ver    : 2.5.3
 # --------------------------------------------------
-
-# 正式版同步基线：beta v2.1.0。
-# 本文件由 beta 通道生成，除版本号与仓库路径外不得与 beta 存在差异。
 
 # 与 mihomo.sh 共用 68 个同名函数，改动需同步两份；
 # main / usage / print_header 因入口职责不同各自实现，不参与同步。
-# 维护规则：只改 beta 通道（仓库根目录），正式版（mihomo/）在 beta 验证通过后同步，
+# 维护规则：beta 为唯一源，正式版（mihomo/）由 sync-mihomo.sh 自动生成，请勿直接修改正式版；
 # 两者差异只允许是版本号与仓库路径（beta 路径含 _beta，正式版不含）。
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换。
@@ -39,10 +36,15 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.0.0"
+readonly SCRIPT_VERSION="2.5.3"
 
-# 收紧新建文件的默认权限：配置、日志和临时文件只允许属主访问。
+# 收紧新建文件的默认权限：配置与临时文件只允许属主访问。
 umask 077
+
+# 脚本元数据：标题、版本、用途统一从这里取值，避免多处硬编码。
+readonly SCRIPT_NAME="mihomo 一键安装脚本"
+readonly SCRIPT_AUTHOR="ChatGPT JK789"
+readonly SCRIPT_DESCRIPTION="安装并配置 mihomo 内核、系统服务与管理面板"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -52,7 +54,6 @@ readonly SHELL_FILE="/usr/bin/mihomo"
 readonly SERVICE_SYSTEMD="/etc/systemd/system/mihomo.service"
 readonly SERVICE_OPENRC="/etc/init.d/mihomo"
 readonly SYSCTL_FILE="/etc/sysctl.d/99-ip-forward.conf"
-readonly LOG_FILE="/var/log/mihomo-install.log"
 
 readonly REPO_RAW="https://raw.githubusercontent.com/Abcd789JK/Tools/refs/heads/main"
 readonly MIHOMO_RELEASE="https://github.com/MetaCubeX/mihomo/releases/download"
@@ -85,6 +86,7 @@ use_cdn=false
 url_prefix=""          # 空 = 直连；非空 = 已验证可用的镜像前缀
 controller_secret=""   # 面板密钥，安装时本地生成并写入配置
 secret_enabled=1       # 是否启用面板密钥：1=启用 0=禁用（由 ask_secret 决定）
+keep_existing=1        # 覆盖安装是否保留现有订阅与配置：1=保留并备份 0=不保留不备份（由 prepare_dirs 决定）
 tmp_files=()
 self_installer=""      # 本次运行的安装脚本绝对路径，由 resolve_self_path 在 cd 之前填充
 
@@ -113,83 +115,26 @@ setup_colors() {
     fi
 }
 
-# 日志文件超过 1 MB 时就地截断，只保留最近 1000 行。
-# 参数：$1 表示日志文件路径。
-# 返回：0 表示已截断或无需截断，1 表示截断失败。
-log_trim() {
-    local log_path="$1"
-    local size_limit=$((1024 * 1024))
-    local keep_lines=1000
-    local size
-    local temp_file
-
-    [[ -f "$log_path" ]] || return 0
-    if ! size="$(wc -c <"$log_path" 2>/dev/null)"; then
-        return 1
-    fi
-    (( size > size_limit )) || return 0
-
-    # 同目录 mktemp 保证临时文件与目标处于同一文件系统，mv 才能原子替换。
-    if ! temp_file="$(mktemp "${log_path}.XXXXXX" 2>/dev/null)"; then
-        return 1
-    fi
-    if ! tail -n "$keep_lines" "$log_path" >"$temp_file" 2>/dev/null; then
-        rm -f -- "$temp_file"
-        return 1
-    fi
-    # 权限收紧失败不影响截断结果，日志仍可正常使用。
-    chmod 640 "$temp_file" 2>/dev/null || true
-    if ! mv -f -- "$temp_file" "$log_path" 2>/dev/null; then
-        rm -f -- "$temp_file"
-        return 1
-    fi
-    return 0
-}
-
-# 把一条带级别标签的日志写入日志文件。
-# 参数：$1 表示级别标签，其余参数为日志内容。
-# 返回：始终返回 0；日志落盘属于辅助诊断，失败不得中断业务主流程。
-log_append() {
-    local level="$1"
-    local timestamp
-    shift
-
-    # 截断失败只影响日志体积，不阻断本次写入。
-    if ! log_trim "$LOG_FILE"; then
-        :
-    fi
-    if ! timestamp="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null)"; then
-        timestamp='unknown-time'
-    fi
-    # 整组重定向到 /dev/null：日志目录不可写时由 Bash 报告的失败信息不应漏到终端。
-    if ! { printf '%s %-5s %s\n' "$timestamp" "$level" "$*" >>"$LOG_FILE"; } 2>/dev/null; then
-        return 0
-    fi
-    return 0
-}
-
+# 安装过程不生成日志文件：所有信息与错误都直接输出到 stderr，
+# 终端里的可见输出就是唯一诊断依据，避免日志与屏幕内容重复。
 # 输出普通信息日志；日志统一写入 stderr，避免污染可供管道消费的 stdout。
 log_info() {
     printf '%s[INFO]%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$*" >&2
-    log_append 'INFO' "$*"
 }
 
 # 输出成功日志；只有操作确认完成并验证成功后才允许调用。
 log_success() {
     printf '%s[ OK ]%s %s\n' "$COLOR_GREEN" "$COLOR_RESET" "$*" >&2
-    log_append 'OK' "$*"
 }
 
 # 输出警告日志；用于非致命问题与风险提示。
 log_warn() {
     printf '%s[WARN]%s %s\n' "$COLOR_YELLOW" "$COLOR_RESET" "$*" >&2
-    log_append 'WARN' "$*"
 }
 
 # 输出错误日志；用于操作失败与错误原因。
 log_error() {
     printf '%s[ERROR]%s %s\n' "$COLOR_RED" "$COLOR_RESET" "$*" >&2
-    log_append 'ERROR' "$*"
 }
 
 # 输出调试日志；仅在 MIHOMO_DEBUG=1 时启用，避免默认刷屏。
@@ -200,10 +145,9 @@ log_debug() {
 }
 
 # 输出错误并立即终止脚本；仅脚本入口层允许调用。
-# 副作用：向 stderr 输出错误、写入日志文件并以状态码 1 退出。
+# 副作用：向 stderr 输出错误并以状态码 1 退出。
 die() {
     log_error "$*"
-    log_error "详细日志：${LOG_FILE}"
     exit 1
 }
 
@@ -221,12 +165,12 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印“标签: 值”行；标签统一青色，值由调用方按语义选择颜色。
+# 打印"标签 值"行；顶格输出，标签统一青色，值由调用方按语义选择颜色。
 kv() {
     local label="${1:?kv 缺少标签参数}"
     local value="${2-}"
 
-    printf '  %s%s%s  %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
+    printf '%s%s%s %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
 # 清理脚本运行期间登记的临时文件与临时目录。
@@ -258,19 +202,20 @@ step() {
 
 # 打印子命令说明行；命令列固定 15 列宽并左对齐，命令绿色、说明默认色。
 cmd_row() {
-    printf '    %s%-15s%s%s\n' "$COLOR_GREEN" "$1" "$COLOR_RESET" "$2"
+    printf '%s%-15s%s%s\n' "$COLOR_GREEN" "$1" "$COLOR_RESET" "$2"
 }
 
-# 打印安装信息头：脚本名、版本、安装目录与日志路径。
-print_header() {
-    printf '\n'
+# 打印脚本启动标题，与 Backup_Win 等非管理脚本保持同一标题格式：
+# 双线 → 名称/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
+# 标题只包含名称、版本与用途，不显示任何文件系统路径。
+print_script_header() {
     hreq
-    printf '%s\n' "${COLOR_CYAN}  mihomo 一键安装脚本  v${SCRIPT_VERSION}${COLOR_RESET}"
-    kv "安装目录" "$ROOT_DIR"
-    kv "日志文件" "$LOG_FILE"
+    printf '%s名  称%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
+    hr
+    printf '%s说  明%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
     hreq
 }
-
 
 # 检查指定命令是否可用。
 command_exists() { command -v "$1" >/dev/null 2>&1; }
@@ -733,7 +678,7 @@ download_file() { # $1=url $2=目标路径 $3=描述 $4=探测函数
         log_error "${desc}地址解析失败：${url}"
         return 1
     fi
-    log_append 'DOWNLOAD' "${desc} <- ${resolved}"
+    log_debug "下载地址：${desc} <- ${resolved}"
 
     if fetch_to "$resolved" "${dest}.part"; then
         mv -f -- "${dest}.part" "$dest"
@@ -1370,8 +1315,10 @@ install_manager() {
 }
 
 # 备份当前配置，固定覆盖同一份 .bak，不累积时间戳文件。
+# keep_existing=0（覆盖安装时选择不保留）时跳过备份，直接返回 0。
 backup_config() {
     local bak="${CONFIG_FILE}.bak"
+    (( keep_existing )) || return 0
     [[ -f "$CONFIG_FILE" ]] || return 0
     if ! cp -f -- "$CONFIG_FILE" "$bak"; then
         log_error "配置备份失败，已中止写入"
@@ -1838,8 +1785,9 @@ config_mihomo() {
     bak=$(backup_config) || die "配置备份失败，已中止"
     [[ -n "$bak" ]] && log_success "原配置已备份：${bak}"
 
-    # 覆盖安装时保留现有机场订阅，避免重装一次就要重输全部链接
-    if [[ -f "$CONFIG_FILE" ]]; then
+    # 覆盖安装时保留现有机场订阅，避免重装一次就要重输全部链接；
+    # keep_existing=0 时跳过，按全新安装处理（不沿用旧订阅）
+    if (( keep_existing )) && [[ -f "$CONFIG_FILE" ]]; then
         keep=$(count_providers "$CONFIG_FILE")
     fi
 
@@ -1913,11 +1861,11 @@ config_mihomo() {
     kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
     if [[ -n "$controller_secret" ]]; then
         kv "面板密钥" "${COLOR_GREEN}${controller_secret}${COLOR_RESET}"
-        printf '%s\n' "  ${COLOR_YELLOW}面板已开启鉴权，首次访问需填写该密钥${COLOR_RESET}"
+        printf '%s\n' "${COLOR_YELLOW}面板已开启鉴权，首次访问需填写该密钥${COLOR_RESET}"
     else
         kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
-    printf '%s\n' "  ${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
+    printf '%s\n' "${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
     hr
 }
 
@@ -1992,23 +1940,33 @@ install_default_config_only() {
     return 0
 }
 
-# 准备安装目录，覆盖安装前先备份配置并确认。
+# 准备安装目录，覆盖安装前确认是否继续、是否保留现有订阅与配置。
 prepare_dirs() {
     if [[ -d "$ROOT_DIR" ]]; then
         log_warn "检测到已存在的安装目录：${ROOT_DIR}"
         local bak ans=""
         if ! is_interactive; then
-            log_info "非交互环境，继续覆盖安装（现有机场订阅将保留）"
+            log_info "非交互环境，继续覆盖安装（现有机场订阅将保留，配置会先备份）"
         else
-            read_input ans "${COLOR_CYAN}继续将覆盖安装（订阅将保留，配置会先备份），是否继续？(y/N): ${COLOR_RESET}"
+            read_input ans "${COLOR_CYAN}继续将覆盖安装，是否继续？(y/N): ${COLOR_RESET}"
             case "$ans" in
                 [Yy]*) ;;
                 *) log_info "已取消安装"; exit 0 ;;
             esac
+
+            read_input ans "${COLOR_CYAN}是否保留现有订阅与配置（保留会先备份，不保留将直接覆盖）？(Y/n): ${COLOR_RESET}"
+            case "$ans" in
+                [Nn]*) keep_existing=0 ;;
+                *)     keep_existing=1 ;;
+            esac
         fi
 
-        bak=$(backup_config) || die "配置备份失败，已中止安装"
-        [[ -n "$bak" ]] && log_success "原配置已备份：${bak}"
+        if (( keep_existing )); then
+            bak=$(backup_config) || die "配置备份失败，已中止安装"
+            [[ -n "$bak" ]] && log_success "原配置已备份：${bak}"
+        else
+            log_warn "不保留现有配置：将直接覆盖，不生成 .bak 备份"
+        fi
 
         # 不在此处停服务、删二进制：下载与校验全部在旧内核运行时完成，
         # 真正的替换由 install_binary 负责（自带备份与失败回滚）。
@@ -2052,23 +2010,23 @@ install_mihomo() {
     install_manager || die "管理脚本安装失败"
 
     step "写入配置"
-    if (( $(count_providers "$CONFIG_FILE" 2>/dev/null || printf '0') > 0 )); then
+    if (( keep_existing )) && (( $(count_providers "$CONFIG_FILE" 2>/dev/null || printf '0') > 0 )); then
         log_info "检测到已有机场订阅，将保留并刷新默认配置"
-        config_mihomo || die "配置写入失败，请检查日志 ${LOG_FILE}"
+        config_mihomo || die "配置写入失败，请检查上方错误输出"
     else
-        printf '%s\n' "  ${COLOR_GREEN}y${COLOR_RESET}  下载默认配置并添加机场订阅"
-        printf '%s\n' "  ${COLOR_GREEN}n${COLOR_RESET}  仅安装默认配置，稍后再添加订阅"
+        printf '%s\n' "${COLOR_GREEN}y${COLOR_RESET}  下载默认配置并添加机场订阅"
+        printf '%s\n' "${COLOR_GREEN}n${COLOR_RESET}  仅安装默认配置，稍后再添加订阅"
 
         local ans="y"
         if is_interactive; then
-            read_input ans "  请选择 [y/n，默认 y]: "
+            read_input ans "请选择 [y/n，默认 y]: "
         else
             log_info "非交互环境，默认下载默认配置并添加订阅"
         fi
         ans=${ans:-y}
         case "$ans" in
             [Yy]*)
-                config_mihomo || die "配置写入失败，请检查日志 ${LOG_FILE}"
+                config_mihomo || die "配置写入失败，请检查上方错误输出"
                 ;;
             *)
                 log_warn "已跳过订阅配置，仅安装默认配置"
@@ -2084,7 +2042,6 @@ install_mihomo() {
     hr
     log_success "安装完成"
     kv "安装目录" "$ROOT_DIR"
-    kv "日志文件" "$LOG_FILE"
     kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
     if [[ -n "$controller_secret" ]]; then
         kv "面板密钥" "${COLOR_GREEN}${controller_secret}${COLOR_RESET}"
@@ -2092,14 +2049,8 @@ install_mihomo() {
         kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
     hr
-    printf '%s\n' "${COLOR_CYAN}  常用命令${COLOR_RESET}"
-    cmd_row "mihomo"          "进入交互菜单"
-    cmd_row "mihomo status"   "查看运行状态与面板地址"
-    cmd_row "mihomo config"   "配置管理（机场订阅 / 面板密钥）"
-    cmd_row "mihomo update"   "更新 mihomo 内核"
-    cmd_row "mihomo switch"   "切换正式版 / 测试版"
-    cmd_row "mihomo logs"     "查看实时日志"
-    cmd_row "mihomo help"     "查看全部命令"
+    printf '%s\n' "${COLOR_CYAN}后续操作${COLOR_RESET}"
+    cmd_row "mihomo"  "进入交互管理菜单（安装、更新、卸载、配置、日志）"
     hr
 
     # 只在成功横幅打印完之后删除自身：失败路径要保留脚本以便重试，
@@ -2152,7 +2103,6 @@ mihomo 一键安装脚本 v${SCRIPT_VERSION}
   支持架构：x86_64 i686 aarch64 armv7l s390x
   需 root 权限。
   安装目录 ${ROOT_DIR}
-  日志文件 ${LOG_FILE}
 EOF
 }
 
@@ -2197,13 +2147,13 @@ choose_channel() {
 
     printf '\n'
     hr
-    printf '%s\n' "  ${COLOR_CYAN}请选择要安装的版本通道${COLOR_RESET}"
-    printf '%s\n' "  ${COLOR_GREEN}1${COLOR_RESET}. 正式版 Release（默认，如 v1.19.32）"
-    printf '%s\n' "  ${COLOR_GREEN}2${COLOR_RESET}. 测试版 Alpha（如 alpha-94b13ae）"
+    printf '%s\n' "${COLOR_CYAN}请选择要安装的版本通道${COLOR_RESET}"
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 正式版 Release（默认，如 v1.19.32）"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 测试版 Alpha（如 alpha-94b13ae）"
     hr
 
     local ans=""
-    read_input ans "  请输入选项 [1]: "
+    read_input ans "请输入选项 [1]: "
     ans=${ans//[[:space:]]/}
     case "$ans" in
         2|a|A|alpha|Alpha) channel="alpha" ;;
@@ -2218,7 +2168,7 @@ main() {
     setup_colors
     parse_args "$@"
     resolve_self_path     # 必须在任何 cd 之前解析 $0，供安装成功后自删除使用
-    print_header
+    print_script_header
     choose_channel        # 未指定 --channel 时交互询问，默认正式版
     install_mihomo
 }

@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # name   : mihomo.sh
 # desc   : mihomo 内核与订阅配置的交互式管理脚本
-# date   : 2026-11-22 13:22:09
+# date   : 2026-11-22 13:38:12
 # author : ChatGPT JK789
 # ver    : 2.5.3-beta
 # --------------------------------------------------
@@ -56,6 +56,7 @@ readonly SERVICE_SYSTEMD="/etc/systemd/system/mihomo.service"
 readonly SERVICE_OPENRC="/etc/init.d/mihomo"
 readonly SYSCTL_FILE="/etc/sysctl.d/99-ip-forward.conf"
 readonly LOG_FILE="/var/log/mihomo.log"
+readonly INSTALL_LOG="/var/log/mihomo-install.log"
 # 早期版本曾用定时任务清理日志，此处仅为卸载时清理残留而保留。
 readonly LOGCLEAN_SERVICE="/etc/systemd/system/mihomo-logclean.service"
 readonly LOGCLEAN_TIMER="/etc/systemd/system/mihomo-logclean.timer"
@@ -70,6 +71,7 @@ readonly MIHOMO_API_TAGS="https://api.github.com/repos/MetaCubeX/mihomo/releases
 readonly CONFIG_URL="${REPO_RAW}/Config/mihomo.yaml"
 readonly SHELL_URL="${REPO_RAW}/Script/mihomo_beta/mihomo.sh"
 readonly INSTALL_URL="${REPO_RAW}/Script/mihomo_beta/install.sh"
+readonly WEBUI_URL="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
 
 readonly MIRRORS=("https://gh-proxy.com" "https://github.boki.moe")
 # 探测顺序以 GitHub 自身可达性为准，Google 仅作通用连通性兜底。
@@ -105,6 +107,7 @@ COLOR_GREEN=''
 COLOR_YELLOW=''
 COLOR_BLUE=''
 COLOR_CYAN=''
+COLOR_GRAY=''
 
 # 根据终端能力和 NO_COLOR 初始化颜色。
 # stdout 与 stderr 都必须是交互终端才启用，避免任一输出流被重定向时把转义符写入文件；
@@ -117,6 +120,7 @@ setup_colors() {
         COLOR_YELLOW=$'\033[33m'
         COLOR_BLUE=$'\033[34m'
         COLOR_CYAN=$'\033[36m'
+        COLOR_GRAY=$'\033[90m'
     fi
 }
 
@@ -197,6 +201,13 @@ log_warn() {
 log_error() {
     printf '%s[ERROR]%s %s\n' "$COLOR_RED" "$COLOR_RESET" "$*" >&2
     log_append 'ERROR' "$*"
+}
+
+# 输出调试日志；仅在 MIHOMO_DEBUG=1 时启用，避免默认刷屏。
+log_debug() {
+    if [[ "${MIHOMO_DEBUG:-0}" == '1' ]]; then
+        printf '%s[DEBUG]%s %s\n' "$COLOR_GRAY" "$COLOR_RESET" "$*" >&2
+    fi
 }
 
 # 输出错误并立即终止脚本；仅脚本入口层允许调用。
@@ -1101,6 +1112,22 @@ logs_mihomo() {
     esac
 }
 
+# 日常上限由 log_append() 里的 log_trim 保证，这里只是手动兜底入口：
+# 日志被其他程序写大、或需要立即压缩时使用。
+log_clean() {
+    local f rc cleaned=0
+    for f in "$LOG_FILE" "$INSTALL_LOG"; do
+        [[ -f "$f" ]] || continue
+        rc=0
+        log_trim "$f" || rc=$?
+        case "$rc" in
+            0) cleaned=1; log_success "已清理 ${f}：保留最近 1000 行" ;;
+            2) log_error "清理 ${f} 失败" ;;
+        esac
+    done
+    (( cleaned )) || log_info "日志均未超过 1 MB，无需清理"
+}
+
 # 面板鉴权：远程配置不含 secret，而 external-controller 默认监听 0.0.0.0:9090，
 # 不加密钥等于把控制 API 无鉴权暴露到公网，因此是否启用由用户决定。
 ask_secret() {
@@ -1981,6 +2008,98 @@ manage_secret() {
         3) secret_set reset ;;
         *) log_warn "无效选项"; return 1 ;;
     esac
+}
+
+# 安装/更新管理面板：与安装流程共用 install_webui，重装即更新（幂等）
+panel_install() {
+    check_installation || return 1
+    if ! command_exists unzip; then
+        log_error "缺少 unzip，无法解压面板（Debian/Ubuntu: apt install unzip；Alpine: apk add unzip）"
+        return 1
+    fi
+    install_webui
+}
+
+# 面板交互菜单：状态与地址一览，可触发安装/更新。
+panel_menu() {
+    check_installation || return 1
+    local choice=""
+    printf '\n'
+    hreq
+    kv "面板地址" "${COLOR_GREEN}$(panel_url)${COLOR_RESET}"
+    if [[ -d "${ROOT_DIR}/ui" ]]; then
+        kv "面板状态" "${COLOR_GREEN}已安装${COLOR_RESET}"
+    else
+        kv "面板状态" "${COLOR_YELLOW}未安装${COLOR_RESET}"
+    fi
+    hr
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 安装/更新面板"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 显示访问地址"
+    printf '%s\n' "${COLOR_GREEN}0${COLOR_RESET}. 返回"
+    hr
+
+    read_input choice "${COLOR_CYAN}请输入选项 (0/1/2): ${COLOR_RESET}"
+    case "$choice" in
+        1) panel_install ;;
+        2) panel_addresses ;;
+        0) return 0 ;;
+        *) log_warn "无效选项"; return 1 ;;
+    esac
+}
+
+# 面板访问地址三行展示：本机 / 内网 / 公网提示。
+# （借鉴 nelvko/clashctl 的 clashui：公网能否访问取决于放线与鉴权，脚本只提示不代决）
+panel_addresses() {
+    detect_network_info
+    local lan rest port
+    lan=$(panel_url)
+    rest="${lan#*://}"
+    rest="${rest%%/*}"
+    port="${rest##*:}"
+    printf '\n'
+    hreq
+    kv "本机访问" "${COLOR_GREEN}http://127.0.0.1:${port}/ui${COLOR_RESET}"
+    kv "内网访问" "${COLOR_GREEN}${lan}${COLOR_RESET}"
+    printf '%s\n' "${COLOR_YELLOW}公网访问需放行 ${port} 端口并确认面板已启用鉴权${COLOR_RESET}"
+    hreq
+}
+
+# 下载并安装管理面板（zashboard），失败只告警不影响内核。
+install_webui() {
+    local zip="${ROOT_DIR}/gh-pages.zip"
+    local tmpdir="${ROOT_DIR}/.webui-tmp"
+    local -a dirs=()
+
+    log_info "开始下载管理面板..."
+    download_file "$WEBUI_URL" "$zip" "管理面板" probe_asset || return 1
+
+    rm -rf -- "$tmpdir"
+    if ! unzip -oq "$zip" -d "$tmpdir"; then
+        rm -f -- "$zip"
+        log_error "面板压缩包解压失败"
+        return 1
+    fi
+    rm -f -- "$zip"
+
+    shopt -s nullglob
+    dirs=("${tmpdir}"/*-gh-pages)
+    shopt -u nullglob
+
+    if (( ${#dirs[@]} == 0 )); then
+        rm -rf -- "$tmpdir"
+        log_error "面板压缩包结构异常，未找到 gh-pages 目录"
+        return 1
+    fi
+
+    rm -rf -- "${ROOT_DIR}/ui"
+    if ! mv -f -- "${dirs[0]}" "${ROOT_DIR}/ui"; then
+        rm -rf -- "$tmpdir"
+        log_error "面板目录安装失败"
+        return 1
+    fi
+    rm -rf -- "$tmpdir"
+    chmod -R a+rX "${ROOT_DIR}/ui"
+    log_success "管理面板已安装"
 }
 
 # 配置管理菜单入口。与 install.sh 的 config_mihomo 同名不同义，

@@ -3,17 +3,14 @@
 # --------------------------------------------------
 # name   : mihomo.sh
 # desc   : mihomo 内核与订阅配置的交互式管理脚本
-# date   : 2026-11-03 19:40:00
+# date   : 2026-11-22 13:38:12
 # author : ChatGPT JK789
-# ver    : 2.0.0
+# ver    : 2.5.3
 # --------------------------------------------------
 
-# 正式版同步基线：beta v2.1.0。
-# 本文件由 beta 通道生成，除版本号与仓库路径外不得与 beta 存在差异。
-
 # 与 install.sh 共用 68 个同名函数，改动需同步两份；
-# main / usage / print_header 因入口职责不同各自实现，不参与同步。
-# 维护规则：只改 beta 通道（仓库根目录），正式版（mihomo/）在 beta 验证通过后同步，
+# main / print_header 因入口职责不同各自实现，不参与同步。
+# 维护规则：beta 为唯一源，正式版（mihomo/）由 sync-mihomo.sh 自动生成，请勿直接修改正式版；
 # 两者差异只允许是版本号与仓库路径（beta 路径含 _beta，正式版不含）。
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换。
@@ -39,10 +36,16 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.0.0"
+readonly SCRIPT_VERSION="2.5.3"
 
 # 收紧新建文件的默认权限：配置、日志和临时文件只允许属主访问。
 umask 077
+
+# 脚本元数据：页头显示的名称、作者与使用说明统一从这里取值。
+readonly SCRIPT_NAME="mihomo 管理脚本"
+readonly SCRIPT_AUTHOR="ChatGPT JK789"
+readonly USAGE_NOTE_1="重装或更新 mihomo 时，原有机场订阅会自动保留"
+readonly USAGE_NOTE_2="添加订阅请用「配置管理」，勿直接编辑配置文件"
 
 readonly ROOT_DIR="/root/mihomo"
 readonly CONFIG_FILE="${ROOT_DIR}/config.yaml"
@@ -229,12 +232,12 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印“标签: 值”行；标签统一青色，值由调用方按语义选择颜色。
+# 打印"标签 值"行；顶格输出，标签统一青色，值由调用方按语义选择颜色。
 kv() {
     local label="${1:?kv 缺少标签参数}"
     local value="${2-}"
 
-    printf '  %s%s%s  %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
+    printf '%s%s%s %s\n' "$COLOR_CYAN" "$label" "$COLOR_RESET" "$value"
 }
 
 # 清理脚本运行期间登记的临时文件与临时目录。
@@ -1022,17 +1025,9 @@ show_status() {
     else
         kv "面板地址" "${COLOR_RED}未安装${COLOR_RESET}"
     fi
-    # 脚本版本不在此展示：菜单页头与 status 子命令页头（print_header）各显示一次，
+    # 脚本版本不在此展示：菜单页头（print_header）已显示一次，
     # 此处再显示会与页头同屏重复
     kv "更新时间" "${COLOR_GREEN}${update_time}${COLOR_RESET}"
-}
-
-# status 子命令入口：页头 + 状态面板 + 收尾分隔线。
-# 页头保证子命令路径也能看到脚本版本，面板内不再重复展示。
-status_cmd() {
-    print_header
-    show_status
-    hreq
 }
 
 # 执行服务操作并打印结果。
@@ -1354,7 +1349,7 @@ list_providers() {
     awk '
         function show() {
             if (cur != "") {
-                printf "  %s  %s\n", cur, (pname == "" ? "<未命名>" : pname)
+                printf "%s  %s\n", cur, (pname == "" ? "<未命名>" : pname)
                 cur = ""
                 pname = ""
             }
@@ -1944,7 +1939,7 @@ reset_config() {
     else
         kv "面板密钥" "${COLOR_YELLOW}未启用（面板无鉴权）${COLOR_RESET}"
     fi
-    printf '%s\n' "  ${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
+    printf '%s\n' "${COLOR_YELLOW}注意：mixed-port 7890 不受密钥保护，建议用防火墙限制来源${COLOR_RESET}"
     hreq
 }
 
@@ -1975,15 +1970,6 @@ secret_set() { # $1=on|off|reset
             log_error "未知操作：${action}（可选 on / off / reset）"
             return 1
             ;;
-    esac
-}
-
-# 面板密钥子命令入口：无参数进交互菜单。
-secret_cmd() { # $1=on|off|reset（可选）
-    case "${1:-}" in
-        on|off|reset) secret_set "$1" ;;
-        "")           manage_secret ;;
-        *)            log_error "未知参数：$1（可选 on / off / reset）"; return 1 ;;
     esac
 }
 
@@ -2021,15 +2007,6 @@ manage_secret() {
         2) secret_set off ;;
         3) secret_set reset ;;
         *) log_warn "无效选项"; return 1 ;;
-    esac
-}
-
-# 面板子命令入口：无参数进交互菜单，install/update 非交互直接安装。
-panel_cmd() { # $1=install|update（可选）
-    case "${1:-}" in
-        install|update) panel_install ;;
-        "")             panel_menu ;;
-        *)              log_error "未知参数：$1（可选 install / update）"; return 1 ;;
     esac
 }
 
@@ -2083,7 +2060,7 @@ panel_addresses() {
     hreq
     kv "本机访问" "${COLOR_GREEN}http://127.0.0.1:${port}/ui${COLOR_RESET}"
     kv "内网访问" "${COLOR_GREEN}${lan}${COLOR_RESET}"
-    printf '%s\n' "  ${COLOR_YELLOW}公网访问需放行 ${port} 端口并确认面板已启用鉴权${COLOR_RESET}"
+    printf '%s\n' "${COLOR_YELLOW}公网访问需放行 ${port} 端口并确认面板已启用鉴权${COLOR_RESET}"
     hreq
 }
 
@@ -2125,16 +2102,15 @@ install_webui() {
     log_success "管理面板已安装"
 }
 
-# 配置管理菜单入口。
 # 配置管理菜单入口。与 install.sh 的 config_mihomo 同名不同义，
 # 那边是「生成并写入默认配置」，这边只是二级菜单，故改名以免混淆。
 config_menu() {
     check_installation || return 1
     hreq
-    printf '%s\n' "${COLOR_CYAN}  操作说明${COLOR_RESET}"
-    printf '%s\n' "    1. 订阅编号从 01 开始依次排列"
-    printf '%s\n' "    2. 订阅不能全部删除，至少保留一个"
-    printf '%s\n' "    3. 所有写操作前自动备份配置${COLOR_RESET}"
+    printf '%s\n' "${COLOR_CYAN}操作说明${COLOR_RESET}"
+    printf '%s\n' "1. 订阅编号从 01 开始依次排列"
+    printf '%s\n' "2. 订阅不能全部删除，至少保留一个"
+    printf '%s\n' "3. 所有写操作前自动备份配置${COLOR_RESET}"
     hr
     printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 新增机场订阅"
     printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 修改机场订阅"
@@ -2452,27 +2428,27 @@ switch_version() {
     hreq
     printf '当前版本: %s（%s）\n' "$current" "$(channel_name "$channel")"
     hr
-    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 测试版 (Alpha，如 alpha-94b13ae)"
-    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 正式版 (Release，如 v1.19.32)"
+    printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 正式版 (Release，如 v1.19.32)"
+    printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 测试版 (Alpha，如 alpha-94b13ae)"
     hr
 
     read_input choice "${COLOR_CYAN}请输入选项 (1/2): ${COLOR_RESET}"
     case "$choice" in
         1)
-            if [[ "$channel" == "alpha" ]]; then
-                log_warn "当前已是测试版，无需重复操作"
-                return 0
-            fi
-            log_info "准备切换到测试版"
-            download_and_install alpha
-            ;;
-        2)
             if [[ "$channel" == "stable" ]]; then
                 log_warn "当前已是正式版，无需重复操作"
                 return 0
             fi
             log_info "准备切换到正式版"
             download_and_install stable
+            ;;
+        2)
+            if [[ "$channel" == "alpha" ]]; then
+                log_warn "当前已是测试版，无需重复操作"
+                return 0
+            fi
+            log_info "准备切换到测试版"
+            download_and_install alpha
             ;;
         *) log_warn "无效选项" ;;
     esac
@@ -2549,28 +2525,30 @@ uninstall_mihomo() {
     if (( failures == 0 )) && [[ ! -d "$ROOT_DIR" && ! -d "$old" ]]; then
         log_success "mihomo 卸载完成"
         printf '\n%s\n' "后续清理（如需）："
-        printf '%s\n' "  rm -f ${SHELL_FILE} ${SHELL_FILE}.bak    # 删除本脚本及其备份"
-        printf '%s\n' "  unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY"
+        printf '%s\n' "rm -f ${SHELL_FILE} ${SHELL_FILE}.bak    # 删除本脚本及其备份"
+        printf '%s\n' "unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY"
     else
         log_error "卸载未完全成功（失败步骤 ${failures} 个），请手动检查残留"
         return 1
     fi
 }
 
-# 判断字符串是否为稳定版三段式 SemVer。
+# 判断字符串是否为三段式 SemVer，允许 -beta 之类的预发布后缀。
 # 参数：$1 表示待校验字符串。
 # 返回：合法返回 0，否则返回 1。
 is_semver() {
-    [[ "${1:-}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+    [[ "${1:-}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]
 }
 
-# 按 SemVer 优先级比较两个稳定版三段式版本号。
+# 按 SemVer 优先级比较两个三段式版本号（可带 -beta 等预发布后缀）。
+# 数字主体相同的情况下，正式版高于预发布版；同为预发布时按后缀字典序比较。
 # 参数：$1 表示左版本，$2 表示右版本。
 # 输出：左大于右输出 1，相等输出 0，小于输出 -1。
 # 返回：任一版本不合法时返回非 0，避免把不可比较的值当作可升级。
 compare_semver() {
     local left_version="$1"
     local right_version="$2"
+    local left_core left_pre right_core right_pre
     local -a left_parts
     local -a right_parts
     local index
@@ -2578,8 +2556,14 @@ compare_semver() {
     is_semver "$left_version" || return 1
     is_semver "$right_version" || return 1
 
-    IFS='.' read -r -a left_parts <<<"$left_version"
-    IFS='.' read -r -a right_parts <<<"$right_version"
+    # 先剥离预发布后缀，数字主体仍按三段数值比较。
+    left_core="${left_version%%-*}"
+    right_core="${right_version%%-*}"
+    left_pre="${left_version#"$left_core"}"
+    right_pre="${right_version#"$right_core"}"
+
+    IFS='.' read -r -a left_parts <<<"$left_core"
+    IFS='.' read -r -a right_parts <<<"$right_core"
 
     for index in 0 1 2; do
         if (( left_parts[index] > right_parts[index] )); then
@@ -2591,12 +2575,31 @@ compare_semver() {
             return 0
         fi
     done
+
+    # 数字主体相等：正式版（无后缀）高于预发布版。
+    if [[ -z "$left_pre" && -n "$right_pre" ]]; then
+        printf '1'
+        return 0
+    fi
+    if [[ -n "$left_pre" && -z "$right_pre" ]]; then
+        printf '%s' '-1'
+        return 0
+    fi
+    # 同为预发布版：按后缀字典序比较（-beta < -beta.1）。
+    if [[ "$left_pre" > "$right_pre" ]]; then
+        printf '1'
+        return 0
+    fi
+    if [[ "$left_pre" < "$right_pre" ]]; then
+        printf '%s' '-1'
+        return 0
+    fi
     printf '0'
 }
 
 # 从未执行的候选脚本中静态提取唯一的顶层 SCRIPT_VERSION 声明。
 # 参数：$1 表示候选脚本路径。
-# 输出：校验通过的 X.Y.Z 版本号。
+# 输出：校验通过的 X.Y.Z 版本号（可带 -beta 等预发布后缀）。
 # 返回：文件无效、声明缺失、重复或格式不符时返回非 0。
 extract_script_version() {
     local candidate_file="${1:-}"
@@ -2614,7 +2617,7 @@ extract_script_version() {
         }
         /^readonly SCRIPT_VERSION=/ {
             declaration_count++
-            if ($0 !~ /^readonly SCRIPT_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$/) {
+            if ($0 !~ /^readonly SCRIPT_VERSION="[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?"$/) {
                 invalid_declaration = 1
                 next
             }
@@ -2703,11 +2706,6 @@ update_shell() {
     check_network
     log_info "正在检查管理脚本更新..."
 
-    if ! command_exists jq; then
-        log_error "缺少必要依赖：jq，无法校验远端版本，更新取消"
-        return 1
-    fi
-
     # 候选脚本放在本次创建的私有临时目录中，由 EXIT Trap 统一回收。
     if ! work_dir="$(mktemp -d /tmp/mihomo-update.XXXXXX 2>/dev/null)"; then
         log_error "无法创建临时目录，更新取消"
@@ -2722,7 +2720,7 @@ update_shell() {
         log_info "已锁定远端提交：${pinned_commit}"
     else
         source_url="$SHELL_URL"
-        log_warn "无法锁定远端提交，改用分支地址下载，本次制品不可复现"
+        log_warn "无法锁定远端提交（接口不可达或缺少 jq），改用分支地址下载，本次制品不可复现"
     fi
 
     if ! download_file "$source_url" "$candidate_file" "管理脚本"; then
@@ -2792,8 +2790,28 @@ update_shell() {
 
     hash -r 2>/dev/null || true
     log_success "管理脚本已更新：${SCRIPT_VERSION} -> ${remote_version}"
-    log_info "新版本将在下次启动时生效，当前进程仍运行旧代码"
     log_info "如新版异常，回滚命令：cp -f ${SHELL_FILE}.bak ${SHELL_FILE}"
+
+    if [[ ! -x "$SHELL_FILE" ]]; then
+        log_error "新脚本缺少可执行权限，请手动执行：chmod 755 ${SHELL_FILE}"
+        return 1
+    fi
+
+    # 覆盖后旧代码仍在内存中，等待 3 秒缓冲，随后直接用新脚本替换当前进程；
+    # 否则菜单、函数与版本号会新旧混跑，行为不可预期。
+    log_info "3 秒后自动运行新版本..."
+    sleep 3
+
+    # exec 不会触发 EXIT Trap，先手动回收本次创建的临时目录，避免遗留。
+    # Trap 本身不解除：万一 exec 失败，接下来退出时仍能正常收尾。
+    cleanup
+
+    # execfail 让 exec 失败时返回而不是直接退出，便于提示后保留当前进程可用。
+    shopt -s execfail
+    exec "$SHELL_FILE" || true
+    shopt -u execfail
+    log_error "启动新版本失败，请手动运行：${SHELL_FILE}"
+    return 1
 }
 
 # 等待用户按回车返回主菜单。
@@ -2803,13 +2821,18 @@ pause_menu() {
     IFS= read -r _ || true
 }
 
-# 页头：交互菜单与 status 子命令共用。
+# 打印管理脚本页头与使用说明，标签格式与 Backup_Win 等非管理脚本一致：
+# 双线 → 名称/作者（标签青色、顶格）→ 单线 → 说明（标签青色）→ 双线。
 # 脚本版本只在此处出现，show_status 面板不再重复展示。
 print_header() {
     hreq
-    printf '%s\n' "${COLOR_CYAN}  mihomo 管理脚本${COLOR_RESET}  ${COLOR_BLUE}v${SCRIPT_VERSION}${COLOR_RESET}"
-    printf '%s\n' "${COLOR_BLUE}  作者  ChatGPT JK789${COLOR_RESET}"
+    printf '%s名  称%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
+    printf '%s说  明%s\n' "$COLOR_CYAN" "$COLOR_RESET"
+    printf '1. %s\n' "$USAGE_NOTE_1"
+    printf '2. %s\n' "$USAGE_NOTE_2"
+    hreq
 }
 
 # 渲染交互主菜单。
@@ -2818,28 +2841,22 @@ menu() {
     while true; do
         clear 2>/dev/null || true
         print_header
-        printf '%s\n' "${COLOR_CYAN}  使用说明${COLOR_RESET}"
-        printf '%s\n' "    1. 重装或更新 mihomo 时，原有机场订阅会自动保留"
-        printf '%s\n' "    2. 添加订阅请用「配置管理」，勿直接编辑配置文件"
-        printf '%s\n' "${COLOR_CYAN}  子命令${COLOR_RESET}"
-        printf '%s\n' "    mihomo status / config / update 等，详见 mihomo help"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 1  "$COLOR_RESET" "安装 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 2  "$COLOR_RESET" "更新 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 3  "$COLOR_RESET" "卸载 mihomo"
         hr
-        printf '%s\n' "${COLOR_GREEN} 1${COLOR_RESET}. 安装 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 2${COLOR_RESET}. 更新 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 3${COLOR_RESET}. 卸载 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 4  "$COLOR_RESET" "启动 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 5  "$COLOR_RESET" "停止 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 6  "$COLOR_RESET" "重启 mihomo"
         hr
-        printf '%s\n' "${COLOR_GREEN} 4${COLOR_RESET}. 启动 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 5${COLOR_RESET}. 停止 mihomo"
-        printf '%s\n' "${COLOR_GREEN} 6${COLOR_RESET}. 重启 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 7  "$COLOR_RESET" "添加开机自启"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 8  "$COLOR_RESET" "关闭开机自启"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 9  "$COLOR_RESET" "切换软件版本"
         hr
-        printf '%s\n' "${COLOR_GREEN} 7${COLOR_RESET}. 添加开机自启"
-        printf '%s\n' "${COLOR_GREEN} 8${COLOR_RESET}. 关闭开机自启"
-        printf '%s\n' "${COLOR_GREEN} 9${COLOR_RESET}. 切换软件版本"
-        hr
-        printf '%s\n' "${COLOR_GREEN}10${COLOR_RESET}. 配置管理"
-        printf '%s\n' "${COLOR_GREEN}11${COLOR_RESET}. 查看日志"
-        printf '%s\n' "${COLOR_GREEN}12${COLOR_RESET}. 更新管理脚本（当前版本：${SCRIPT_VERSION}）"
-        printf '%s\n' "${COLOR_GREEN} 0${COLOR_RESET}. 退出脚本"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 10 "$COLOR_RESET" "配置管理"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 11 "$COLOR_RESET" "查看日志"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 12 "$COLOR_RESET" "更新脚本"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 0  "$COLOR_RESET" "退出脚本"
         hreq
         show_status
         hreq
@@ -2866,78 +2883,19 @@ menu() {
     done
 }
 
-# 输出命令行帮助。
-usage() {
-    cat <<EOF
-mihomo 一键管理脚本 v${SCRIPT_VERSION}
-
-用法: mihomo [子命令]
-      mihomo                 进入交互菜单
-
-子命令:
-  status              查看运行状态
-  start               启动服务
-  stop                停止服务
-  restart             重启服务
-  enable              设置开机自启
-  disable             取消开机自启
-  logs                实时查看日志
-  config              配置管理（交互）
-  secret [on|off|reset]  面板密钥：启用 / 禁用 / 重新生成
-  panel [install|update]  管理面板：安装 / 更新 / 查看访问地址
-  log-clean           立即清理日志（超过 1 MB 时压缩）
-  update              更新 mihomo 内核
-  switch              切换正式版 / 测试版
-  install             安装 / 重装
-  uninstall           卸载
-  update-shell        更新本管理脚本
-  version             显示脚本版本
-  help                显示本帮助
-
-说明:
-  安装目录 ${ROOT_DIR}
-  日志文件 ${LOG_FILE}
-EOF
-}
-
 # 脚本入口。
+# 管理脚本不提供命令行子命令：所有管理操作统一由交互菜单提供。
 main() {
     # 颜色必须在任何日志、菜单和分隔线输出之前完成初始化。
     setup_colors
 
-    # 帮助与版本只依赖脚本自身，不访问系统与服务状态。
-    case "${1:-}" in
-        -v|--version|version)   printf 'mihomo.sh v%s\n' "$SCRIPT_VERSION"; exit 0 ;;
-        -h|--help|help)         usage; exit 0 ;;
-    esac
+    if (( $# > 0 )); then
+        log_error "本脚本不提供命令行子命令，请直接运行 ${0##*/} 进入交互菜单"
+        exit 2
+    fi
 
     detect_distro
-
-    case "${1:-}" in
-        "")                     menu ;;
-        status)                 status_cmd ;;
-        start)                  service_action start ;;
-        stop)                   service_action stop ;;
-        restart)                service_action restart ;;
-        enable)                 service_action enable ;;
-        disable)                service_action disable ;;
-        logs)                   logs_mihomo ;;
-        config)                 config_menu ;;
-        secret)                 secret_cmd "${2:-}" ;;
-        panel)                  panel_cmd "${2:-}" ;;
-        log-clean)              log_clean ;;
-        update)                 update_mihomo ;;
-        switch)                 switch_version ;;
-        install)                reinstall_mihomo ;;
-        uninstall)              uninstall_mihomo ;;
-        update-shell)           update_shell ;;
-        *)
-            log_error "未知子命令：$1"
-            usage
-            # 参数错误统一使用退出码 2，与通用错误（1）区分。
-            exit 2
-            ;;
-    esac
+    menu
 }
 
 main "$@"
