@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : mihomo.sh
 # desc   : mihomo 内核与订阅配置的交互式管理脚本
-# date   : 2026-11-22 11:41:54
+# date   : 2026-11-22 12:15:34
 # author : ChatGPT JK789
-# ver    : 2.5.0-beta
+# ver    : 2.5.1-beta
 # --------------------------------------------------
 
 # 与 install.sh 共用 68 个同名函数，改动需同步两份；
@@ -36,7 +36,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.5.0-beta"
+readonly SCRIPT_VERSION="2.5.1-beta"
 
 # 收紧新建文件的默认权限：配置、日志和临时文件只允许属主访问。
 umask 077
@@ -2842,22 +2842,22 @@ menu() {
     while true; do
         clear 2>/dev/null || true
         print_header
-        printf '%s\n' "${COLOR_GREEN}1${COLOR_RESET}. 安装 mihomo"
-        printf '%s\n' "${COLOR_GREEN}2${COLOR_RESET}. 更新 mihomo"
-        printf '%s\n' "${COLOR_GREEN}3${COLOR_RESET}. 卸载 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 1  "$COLOR_RESET" "安装 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 2  "$COLOR_RESET" "更新 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 3  "$COLOR_RESET" "卸载 mihomo"
         hr
-        printf '%s\n' "${COLOR_GREEN}4${COLOR_RESET}. 启动 mihomo"
-        printf '%s\n' "${COLOR_GREEN}5${COLOR_RESET}. 停止 mihomo"
-        printf '%s\n' "${COLOR_GREEN}6${COLOR_RESET}. 重启 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 4  "$COLOR_RESET" "启动 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 5  "$COLOR_RESET" "停止 mihomo"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 6  "$COLOR_RESET" "重启 mihomo"
         hr
-        printf '%s\n' "${COLOR_GREEN}7${COLOR_RESET}. 添加开机自启"
-        printf '%s\n' "${COLOR_GREEN}8${COLOR_RESET}. 关闭开机自启"
-        printf '%s\n' "${COLOR_GREEN}9${COLOR_RESET}. 切换软件版本"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 7  "$COLOR_RESET" "添加开机自启"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 8  "$COLOR_RESET" "关闭开机自启"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 9  "$COLOR_RESET" "切换软件版本"
         hr
-        printf '%s\n' "${COLOR_GREEN}10${COLOR_RESET}. 配置管理"
-        printf '%s\n' "${COLOR_GREEN}11${COLOR_RESET}. 查看日志"
-        printf '%s\n' "${COLOR_GREEN}12${COLOR_RESET}. 更新脚本"
-        printf '%s\n' "${COLOR_GREEN}0${COLOR_RESET}. 退出脚本"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 10 "$COLOR_RESET" "配置管理"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 11 "$COLOR_RESET" "查看日志"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 12 "$COLOR_RESET" "更新脚本"
+        printf '%s%2d%s. %s\n' "$COLOR_GREEN" 0  "$COLOR_RESET" "退出脚本"
         hreq
         show_status
         hreq
