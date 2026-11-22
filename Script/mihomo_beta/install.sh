@@ -3,14 +3,14 @@
 # --------------------------------------------------
 # name   : install.sh
 # desc   : 一键安装 mihomo 内核、系统服务与管理面板并生成订阅配置
-# date   : 2026-11-22 12:15:34
+# date   : 2026-11-22 13:22:09
 # author : ChatGPT JK789
-# ver    : 2.5.1-beta
+# ver    : 2.5.3-beta
 # --------------------------------------------------
 
 # 与 mihomo.sh 共用 68 个同名函数，改动需同步两份；
 # main / usage / print_header 因入口职责不同各自实现，不参与同步。
-# 维护规则：只改 beta 通道（仓库根目录），正式版（mihomo/）在 beta 验证通过后同步，
+# 维护规则：beta 为唯一源，正式版（mihomo/）由 sync-mihomo.sh 自动生成，请勿直接修改正式版；
 # 两者差异只允许是版本号与仓库路径（beta 路径含 _beta，正式版不含）。
 
 # 必须用 bash 运行：dash/sh 不支持 pipefail、[[ ]] 与进程替换。
@@ -36,7 +36,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，必须与文件头 ver 完全一致。
-readonly SCRIPT_VERSION="2.5.1-beta"
+readonly SCRIPT_VERSION="2.5.3-beta"
 
 # 收紧新建文件的默认权限：配置与临时文件只允许属主访问。
 umask 077
