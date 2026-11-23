@@ -1,9 +1,9 @@
 # ----------------------------------------
 # name   : Fork.yml
 # desc   : 定时拉取上游 mihomo 规则文件，提交并推送
-# date   : 2026-11-04 19:29:29
+# date   : 2026-11-23 18:34:46
 # author : ChatGPT JK789
-# ver    : 0.1.3
+# ver    : 0.1.4
 # ----------------------------------------
 
 name: 拉取上游 mihomo 规则
@@ -21,8 +21,9 @@ permissions:
   contents: write
   actions: write
 
-# 防止定时任务与手动触发并发导致 push 冲突
-# 与 Auto-Update.yml 共用同一 group：两个工作流写同一分支，必须互斥，否则只能依赖推送重试兜底
+# 防止同一仓库内定时任务与手动触发并发导致 push 冲突。
+# 注意：concurrency group 只在单个仓库内生效。Auto-Update.yml 位于另一账户的另一仓库，
+# 两者的 ruleset-sync 互不影响，不能依赖它做跨账户互斥；跨写冲突由推送重试兜底。
 concurrency:
   group: ruleset-sync
   cancel-in-progress: false
@@ -140,14 +141,32 @@ jobs:
                         --retry 3 --retry-delay 3 --retry-all-errors \
                         --remove-on-error \
                         -o "$part" "$url" && [[ -s "$part" ]]; then
+                  # 内容有效性校验：拦截 HTTP 200 但返回错误页的情况。
+                  # 只按错误页特征做黑名单判定，.mrs 内部格式不做假设。
+                  if head -n 5 "$part" | grep -qiE '<(!doctype|html|head|body)|^[[:space:]]*\{"?(message|error)"?:|404: not found'; then
+                      rm -f "$part"
+                      printf '%s\t%s\t%s\n' "$dest" "$url" "内容为错误页" >> "$fail_log"
+                      return 1
+                  fi
                   mv -f "$part" "$dest"
               else
                   rm -f "$part"
-                  printf '%s\n' "$url" >> "$fail_log"
+                  printf '%s\t%s\t%s\n' "$dest" "$url" "下载或空文件" >> "$fail_log"
                   return 1
               fi
           }
           export -f fetch_one
+
+          # 关键源白名单：这些是常用的基础规则，任一失败都可能导致大面积订阅失效，
+          # 因此不允许"部分失败继续"，必须立即中止。按目标路径判定，与 manifest 第一列一致。
+          critical_dests=(
+              Ruleset/mihomo/geosite/category-ads-all.mrs
+              Ruleset/mihomo/geosite/cn.mrs
+              Ruleset/mihomo/geosite/private.mrs
+              Ruleset/mihomo/geosite/geolocation-!cn.mrs
+              Ruleset/mihomo/geoip/cn.mrs
+              Ruleset/mihomo/geoip/private.mrs
+          )
 
           echo "开始并发下载（并行度 ${DOWNLOAD_PARALLEL}）..."
           # xargs 在有失败项时返回 123，这里用 || true 吞掉，改为按日志统计。
@@ -161,15 +180,27 @@ jobs:
           # 必须在可能的 exit 之前写入：否则中止时通知只能拿到默认值 0，掩盖真实失败数。
           echo "failures=${failures}" >> "$GITHUB_ENV"
           if [[ "$failures" -gt 0 ]]; then
-              echo "::warning::共有 ${failures}/${total} 个上游文件下载失败，继续执行"
-              cat "$fail_log"
+              echo "::warning::共有 ${failures}/${total} 个上游文件下载失败"
+              awk -F'\t' '{printf "  - %s (%s)\n", $1, $3}' "$fail_log"
           else
               echo "全部上游规则下载成功（共 ${total} 个）"
           fi
-          # 全部失败时必须中止：后续步骤会用旧文件或空文件重建规则，
-          # 继续执行可能把既有规则清空后推送，造成规则丢失。
+
+          # 全部失败必须中止：无一是新数据，继续只会推送旧内容。
           if [[ "$failures" -ge "$total" ]]; then
               echo "::error::全部 ${total} 个上游文件下载失败，中止以避免覆盖既有规则"
+              exit 1
+          fi
+          # 关键源失败必须中止：这些文件直接对外提供，失败即意味着部分订阅拿到旧规则。
+          critical_hit=""
+          for dest in "${critical_dests[@]}"; do
+              if awk -F'\t' -v d="$dest" '$1==d{found=1} END{exit !found}' "$fail_log"; then
+                  critical_hit+="  - ${dest}"$'\n'
+              fi
+          done
+          if [[ -n "$critical_hit" ]]; then
+              echo "::error::关键源下载失败，中止以避免订阅规则陈旧："
+              echo "$critical_hit"
               exit 1
           fi
 
