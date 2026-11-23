@@ -3,7 +3,7 @@
 # --------------------------------------------------
 # name   : Backup.sh
 # desc   : GitHub 仓库自动同步与备份脚本，拉取远程更新、提交推送本地变更并打包备份
-# date   : 2026-11-22 11:31:33
+# date   : 2026-11-23 20:21:14
 # author : ChatGPT JK789
 # ver    : 0.5.6
 # --------------------------------------------------
@@ -121,6 +121,19 @@ log_error() {
 log_debug() {
     if [[ "${APP_DEBUG:-0}" == '1' ]]; then
         printf '%s[DEBUG]%s %s\n' "$COLOR_GRAY" "$COLOR_RESET" "$*" >&2
+    fi
+}
+
+# 将秒数格式化为易读的耗时文本（<60s 显示 "N秒"，否则显示 "N分MM秒"）。
+format_duration() {
+    local total_seconds="${1:?缺少秒数}"
+    local minutes=$(( total_seconds / 60 ))
+    local seconds=$(( total_seconds % 60 ))
+
+    if (( minutes > 0 )); then
+        printf '%d分%02d秒' "$minutes" "$seconds"
+    else
+        printf '%d秒' "$seconds"
     fi
 }
 
@@ -273,6 +286,7 @@ send_telegram_message() {
     # --fail 使 HTTP 4xx/5xx 返回非零退出码；通知属于辅助功能，失败仅警告不中断主流程。
     if ! curl --fail -s -o /dev/null -X POST "${api_base}/bot${TELEGRAM_TOKEN}/sendMessage" \
         --data-urlencode "chat_id=${CHAT_ID}" \
+        --data-urlencode "parse_mode=HTML" \
         --data-urlencode "text=${message}" \
         --max-time 10; then
         log_warn "Telegram 通知发送失败"
@@ -483,9 +497,9 @@ process_repo() {
         update_occurred=1
     fi
 
-    # 累积状态消息，使用真实换行符。
+    # 累积状态消息，使用真实换行符；列表符号 + 全角冒号便于移动端扫读。
     local repo_status
-    repo_status="【$repo_alias】$remote_status"
+    repo_status="• $repo_alias：$remote_status"
     ALL_STATUS_MSG+=$'\n'"$repo_status"
 
     log_success "仓库同步完成"
@@ -597,9 +611,10 @@ main() {
         exit 1
     fi
 
-    # 初始化状态消息与更新标志。
+    # 初始化状态消息与更新标志；SECONDS 为 Bash 内置秒表，从此处开始计时。
     ALL_STATUS_MSG=""
     update_occurred=0
+    SECONDS=0
 
     # 遍历 ACCOUNTS 并处理每个仓库。
     local repo_alias repo_url project_dir
@@ -630,12 +645,45 @@ main() {
         backup_status="备份：无更新，跳过"
     fi
 
-    # 构建 Telegram 通知消息（printf 解析真实换行符）。
+    # 构建 Telegram 通知消息：纯文本 + emoji 分层排版，状态醒目、层级清晰、移动端易读。
+    local status_icon status_text
+    if (( backup_failed == 1 )); then
+        status_icon='❌'
+        status_text='存在失败'
+    else
+        status_icon='✅'
+        status_text='全部成功'
+    fi
+
+    # 失败原因只取脚本已掌握的信息，不臆测具体故障点。
+    local failure_reason=''
+    if (( backup_failed == 1 )); then
+        failure_reason=$'\n⚠️ 原因：备份创建失败，详见运行日志'
+    fi
+
+    # 明细为空时给出占位，避免通知里出现悬空标题。
+    local detail_section
+    if [[ -n "$ALL_STATUS_MSG" ]]; then
+        detail_section="$ALL_STATUS_MSG"
+    else
+        detail_section=$'\n• （无仓库明细）'
+    fi
+
+    # 启用 HTML parse_mode 后，明细中的仓库名可能含 < > &，需转义以免 API 拒绝整条消息。
+    # 先转义 & 再转义尖括号，避免新生成的实体被二次转义。
+    detail_section="${detail_section//&/&amp;}"
+    detail_section="${detail_section//</&lt;}"
+    detail_section="${detail_section//>/&gt;}"
+
     local notify_message
-    printf -v notify_message 'GitHub 仓库同步完成\n时间：%s\n%s\n%s' \
+    printf -v notify_message \
+        '<b>📢 GitHub 仓库同步备份通知</b>\n\n%s 状态：%s\n🕐 时间：%s\n⏱️ 耗时：%s\n📦 备份：%s%s\n\n📋 仓库明细%s' \
+        "$status_icon" "$status_text" \
         "$(date +'%Y-%m-%d %H:%M:%S')" \
-        "$ALL_STATUS_MSG" \
-        "$backup_status"
+        "$(format_duration "$SECONDS")" \
+        "${backup_status#备份：}" \
+        "$failure_reason" \
+        "$detail_section"
 
     # 发送通知。
     send_telegram_message "$notify_message"
