@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : Backup.sh
 # desc   : GitHub 仓库自动同步与备份脚本，拉取远程更新、提交推送本地变更并打包备份
-# date   : 2026-11-23 20:21:14
+# date   : 2026-11-26 20:17:04
 # author : ChatGPT JK789
-# ver    : 0.5.6
+# ver    : 0.5.8
 # --------------------------------------------------
 
 # 解释器守卫：必须早于 set -u 等 Bash 专有选项，给出可读错误提示。
@@ -47,7 +47,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本。
-readonly SCRIPT_VERSION="0.5.6"
+readonly SCRIPT_VERSION="0.5.8"
 
 # 脚本加载含凭据的 .env，收紧默认文件权限，避免新建文件被 group/other 读取。
 umask 077
@@ -58,7 +58,7 @@ umask 077
 
 readonly SCRIPT_NAME="GitHub 仓库自动同步备份脚本"
 readonly SCRIPT_AUTHOR="ChatGPT JK789"
-readonly SCRIPT_DESCRIPTION="拉取 GitHub 仓库更新, 有更新时北方, 并通过 Telegram 通知结果"
+readonly SCRIPT_DESCRIPTION="拉取 GitHub 仓库更新，有更新时北方，并通过 Telegram 通知结果"
 
 # 分隔线固定为 50 个可见 ASCII 字符。
 readonly HR="--------------------------------------------------"
@@ -147,7 +147,7 @@ hreq() {
     printf '%s\n' "${COLOR_BLUE}${HR_EQ}${COLOR_RESET}"
 }
 
-# 打印"标签: 值"行；标签「仓  库」占 6 列，与 [INFO]/[ OK ] 标签同宽、前后对齐，
+# 打印“标签：值”行；标签「仓  库」占 6 列，与 [INFO]/[ OK ] 标签同宽、前后对齐，
 # 再补 1 个空格让值（小姐姐）与日志正文（开始处理仓库）同从第 7 列开始。
 kv() {
     local label="${1:?kv 缺少标签参数}"
@@ -160,10 +160,10 @@ kv() {
 # 打印启动横幅：双线 → 名称/作者（标签青色）→ 单线 → 说明（标签青色）→ 说明文本 → 双线。
 print_script_header() {
     hreq
-    printf '%s名  称:%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
-    printf '%s作  者:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
+    printf '%s名  称：%s %s v%s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_NAME" "$SCRIPT_VERSION"
+    printf '%s作  者：%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_AUTHOR"
     hr
-    printf '%s说  明:%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
+    printf '%s说  明：%s %s\n' "$COLOR_CYAN" "$COLOR_RESET" "$SCRIPT_DESCRIPTION"
     hreq
 }
 
@@ -317,7 +317,7 @@ commit_local_changes() {
     local repo_alias="${1:?缺少仓库别名}"
     local project_dir="${2:?缺少仓库目录}"
 
-    # 先显式检查状态命令退出码；仓库损坏或命令失败时不得误判为"无变更"。
+    # 先显式检查状态命令退出码；仓库损坏或命令失败时不得误判为“无变更”。
     if ! git -C "$project_dir" status --porcelain >/dev/null 2>&1; then
         log_error "读取仓库状态失败：$repo_alias"
         return 1
@@ -677,7 +677,7 @@ main() {
 
     local notify_message
     printf -v notify_message \
-        '<b>📢 GitHub 仓库同步备份通知</b>\n\n%s 状态：%s\n🕐 时间：%s\n⏱️ 耗时：%s\n📦 备份：%s%s\n\n📋 仓库明细%s' \
+        '<b>📢 Debian 自动化任务通知</b>\n\n✉️ 标题：GitHub 仓库同步并备份\n%s 状态：%s\n🕐 时间：%s\n⏱️ 耗时：%s\n📦 备份：%s%s\n\n📋 仓库明细%s' \
         "$status_icon" "$status_text" \
         "$(date +'%Y-%m-%d %H:%M:%S')" \
         "$(format_duration "$SECONDS")" \

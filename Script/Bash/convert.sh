@@ -3,9 +3,9 @@
 # --------------------------------------------------
 # name   : convert.sh
 # desc   : 批量将 Loon 插件转换为 Surge 模块，支持多 JSON 订阅源、并发与增量转换
-# date   : 2026-11-23 20:21:14
+# date   : 2026-11-26 20:17:04
 # author : ChatGPT JK789
-# ver    : 2.4.2
+# ver    : 2.4.4
 # --------------------------------------------------
 
 # 启用 Bash 严格模式。
@@ -17,7 +17,7 @@ TASK_SUMMARY=''
 TASK_DETAIL=''
 TASK_CHANGED=''
 TASK_TMP_DIR=''
-# 来源显示顺序：按 JSON_SOURCES 配置顺序记录，供通知的"变更详细"稳定展示。
+# 来源显示顺序：按 JSON_SOURCES 配置顺序记录，供通知的“变更详细”稳定展示。
 SOURCE_NAMES=()
 
 # 检查并确认当前进程具备 Root 权限。
@@ -32,7 +32,7 @@ if (( EUID != 0 )); then
 fi
 
 # 声明当前脚本版本，须与文件头 ver 一致，供启动标题读取。
-readonly SCRIPT_VERSION="2.4.2"
+readonly SCRIPT_VERSION="2.4.4"
 
 # 全局常量与默认配置。
 # SCRIPT_NAME 为标题使用的简体中文显示名称，须根据脚本用途概括，不使用文件名；
@@ -57,7 +57,7 @@ readonly DEFAULT_OUTPUT_DIR=''
 # 并发数（同时转换多少个插件，建议 5-10，太高可能压垮 Script-Hub）
 readonly DEFAULT_CONCURRENCY=''
 # 增量转换检测：始终启用。仅当检测到上游插件更新时才替换本地文件；
-# 上游未更新时直接跳过并保留本地文件，不再提供"每次全量替换"模式。
+# 上游未更新时直接跳过并保留本地文件，不再提供“每次全量替换”模式。
 # 该变量保留仅为兼容旧版 .env 的配置项，其值不再影响是否检测更新。
 readonly DEFAULT_CHECK_UPDATED='true'
 # JSON 订阅源：每行一个地址，自动拉取并解析其中所有插件地址。
@@ -206,7 +206,7 @@ notify_task_result() {
     local rc="$1"
     local status_icon status_text message
 
-    # 与 Backup.sh 一致：只有"全部成功 / 存在失败"两种状态文案；
+    # 与 Backup.sh 一致：只有“全部成功 / 存在失败”两种状态文案；
     # 失败与否由退出码与 TASK_ERROR_MSG 判定，失败数量体现在结果行中。
     if (( rc == 0 )) && [[ -z "$TASK_ERROR_MSG" ]]; then
         status_icon='✅'
@@ -217,7 +217,7 @@ notify_task_result() {
     fi
 
     printf -v message \
-        '<b>📢 Loon 插件转 Surge 模块通知</b>\n\n%s 状态：%s\n🕐 时间：%s\n⏱️ 耗时：%s\n📊 合计：%s\n\n📈 变更详细%s%s' \
+        '<b>📢 Debian 自动化任务通知</b>\n\n✉️ 标题：Loon 插件转 Surge 模块\n%s 状态：%s\n🕐 时间：%s\n⏱️ 耗时：%s\n📊 合计：%s\n\n📈 变更详细%s%s' \
         "$status_icon" "$status_text" \
         "$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || printf 'unknown')" \
         "$(format_duration "${TASK_SECONDS:-0}")" \
@@ -603,9 +603,10 @@ convert_all() {
     done
 
     # 变更文件清单（新增或变更过的 .sgmodule），仅在非空时组装。
+    # 前置空行与"变更详细"分段；无变更时整段不出现，不留多余空行。
     TASK_CHANGED=''
     if (( ${#changed_files[@]} > 0 )); then
-        TASK_CHANGED=$'\n📂 变更文件'
+        TASK_CHANGED=$'\n\n📂 变更文件'
         for name in "${!changed_files[@]}"; do
             TASK_CHANGED+=$'\n🔄 '"${name}.sgmodule"
         done
@@ -622,7 +623,7 @@ main() {
     local total
     local json_url
 
-    # 任务计时起点，供结束通知的"耗时"字段使用（与 Backup.sh 一致）。
+    # 任务计时起点，供结束通知的“耗时”字段使用（与 Backup.sh 一致）。
     SECONDS=0
 
     # 基于 BASH_SOURCE 定位脚本目录，显式检查失败（否则无法加载同目录 .env）。
