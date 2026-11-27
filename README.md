@@ -23,6 +23,12 @@
 > mihomo 教程
 >
 > [中文教程](https://github.com/Abcd789JK/Tools/blob/main/Script/README_CN.md)
+>
+> mihomo 脚本已迁移，最新版本请看新仓库
+>
+> [mihomo_scripts](https://github.com/Abcd789JK/mihomo_scripts)
+>
+> [mihomo 最新教程](https://github.com/Abcd789JK/mihomo_scripts/blob/main/README_CN.md)
 
 ## 致敬开源精神 净化网络环境
 
